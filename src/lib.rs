@@ -1,14 +1,12 @@
-pub fn placeholder_function() -> String {
-    "The simulator is ready!".to_string()
-}
+// src/lib.rs
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// Declare the modules
+pub mod pricing;
+pub mod simulators;
+pub mod shared_types;
 
-    #[test]
-    fn it_works() {
-        let result = placeholder_function();
-        assert_eq!(result, "The simulator is ready!");
-    }
-}
+// Re-export the key components so they are easily accessible from the outside.
+pub use simulators::gbm::GBMSimulator;
+pub use simulators::market_trait::Marketable;
+pub use pricing::black_scholes::calculate_option_price;
+pub use shared_types::OptionType;
