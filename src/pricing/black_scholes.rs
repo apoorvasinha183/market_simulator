@@ -4,6 +4,7 @@ use crate::shared_types::OptionType;
 use statrs::distribution::{ContinuousCDF, Normal as StatNormal};
 
 // The function signature is the same, but it now correctly uses the shared OptionType
+//TODO: Estimate Running volatility! Right now I am estimating it statically!
 pub fn calculate_option_price(
     option_type: OptionType,
     stock_price: f64,
