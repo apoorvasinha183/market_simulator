@@ -1,33 +1,32 @@
 // src/bin/visualizer.rs
 
 use eframe::egui;
+use egui::{Color32, FontId, Frame, RichText};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
-// Import all the necessary components from our refactored library hub
-use market_simulator::{
-    calculate_option_price,
-    Marketable,       // The all-important trait
-    OptionType,
-    GBMSimulator,     // The concrete implementation we'll use for now
-};
+use market_simulator::{Greeks, Marketable, OptionPricer, OptionType, GBMSimulator};
 use std::time::{Duration, Instant};
 
 struct VisualizerApp {
-    // THE KEY CHANGE: The app now owns a "trait object".
-    // It can hold a GBMSimulator, an OrderBookSimulator, or anything that implements Marketable.
+    // World state
     stock_simulator: Box<dyn Marketable>,
+    option_pricer: OptionPricer,
 
-    // History vectors remain the same
+    // History for the stock plot
     price_history: Vec<f64>,
-    option_price_history: Vec<f64>,
 
-    // Option parameters controlled by the UI
+    // Current values for the data panel
+    current_option_price: f64,
+    current_greeks: Greeks,
+
+    // UI state for controlling the simulation parameters
     strike_price: f64,
     time_to_expiration_days: u32,
-    volatility: f64,
     risk_free_rate: f64,
     option_type: OptionType,
-
-    // UI state
+    initial_volatility: f64,
+    volatility_window: usize,
+    
+    // UI state for the app itself
     is_playing: bool,
     last_update: Instant,
 }
@@ -37,35 +36,27 @@ impl eframe::App for VisualizerApp {
         if self.is_playing && self.last_update.elapsed() > Duration::from_millis(50) {
             let current_day = self.price_history.len() - 1;
 
-            // This logic correctly stops the simulation after the option expires
             if current_day < self.time_to_expiration_days as usize {
-                // We call .step() on the trait object, not on a specific struct
                 let new_stock_price = self.stock_simulator.step();
                 self.price_history.push(new_stock_price);
-                // hueeee
-                let days_remaining = self.time_to_expiration_days.saturating_sub(current_day as u32 + 1);
-                let time_to_expiration_years = days_remaining as f64 / 252.0;
 
-                let new_option_price = calculate_option_price(
-                    self.option_type,
+                let (new_option_price, new_greeks) = self.option_pricer.calculate_price_and_greeks(
                     new_stock_price,
-                    self.strike_price,
-                    time_to_expiration_years,
-                    self.risk_free_rate,
-                    self.volatility,
+                    current_day as u32 + 1,
                 );
-                self.option_price_history.push(new_option_price);
+
+                self.current_option_price = new_option_price;
+                self.current_greeks = new_greeks;
+
             } else {
-                // If expired, just stop playing
                 self.is_playing = false;
             }
-
             self.last_update = Instant::now();
         }
         ctx.request_repaint();
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Pluggable Stock & Option Simulator");
+            ui.heading("Stateful Option Pricer with Dynamic Volatility");
 
             ui.horizontal(|ui| {
                 if ui.button(if self.is_playing { "⏸ Pause" } else { "▶ Play" }).clicked() {
@@ -78,16 +69,13 @@ impl eframe::App for VisualizerApp {
             });
             ui.separator();
 
-            // UI Controls Panel (no changes needed here)
             ui.collapsing("Simulation Parameters", |ui| {
-                ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut self.strike_price).prefix("Strike: $"));
-                    ui.add(egui::DragValue::new(&mut self.time_to_expiration_days).suffix(" days"));
-                });
-                ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(&mut self.volatility).speed(0.001).prefix("Volatility: "));
-                    ui.add(egui::DragValue::new(&mut self.risk_free_rate).speed(0.001).prefix("Risk-Free Rate: "));
-                });
+                ui.add(egui::DragValue::new(&mut self.strike_price).prefix("Strike: $"));
+                ui.add(egui::DragValue::new(&mut self.time_to_expiration_days).suffix(" days"));
+                ui.add(egui::DragValue::new(&mut self.risk_free_rate).speed(0.001).prefix("Risk-Free Rate: "));
+                ui.add(egui::DragValue::new(&mut self.initial_volatility).speed(0.001).prefix("Initial Volatility: "));
+                ui.add(egui::DragValue::new(&mut self.volatility_window).suffix(" day window"));
+                
                 ui.horizontal(|ui| {
                     ui.label("Option Type:");
                     ui.radio_value(&mut self.option_type, OptionType::Call, "Call");
@@ -96,34 +84,95 @@ impl eframe::App for VisualizerApp {
             });
             ui.separator();
 
-            // Plots Panel (no changes needed here)
             ui.horizontal_top(|ui| {
-                Plot::new("stock_plot").width(500.0).height(400.0).legend(Legend::default()).show(ui, |plot_ui| {
-                    plot_ui.line(Line::new(PlotPoints::from_ys_f64(&self.price_history)).name("Stock Price"));
+                Plot::new("stock_plot")
+                    .width(600.0)
+                    .height(400.0)
+                    .legend(Legend::default())
+                    .show(ui, |plot_ui| {
+                        plot_ui.line(Line::new(PlotPoints::from_ys_f64(&self.price_history)).name("Stock Price"));
                 });
-                Plot::new("option_plot").width(500.0).height(400.0).legend(Legend::default()).show(ui, |plot_ui| {
-                    plot_ui.line(Line::new(PlotPoints::from_ys_f64(&self.option_price_history)).name("Option Price"));
-                });
+                
+                Frame::dark_canvas(ui.style())
+                    .inner_margin(egui::Margin::same(10.0))
+                    .show(ui, |ui| {
+                        ui.set_width(300.0);
+                        ui.vertical_centered(|ui| {
+                            ui.heading("Option Data");
+                        });
+                        ui.separator();
+
+                        let mono_font = FontId::monospace(14.0);
+                        
+                        // --- CORRECTED LAYOUT SECTION ---
+                        // Price and Greeks are now all inside the same Grid.
+                        egui::Grid::new("greeks_grid")
+                            .num_columns(2)
+                            .spacing([40.0, 4.0])
+                            .striped(true)
+                            .show(ui, |ui| {
+                                // Add Price as the first row of the grid.
+                                ui.label(RichText::new("Price:").size(16.0).strong());
+                                ui.label(RichText::new(format!("{:2}", self.current_option_price))
+                                    .font(mono_font.clone())
+                                    .color(Color32::LIGHT_GREEN)
+                                    .size(16.0));
+                                ui.end_row();
+
+                                // Add a separator row for visual clarity
+                                ui.label(""); // empty cell
+                                ui.separator();
+                                ui.end_row();
+
+                                ui.label("Delta:");
+                                ui.label(RichText::new(format!("{:.4}", self.current_greeks.delta)).font(mono_font.clone()));
+                                ui.end_row();
+
+                                ui.label("Gamma:");
+                                ui.label(RichText::new(format!("{:.4}", self.current_greeks.gamma)).font(mono_font.clone()));
+                                ui.end_row();
+
+                                ui.label("Vega:");
+                                ui.label(RichText::new(format!("{:.4}", self.current_greeks.vega)).font(mono_font.clone()));
+                                ui.end_row();
+
+                                ui.label("Theta:");
+                                ui.label(RichText::new(format!("{:.4}", self.current_greeks.theta)).font(mono_font.clone()));
+                                ui.end_row();
+
+                                ui.label("Rho:");
+                                ui.label(RichText::new(format!("{:.4}", self.current_greeks.rho)).font(mono_font.clone()));
+                                ui.end_row();
+                            });
+                    });
             });
         });
     }
 }
 
 impl VisualizerApp {
-    // The reset logic is now much cleaner
     fn reset_simulation(&mut self) {
-        // We call the trait's reset method
+        // Reset the stock price generator
         self.stock_simulator.reset();
         
+        // Re-create the OptionPricer with the latest settings from the UI
+        self.option_pricer = OptionPricer::new(
+            self.option_type,
+            self.strike_price,
+            self.time_to_expiration_days as f64 / 252.0,
+            self.risk_free_rate,
+            self.initial_volatility,
+            self.volatility_window,
+        );
+        
+        // Reset the historical data vectors
         let initial_stock_price = self.stock_simulator.current_price();
         self.price_history = vec![initial_stock_price];
         
-        let time_to_expiration_years = self.time_to_expiration_days as f64 / 252.0;
-        let initial_option_price = calculate_option_price(
-            self.option_type, initial_stock_price, self.strike_price, 
-            time_to_expiration_years, self.risk_free_rate, self.volatility
-        );
-        self.option_price_history = vec![initial_option_price];
+        // On reset, recalculate the initial price/greeks and set the current state.
+        let (price, greeks) = self.option_pricer.calculate_price_and_greeks(initial_stock_price, 0);
+        self.current_option_price = price;
+        self.current_greeks = greeks;
 
         self.is_playing = false;
     }
@@ -131,47 +180,55 @@ impl VisualizerApp {
 
 fn main() -> Result<(), eframe::Error> {
     // We create a concrete simulator instance...
-    let gbm_simulator = GBMSimulator::new(150.0, 0.08, 0.20);
-    // ...and immediately put it behind the 'Marketable' trait interface.
-    let stock_simulator: Box<dyn Marketable> = Box::new(gbm_simulator);
-
+    let stock_simulator: Box<dyn Marketable> = Box::new(GBMSimulator::new(150.0, 0.08, 0.20));
     let initial_stock_price = stock_simulator.current_price();
 
-    // Initial Option Parameters
+    // Initial parameters for the UI
     let option_type = OptionType::Call;
     let strike_price = 160.0;
     let time_to_expiration_days = 90;
-    let volatility = 0.20;
+    let initial_volatility = 0.20;
     let risk_free_rate = 0.05;
+    let volatility_window = 20;
 
-    let time_to_expiration_years = time_to_expiration_days as f64 / 252.0;
-    let initial_option_price = calculate_option_price(
-        option_type, initial_stock_price, strike_price, 
-        time_to_expiration_years, risk_free_rate, volatility
+    // Create the stateful OptionPricer
+    let mut option_pricer = OptionPricer::new(
+        option_type,
+        strike_price,
+        time_to_expiration_days as f64 / 252.0,
+        risk_free_rate,
+        initial_volatility,
+        volatility_window
     );
 
+    // Calculate initial state for display
+    let (initial_option_price, initial_greeks) = option_pricer.calculate_price_and_greeks(initial_stock_price, 0);
+
     let app_state = VisualizerApp {
-        stock_simulator, // Pass the trait object to the app
+        stock_simulator,
+        option_pricer,
         price_history: vec![initial_stock_price],
+        current_option_price: initial_option_price,
+        current_greeks: initial_greeks,
         strike_price,
         time_to_expiration_days,
-        volatility,
         risk_free_rate,
         option_type,
-        option_price_history: vec![initial_option_price],
+        initial_volatility,
+        volatility_window,
         is_playing: false,
         last_update: Instant::now(),
     };
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1100.0, 800.0])
-            .with_title("Pluggable Stock and Option Visualizer"),
+            .with_inner_size([1000.0, 600.0])
+            .with_title("Stateful Pricer Visualizer"),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Pluggable Visualizer App",
+        "Stateful Pricer Visualizer App",
         native_options,
         Box::new(|_cc| Box::new(app_state)),
     )

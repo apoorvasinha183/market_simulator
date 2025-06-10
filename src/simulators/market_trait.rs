@@ -11,4 +11,6 @@ pub trait Marketable {
 
     /// Resets the simulation to its initial state.
     fn reset(&mut self);
+
+    
 }

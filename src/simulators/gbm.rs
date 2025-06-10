@@ -29,17 +29,19 @@ impl GBMSimulator {
 
 // Here we provide the implementation of the Marketable trait for our GBM struct.
 impl Marketable for GBMSimulator {
+    // This one will generate the new prices for the order book.
     fn step(&mut self) -> f64 {
         let daily_drift = self.drift / 252.0;
         let daily_volatility = self.volatility / (252.0 as f64).sqrt();
         let dt = 1.0;
         let random_shock = self.normal_dist.sample(&mut self.rng);
+        // Code below didn't have mu-sigma^2/2 term
         let next_price = self.current_price
-            * (daily_drift * dt + daily_volatility * random_shock * dt.sqrt()).exp();
+            * ((daily_drift - 0.5 * daily_volatility.powi(2)) * dt + daily_volatility * random_shock * dt.sqrt()).exp();
         self.current_price = next_price;
         self.current_price
     }
-
+    // This API is for observers in the market. That's you 🫵 you degenerate.
     fn current_price(&self) -> f64 {
         self.current_price
     }
