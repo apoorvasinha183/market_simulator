@@ -36,6 +36,7 @@ impl Marketable for GBMSimulator {
         let dt = 1.0;
         let random_shock = self.normal_dist.sample(&mut self.rng);
         // Code below didn't have mu-sigma^2/2 term
+        // ref : https://www.sciencedirect.com/science/article/pii/S2468227623000157#:~:text=Derivation%20of%20geometric%20Brownian%20motion,the%20standard%20normal%20random%20variable.
         let next_price = self.current_price
             * ((daily_drift - 0.5 * daily_volatility.powi(2)) * dt + daily_volatility * random_shock * dt.sqrt()).exp();
         self.current_price = next_price;
