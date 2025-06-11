@@ -16,6 +16,8 @@ pub use agents::agent_trait::{Agent, MarketView};
 pub use agents::agent_type::AgentType; // <-- EXPORT THE NEW ENUM
 pub use agents::dumb_agent::DumbAgent;
 pub use agents::dumb_limit_agent::DumbLimitAgent;
+pub use agents::market_maker_agent::MarketMakerAgent;
+pub use agents::ipo_agent::IpoAgent;
 
 // --- From our `market` engine ---
 pub use market::Market;
@@ -29,7 +31,7 @@ pub use simulators::order_book::{OrderBook, Trade};
 pub use pricing::{OptionPricer, Greeks};
 
 // --- From `types` ---
-pub use types::order::{OrderRequest, Side};
-
+pub use types::order::{Order,OrderRequest, Side};
+//pub use types::order::{Order, OrderRequest, Side};
 // --- From `shared_types` ---
 pub use shared_types::OptionType;

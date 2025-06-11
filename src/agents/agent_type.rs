@@ -4,5 +4,7 @@
 pub enum AgentType {
     DumbMarket,
     DumbLimit,
+    MarketMaker,
+    IPO,
     // We can add more here later, like MarketMaker, Institutional, etc.
 }
