@@ -14,6 +14,7 @@ pub struct Market {
     last_traded_price: f64,
     initial_agent_types: Vec<AgentType>,
     order_id_counter: u64,
+    cumulative_volume: u64, // Volume
 }
 
 impl Market {
@@ -33,6 +34,7 @@ impl Market {
             last_traded_price: 150.00,
             initial_agent_types: participant_types.to_vec(),
             order_id_counter: 0,
+            cumulative_volume: 0,
         }
     }
     
@@ -53,6 +55,7 @@ impl Market {
     pub fn get_order_book(&self) -> &OrderBook {
         &self.order_book
     }
+    pub fn cumulative_volume(&self) -> u64 { self.cumulative_volume }
 }
 
 impl Marketable for Market {
@@ -74,7 +77,26 @@ impl Marketable for Market {
         for request in all_requests {
             match request {
                 OrderRequest::MarketOrder { agent_id, side, volume } => {
-                    let trades = self.order_book.process_market_order(agent_id, side, volume);
+                    let mut trades = self.order_book.process_market_order(agent_id, side, volume);
+                    // To handle the case when there are no takers
+                    if trades.is_empty() {
+                // price is stored in cents → multiply by 100 and round
+                let fallback_price = (self.last_traded_price * 100.0).round() as u64;
+
+                // Safety: if last_traded_price is still zero (pre-open),
+                // just skip – nothing sensible to anchor on.
+                if fallback_price > 0 {
+                    let mut order = Order {
+                        id: self.next_order_id(),
+                        agent_id,
+                        side,
+                        price: fallback_price,
+                        volume,
+                    };
+                    // Insert as limit order; may trade immediately or rest.
+                    trades = self.order_book.process_limit_order(&mut order);
+                }
+            }
                     trades_this_tick.extend(trades);
                 }
                 OrderRequest::LimitOrder { agent_id, side, price, volume } => {
@@ -104,7 +126,9 @@ impl Marketable for Market {
         if let Some(last_trade) = trades_this_tick.last() {
             self.last_traded_price = last_trade.price as f64 / 100.0;
         }
-
+        // Update the traded volume
+        let tick_volume: u64 = trades_this_tick.iter().map(|t| t.volume).sum();
+        self.cumulative_volume = self.cumulative_volume.saturating_add(tick_volume);
         self.last_traded_price
     }
 
@@ -131,4 +155,5 @@ impl Marketable for Market {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    
 }

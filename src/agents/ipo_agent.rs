@@ -16,7 +16,7 @@ impl IpoAgent {
         Self {
             id,
             // This agent is created holding the entire float of the company.
-            inventory: 1_0000,
+            inventory: 1_000_000,
             has_acted: false,
         }
     }
@@ -35,7 +35,7 @@ impl Agent for IpoAgent {
         println!("--- IPO AGENT IS ACTING ---");
 
         let mut orders = Vec::new();
-        let num_price_levels = 20;
+        let num_price_levels = 1;
         let volume_per_level = (self.inventory / num_price_levels as i64) as u64;
         let start_price = 15000; // $150.00
         let tick_size = 5;       // $0.05 per tick

@@ -95,8 +95,14 @@ impl eframe::App for AgentVisualizer {
                             if ask > bid { // Ensure spread is positive
                                 let spread = (ask - bid) as f64 / 100.0;
                                 ui.vertical_centered(|ui| {
-                                    ui.label(format!("Best Bid: {:.2}  |  Best Ask: {:.2}  |  Spread: ${:.2}", bid as f64 / 100.0, ask as f64 / 100.0, spread));
-                                });
+                                ui.label(format!(
+                                    "Best Bid: {:.2}  |  Best Ask: {:.2}  |  Spread: ${:.2}  |  Cum Vol: {}",
+                                    bid as f64 / 100.0,
+                                    ask as f64 / 100.0,
+                                    spread,
+                                    market.cumulative_volume()
+                                ));
+                            });
                             }
                         }
                     });
@@ -156,7 +162,7 @@ fn main() -> Result<(), eframe::Error> {
     };
 
     let participants = vec![
-        AgentType::IPO,
+        //AgentType::IPO,
         AgentType::MarketMaker,
         AgentType::DumbLimit,
         AgentType::DumbMarket,

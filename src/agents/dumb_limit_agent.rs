@@ -17,7 +17,7 @@ impl DumbLimitAgent {
     pub fn new(id: usize) -> Self {
         Self {
             id,
-            inventory: 0, // Start with a flat inventory
+            inventory: 2000000, //Assign some inventory
             action_probability: 0.2,
             ticks_until_active: 10,
         }
@@ -34,7 +34,7 @@ impl Agent for DumbLimitAgent {
         if rng.gen_range(0.0..1.0) < self.action_probability {
             if let (Some(&bid), Some(&ask)) = (market_view.order_book.bids.keys().last(), market_view.order_book.asks.keys().next()) {
                 let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
-                let volume = rng.gen_range(50..=200);
+                let volume = rng.gen_range(50000..=200000);
                 let price = match side {
                     Side::Buy => bid + 1,
                     Side::Sell => ask - 1,
@@ -45,7 +45,7 @@ impl Agent for DumbLimitAgent {
             }
         }
         // short covering
-        if (self.inventory <= -200){
+        if (self.inventory <= -20000){
             let deficit = -1*self.inventory;
             let absolute_deficit = deficit as u64;
             return vec![OrderRequest::MarketOrder { agent_id: self.id,side: Side::Buy,volume:absolute_deficit }];
@@ -60,7 +60,7 @@ impl Agent for DumbLimitAgent {
             // cover them with a 
         // For debugging, we can print the new inventory.
         // You can comment this out later to reduce console noise.
-        //println!("DumbLimitAgent {} new inventory: {}", self.id, self.inventory);
+        println!("DumbLimitAgent {} new inventory: {}", self.id, self.inventory);
     }
 
     fn get_id(&self) -> usize {
