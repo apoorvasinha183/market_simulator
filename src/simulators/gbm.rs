@@ -4,7 +4,8 @@ use rand::distributions::Distribution;
 use rand_distr::Normal; 
 use rand::rngs::ThreadRng;
 use super::market_trait::Marketable; // <-- Import the trait
-
+use crate::OrderBook; 
+use std::any::Any;
 pub struct GBMSimulator {
     initial_price: f64,
     drift: f64,
@@ -49,6 +50,11 @@ impl Marketable for GBMSimulator {
 
     fn reset(&mut self) {
         self.current_price = self.initial_price;
-        self.rng = rand::thread_rng(); // Get a new seed on reset
+        self.rng = rand::thread_rng();
     }
+    fn get_order_book(&self) -> Option<&OrderBook> { None }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    
 }

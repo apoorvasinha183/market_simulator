@@ -19,7 +19,7 @@ struct VisualizerApp {
     current_option_price: f64,
     current_greeks: Greeks,
 
-    // --- NEW: State for non-blocking Batch Mode ---
+    // --- State for non-blocking Batch Mode ---
     num_runs_to_batch: usize,
     is_batch_running: bool,
     batch_runs_done: usize,
@@ -39,7 +39,7 @@ struct VisualizerApp {
 
 impl eframe::App for VisualizerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // --- NEW: Non-blocking batch processing ---
+        // --- Non-blocking batch processing ---
         // If a batch is running, process a small chunk on each UI frame.
         if self.is_batch_running {
             let runs_per_frame = 20; // Process this many simulations per frame to keep UI smooth
@@ -115,7 +115,7 @@ impl eframe::App for VisualizerApp {
                 }
             });
 
-            // --- NEW: Display the Progress Bar ---
+            // --- Display the Progress Bar ---
             if self.is_batch_running {
                 let progress = self.batch_runs_done as f32 / self.num_runs_to_batch as f32;
                 let progress_text = format!("Running Batch... {}/{}", self.batch_runs_done, self.num_runs_to_batch);
@@ -219,12 +219,12 @@ impl VisualizerApp {
         self.start_new_run();
     }
 
-    // UPDATED Logic for Batch Mode
+    /// Kicks off the batch process. Does not block the UI.
     fn run_batch_simulations(&mut self) {
         self.clear_all_runs(); // Start from a clean slate
         self.is_playing = false; // Stop any interactive run
         self.batch_runs_done = 0; // Reset progress
-        self.is_batch_running = true; // Kick off the batch process
+        self.is_batch_running = true; // Set the flag to start processing in the update loop
     }
 }
 

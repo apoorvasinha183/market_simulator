@@ -1,32 +1,35 @@
 // src/lib.rs
 
-// === 1. Declare the top-level modules ===
-// This makes `pricing::`, `simulators::`, and `shared_types::` available within the library.
+// === 1. Declare all the top-level modules ===
+pub mod agents;
+pub mod market;
 pub mod pricing;
 pub mod simulators;
+pub mod types;
 pub mod shared_types;
 
 
 // === 2. Re-export the public-facing components to create a clean API ===
-// We want users of our library to be able to write `market_simulator::Component`
-// to get access to these important structs and traits.
 
-// --- From the `simulators` module ---
-// The core trait that all simulators must implement.
+// --- From `agents` ---
+pub use agents::agent_trait::{Agent, MarketView};
+pub use agents::agent_type::AgentType; // <-- EXPORT THE NEW ENUM
+pub use agents::dumb_agent::DumbAgent;
+pub use agents::dumb_limit_agent::DumbLimitAgent;
+
+// --- From our `market` engine ---
+pub use market::Market;
+
+// --- From `simulators` ---
 pub use simulators::market_trait::Marketable;
-// The first concrete simulator we built.
 pub use simulators::gbm::GBMSimulator;
-// The new order book simulator and its supporting types.
-//pub use simulators::order_book::{OrderBook, OrderBookSimulator, Side, Trade};
+pub use simulators::order_book::{OrderBook, Trade};
 
+// --- From `pricing` ---
+pub use pricing::{OptionPricer, Greeks};
 
-// --- From the `pricing` module ---
-// The new, stateful option pricer is the main public component.
-pub use pricing::OptionPricer;
-// The data structure for returning the Greeks.
-pub use pricing::Greeks;
+// --- From `types` ---
+pub use types::order::{OrderRequest, Side};
 
-
-// --- From the `shared_types` module ---
-// The enum to define call or put options.
+// --- From `shared_types` ---
 pub use shared_types::OptionType;
