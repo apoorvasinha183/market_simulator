@@ -1,6 +1,6 @@
 // src/market.rs
 
-// We import all the necessary types here.
+// We import all the necessary types here. The visualizer will not need to.
 use crate::{
     Agent, AgentType, DumbAgent, DumbLimitAgent, Marketable, MarketView, OrderBook, OrderRequest,
     Side, Trade,
@@ -19,12 +19,12 @@ pub struct Market {
 
 impl Market {
     /// The one true public constructor. It takes the desired agent types and builds the market.
-    pub fn new(participant_types: Vec<AgentType>) -> Self {
+    pub fn new(participant_types: &[AgentType]) -> Self {
         let mut agents: Vec<Box<dyn Agent>> = Vec::new();
         let mut agent_id_counter: usize = 0;
 
         // Loop through the requested agent types and create ONE instance of each.
-        for agent_type in &participant_types {
+        for agent_type in participant_types {
             let agent = Self::create_agent_from_type(*agent_type, agent_id_counter);
             agents.push(agent);
             agent_id_counter += 1;
@@ -35,7 +35,7 @@ impl Market {
             agents,
             last_traded_price: 150.00,
             // Store the configuration for use in the reset method.
-            initial_agent_types: participant_types,
+            initial_agent_types: participant_types.to_vec(),
         }
     }
 
@@ -53,6 +53,7 @@ impl Market {
     }
 }
 
+// This implementation of the Marketable trait is now correct.
 impl Marketable for Market {
     /// This is the core "tick" of the simulation.
     fn step(&mut self) -> f64 {
@@ -117,3 +118,4 @@ impl Marketable for Market {
         self
     }
 }
+    
