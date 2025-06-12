@@ -1,7 +1,7 @@
 // src/market.rs
 
 use crate::{
-    Agent, AgentType, DumbAgent, DumbLimitAgent, MarketMakerAgent,IpoAgent, MarketView, Marketable,
+    Agent, AgentType, DumbAgent, DumbLimitAgent, IpoAgent, MarketMakerAgent, MarketView, Marketable,
     Order, OrderBook, OrderRequest, Side, Trade,
 };
 use std::any::Any;
@@ -14,7 +14,7 @@ pub struct Market {
     last_traded_price: f64,
     initial_agent_types: Vec<AgentType>,
     order_id_counter: u64,
-    cumulative_volume: u64, // Volume
+    cumulative_volume: u64,
 }
 
 impl Market {
@@ -37,7 +37,7 @@ impl Market {
             cumulative_volume: 0,
         }
     }
-    
+
     fn create_agent_from_type(agent_type: AgentType, id: usize) -> Box<dyn Agent> {
         match agent_type {
             AgentType::DumbMarket => Box::new(DumbAgent::new(id)),
@@ -46,7 +46,7 @@ impl Market {
             AgentType::IPO => Box::new(IpoAgent::new(id)),
         }
     }
-    
+
     fn next_order_id(&mut self) -> u64 {
         self.order_id_counter += 1;
         self.order_id_counter
@@ -55,63 +55,75 @@ impl Market {
     pub fn get_order_book(&self) -> &OrderBook {
         &self.order_book
     }
-    pub fn cumulative_volume(&self) -> u64 { self.cumulative_volume }
+    pub fn cumulative_volume(&self) -> u64 {
+        self.cumulative_volume
+    }
 }
 
 impl Marketable for Market {
     fn step(&mut self) -> f64 {
+        // --- Phase 1: Agent Decisions ---
         let market_view = MarketView {
             order_book: &self.order_book,
         };
-
         let mut all_requests = Vec::new();
         let agent_ids: Vec<usize> = self.agents.keys().cloned().collect();
-        for id in agent_ids {
-            if let Some(agent) = self.agents.get_mut(&id) {
+        for id in &agent_ids {
+            if let Some(agent) = self.agents.get_mut(id) {
                 all_requests.extend(agent.decide_actions(&market_view));
             }
         }
-        
+
         let mut trades_this_tick: Vec<Trade> = Vec::new();
 
+        // --- Phase 2: Process Normal Orders & Fulfill Promises ---
         for request in all_requests {
-            match request {
+            let (mut order, is_market_order) = match request {
                 OrderRequest::MarketOrder { agent_id, side, volume } => {
-                    let mut trades = self.order_book.process_market_order(agent_id, side, volume);
-                    // To handle the case when there are no takers
-                    if trades.is_empty() {
-                // price is stored in cents → multiply by 100 and round
-                let fallback_price = (self.last_traded_price * 100.0).round() as u64;
-
-                // Safety: if last_traded_price is still zero (pre-open),
-                // just skip – nothing sensible to anchor on.
-                if fallback_price > 0 {
-                    let mut order = Order {
-                        id: self.next_order_id(),
-                        agent_id,
-                        side,
-                        price: fallback_price,
-                        volume,
-                    };
-                    // Insert as limit order; may trade immediately or rest.
-                    trades = self.order_book.process_limit_order(&mut order);
-                }
-            }
-                    trades_this_tick.extend(trades);
+                    let price = (self.last_traded_price * 100.0).round() as u64; // Fallback price
+                    (Order { id: self.next_order_id(), agent_id, side, price, volume }, true)
                 }
                 OrderRequest::LimitOrder { agent_id, side, price, volume } => {
-                    let mut order = Order {
-                        id: self.next_order_id(),
-                        agent_id, side, price, volume,
-                    };
-                    let trades = self.order_book.process_limit_order(&mut order);
-                    trades_this_tick.extend(trades);
+                    (Order { id: self.next_order_id(), agent_id, side, price, volume }, false)
                 }
+            };
+
+            // "Promise Fulfillment": Acknowledge the order *before* processing it.
+            if let Some(agent) = self.agents.get_mut(&order.agent_id) {
+                agent.acknowledge_order(order);
+            }
+
+            // Process the order against the book.
+            let trades = if is_market_order {
+                let mut trades = self.order_book.process_market_order(order.agent_id, order.side, order.volume);
+                if trades.is_empty() && order.price > 0 {
+                    trades.extend(self.order_book.process_limit_order(&mut order));
+                }
+                trades
+            } else {
+                self.order_book.process_limit_order(&mut order)
+            };
+            trades_this_tick.extend(trades);
+        }
+
+        // --- Phase 3: Margin Call Phase ---
+        let mut margin_requests = Vec::new();
+        for id in &agent_ids {
+            if let Some(agent) = self.agents.get_mut(id) {
+                 margin_requests.extend(agent.margin_call());
+            }
+        }
+        // Process any orders that resulted from margin calls.
+        for request in margin_requests {
+             match request {
+                OrderRequest::MarketOrder { agent_id, side, volume } => {
+                    trades_this_tick.extend(self.order_book.process_market_order(agent_id, side, volume));
+                }
+                _ => { /* Ignore limit orders from margin calls for simplicity */ }
             }
         }
 
-        // --- THIS IS THE CORRECTED LOOP ---
-        // We iterate over a reference (&trades_this_tick) to avoid moving the vector.
+        // --- Phase 4: Update Portfolios from all trades this tick ---
         for trade in &trades_this_tick {
             if let Some(taker) = self.agents.get_mut(&trade.taker_agent_id) {
                 let change = if trade.taker_side == Side::Buy { trade.volume as i64 } else { -(trade.volume as i64) };
@@ -119,23 +131,24 @@ impl Marketable for Market {
             }
             if let Some(maker) = self.agents.get_mut(&trade.maker_agent_id) {
                 let change = if trade.taker_side == Side::Sell { trade.volume as i64 } else { -(trade.volume as i64) };
-                 maker.update_portfolio(change);
+                maker.update_portfolio(change);
             }
         }
 
+        // --- Phase 5: Update Market-Level State ---
         if let Some(last_trade) = trades_this_tick.last() {
             self.last_traded_price = last_trade.price as f64 / 100.0;
         }
-        // Update the traded volume
         let tick_volume: u64 = trades_this_tick.iter().map(|t| t.volume).sum();
         self.cumulative_volume = self.cumulative_volume.saturating_add(tick_volume);
+        
         self.last_traded_price
     }
 
     fn current_price(&self) -> f64 {
         self.last_traded_price
     }
-    
+
     fn reset(&mut self) {
         let mut agents = HashMap::new();
         for (id, agent_type) in self.initial_agent_types.iter().enumerate() {
@@ -146,6 +159,7 @@ impl Marketable for Market {
         self.order_book = OrderBook::new();
         self.last_traded_price = 150.00;
         self.order_id_counter = 0;
+        self.cumulative_volume = 0;
     }
 
     fn get_order_book(&self) -> Option<&OrderBook> {
@@ -155,5 +169,4 @@ impl Marketable for Market {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    
 }
