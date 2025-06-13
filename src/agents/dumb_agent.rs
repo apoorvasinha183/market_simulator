@@ -50,7 +50,7 @@ impl Agent for DumbAgent {
 
                 // Determine volume using constants from the config file.
                 let volume = if rng.gen_bool(DUMB_AGENT_LARGE_VOL_CHANCE) {
-                    println!("OMAIGAWD, This idiot yolod his lunch money");
+                    //println!("OMAIGAWD, This idiot yolod his lunch money");
                     rng.gen_range(DUMB_AGENT_LARGE_VOL_MIN..=DUMB_AGENT_LARGE_VOL_MAX)
                 } else {
                     rng.gen_range(DUMB_AGENT_TYPICAL_VOL_MIN..=DUMB_AGENT_TYPICAL_VOL_MAX)
