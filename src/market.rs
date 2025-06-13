@@ -70,7 +70,8 @@ impl Marketable for Market {
             //last_traded_price: self.last_traded_price,
         };
         let mut all_requests = Vec::new();
-        let agent_ids: Vec<usize> = self.agents.keys().cloned().collect();
+        let mut agent_ids: Vec<usize> = self.agents.keys().cloned().collect();
+        agent_ids.sort_unstable();  
         for id in &agent_ids {
             if let Some(agent) = self.agents.get_mut(id) {
                 all_requests.extend(agent.decide_actions(&market_view));
