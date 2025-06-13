@@ -50,14 +50,22 @@ impl Agent for WhaleAgent {
             .into_iter()
             .flat_map(|id| self.cancel_open_order(id))
             .collect();
-        
+
         self.open_orders.clear();
 
         // --- Place new orders ---
         if rng.gen_bool(CRAZY_WHALE) {
             let crazy_volume = rng.gen_range((WHALE_ORDER_VOLUME / 2)..=WHALE_ORDER_VOLUME);
-            let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
-            requests.push(OrderRequest::MarketOrder { agent_id: self.id, side, volume: crazy_volume });
+            let side = if rng.gen_bool(0.5) {
+                Side::Buy
+            } else {
+                Side::Sell
+            };
+            requests.push(OrderRequest::MarketOrder {
+                agent_id: self.id,
+                side,
+                volume: crazy_volume,
+            });
         } else {
             if let Some(center_price) = market_view.get_mid_price() {
                 let buy_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
@@ -82,9 +90,15 @@ impl Agent for WhaleAgent {
         requests
     }
 
-    fn buy_stock(&mut self, _volume: u64) -> Vec<OrderRequest> { vec![] }
-    fn sell_stock(&mut self, _volume: u64) -> Vec<OrderRequest> { vec![] }
-    fn margin_call(&mut self) -> Vec<OrderRequest> { vec![] }
+    fn buy_stock(&mut self, _volume: u64) -> Vec<OrderRequest> {
+        vec![]
+    }
+    fn sell_stock(&mut self, _volume: u64) -> Vec<OrderRequest> {
+        vec![]
+    }
+    fn margin_call(&mut self) -> Vec<OrderRequest> {
+        vec![]
+    }
 
     fn acknowledge_order(&mut self, order: Order) {
         self.open_orders.insert(order.id, order);
@@ -115,10 +129,16 @@ impl Agent for WhaleAgent {
         }
         vec![]
     }
-    
-    fn get_id(&self) -> usize { self.id }
-    fn get_inventory(&self) -> i64 { self.inventory }
-    fn clone_agent(&self) -> Box<dyn Agent> { Box::new(WhaleAgent::new(self.id)) }
+
+    fn get_id(&self) -> usize {
+        self.id
+    }
+    fn get_inventory(&self) -> i64 {
+        self.inventory
+    }
+    fn clone_agent(&self) -> Box<dyn Agent> {
+        Box::new(WhaleAgent::new(self.id))
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -128,15 +148,29 @@ impl Agent for WhaleAgent {
 mod tests {
     use super::*;
     use crate::simulators::order_book::{OrderBook, PriceLevel};
-    use crate::types::order::{Side};
+    use crate::types::order::Side;
 
     // Helper to create a new order for testing.
     fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64) -> Order {
-        Order { id, agent_id, side, price, volume, filled: 0 }
+        Order {
+            id,
+            agent_id,
+            side,
+            price,
+            volume,
+            filled: 0,
+        }
     }
 
     // Helper to create a mock trade for testing.
-    fn new_trade(taker_id: usize, maker_id: usize, maker_order_id: u64, side: Side, price: u64, vol: u64) -> Trade {
+    fn new_trade(
+        taker_id: usize,
+        maker_id: usize,
+        maker_order_id: u64,
+        side: Side,
+        price: u64,
+        vol: u64,
+    ) -> Trade {
         Trade {
             price,
             volume: vol,
@@ -173,12 +207,27 @@ mod tests {
         // Assert
         // This test will only pass if the whale decides to act (WHALE_ACTION_PROB).
         if !requests.is_empty() {
-            let cancel_count = requests.iter().filter(|r| matches!(r, OrderRequest::CancelOrder { .. })).count();
-            let limit_count = requests.iter().filter(|r| matches!(r, OrderRequest::LimitOrder { .. })).count();
-            
-            assert_eq!(cancel_count, 2, "Should have generated two cancel requests.");
-            assert!(limit_count >= 2, "Should have generated at least two new limit orders.");
-            assert!(whale.open_orders.is_empty(), "Internal open orders map should be cleared.");
+            let cancel_count = requests
+                .iter()
+                .filter(|r| matches!(r, OrderRequest::CancelOrder { .. }))
+                .count();
+            let limit_count = requests
+                .iter()
+                .filter(|r| matches!(r, OrderRequest::LimitOrder { .. }))
+                .count();
+
+            assert_eq!(
+                cancel_count, 2,
+                "Should have generated two cancel requests."
+            );
+            assert!(
+                limit_count >= 2,
+                "Should have generated at least two new limit orders."
+            );
+            assert!(
+                whale.open_orders.is_empty(),
+                "Internal open orders map should be cleared."
+            );
         }
     }
 
@@ -194,7 +243,10 @@ mod tests {
         whale.update_portfolio(expected_inventory_change, &trade);
 
         // Assert
-        let open_order = whale.open_orders.get(&101).expect("Order 101 should still be open.");
+        let open_order = whale
+            .open_orders
+            .get(&101)
+            .expect("Order 101 should still be open.");
         assert_eq!(open_order.filled, 10_000);
         assert_eq!(whale.inventory, WHALE_INITIAL_INVENTORY + 10_000);
     }

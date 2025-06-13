@@ -44,13 +44,25 @@ impl VolatilityEstimator {
         if self.prices.len() < self.window_size {
             return self.initial_volatility;
         }
-        let returns: Vec<f64> = self.prices.as_slices().0.windows(2).map(|w| (w[1] / w[0]).ln()).collect();
+        let returns: Vec<f64> = self
+            .prices
+            .as_slices()
+            .0
+            .windows(2)
+            .map(|w| (w[1] / w[0]).ln())
+            .collect();
         let num_returns = returns.len() as f64;
-        if num_returns == 0.0 { return self.initial_volatility; }
-        
+        if num_returns == 0.0 {
+            return self.initial_volatility;
+        }
+
         let mean_return = returns.iter().sum::<f64>() / num_returns;
-        let variance = returns.iter().map(|r| (r - mean_return).powi(2)).sum::<f64>() / num_returns;
-        
+        let variance = returns
+            .iter()
+            .map(|r| (r - mean_return).powi(2))
+            .sum::<f64>()
+            / num_returns;
+
         variance.sqrt() * (252.0 as f64).sqrt()
     }
 }
@@ -81,7 +93,11 @@ impl OptionPricer {
         }
     }
 
-    pub fn calculate_price_and_greeks(&mut self, stock_price: f64, days_elapsed: u32) -> (f64, Greeks) {
+    pub fn calculate_price_and_greeks(
+        &mut self,
+        stock_price: f64,
+        days_elapsed: u32,
+    ) -> (f64, Greeks) {
         self.volatility_estimator.update(stock_price);
         let dynamic_vol = self.volatility_estimator.calculate();
         let time_remaining = self.time_to_expiration - (days_elapsed as f64 / 252.0);
@@ -95,13 +111,22 @@ impl OptionPricer {
         }
 
         let normal = StatNormal::new(0.0, 1.0).unwrap();
-        let d1 = ( (stock_price / self.strike_price).ln() + (self.risk_free_rate + 0.5 * dynamic_vol.powi(2)) * time_remaining )
-                 / (dynamic_vol * time_remaining.sqrt());
+        let d1 = ((stock_price / self.strike_price).ln()
+            + (self.risk_free_rate + 0.5 * dynamic_vol.powi(2)) * time_remaining)
+            / (dynamic_vol * time_remaining.sqrt());
         let d2 = d1 - dynamic_vol * time_remaining.sqrt();
-        
+
         let theoretical_price = match self.option_type {
-            OptionType::Call => stock_price * normal.cdf(d1) - self.strike_price * (-self.risk_free_rate * time_remaining).exp() * normal.cdf(d2),
-            OptionType::Put => self.strike_price * (-self.risk_free_rate * time_remaining).exp() * normal.cdf(-d2) - stock_price * normal.cdf(-d1),
+            OptionType::Call => {
+                stock_price * normal.cdf(d1)
+                    - self.strike_price
+                        * (-self.risk_free_rate * time_remaining).exp()
+                        * normal.cdf(d2)
+            }
+            OptionType::Put => {
+                self.strike_price * (-self.risk_free_rate * time_remaining).exp() * normal.cdf(-d2)
+                    - stock_price * normal.cdf(-d1)
+            }
         };
 
         // --- NEW RULES APPLIED HERE ---
@@ -111,16 +136,20 @@ impl OptionPricer {
 
         // 2. Quantize the data output by rounding to the nearest cent.
         let final_price = (price_with_floor * 100.0).round() / 100.0;
-        
-        // --- END OF NEW RULES ---
 
-        
+        // --- END OF NEW RULES ---
 
         let greeks = self.calculate_greeks(stock_price, d1, time_remaining, dynamic_vol);
         (final_price, greeks)
     }
 
-    fn calculate_greeks(&self, stock_price: f64, d1: f64, time_remaining: f64, volatility: f64) -> Greeks {
+    fn calculate_greeks(
+        &self,
+        stock_price: f64,
+        d1: f64,
+        time_remaining: f64,
+        volatility: f64,
+    ) -> Greeks {
         let normal = StatNormal::new(0.0, 1.0).unwrap();
         let n_d1_pdf = normal.pdf(d1);
         let d2 = d1 - volatility * time_remaining.sqrt();
@@ -133,7 +162,7 @@ impl OptionPricer {
 
         // --- GAMMA ---
         let gamma = n_d1_pdf / (stock_price * volatility * time_remaining.sqrt());
-        
+
         // --- VEGA --- (per 1% change in volatility)
         let vega = stock_price * n_d1_pdf * time_remaining.sqrt() * 0.01;
 
@@ -141,20 +170,44 @@ impl OptionPricer {
         let theta = match self.option_type {
             OptionType::Call => {
                 -((stock_price * n_d1_pdf * volatility) / (2.0 * time_remaining.sqrt()))
-                - self.risk_free_rate * self.strike_price * (-self.risk_free_rate * time_remaining).exp() * normal.cdf(d2)
-            },
+                    - self.risk_free_rate
+                        * self.strike_price
+                        * (-self.risk_free_rate * time_remaining).exp()
+                        * normal.cdf(d2)
+            }
             OptionType::Put => {
                 -((stock_price * n_d1_pdf * volatility) / (2.0 * time_remaining.sqrt()))
-                + self.risk_free_rate * self.strike_price * (-self.risk_free_rate * time_remaining).exp() * normal.cdf(-d2)
-            },
+                    + self.risk_free_rate
+                        * self.strike_price
+                        * (-self.risk_free_rate * time_remaining).exp()
+                        * normal.cdf(-d2)
+            }
         } / 365.0;
 
         // --- RHO --- (per 1% change in risk-free rate)
         let rho = match self.option_type {
-            OptionType::Call => self.strike_price * time_remaining * (-self.risk_free_rate * time_remaining).exp() * normal.cdf(d2) * 0.01,
-            OptionType::Put => -self.strike_price * time_remaining * (-self.risk_free_rate * time_remaining).exp() * normal.cdf(-d2) * 0.01,
+            OptionType::Call => {
+                self.strike_price
+                    * time_remaining
+                    * (-self.risk_free_rate * time_remaining).exp()
+                    * normal.cdf(d2)
+                    * 0.01
+            }
+            OptionType::Put => {
+                -self.strike_price
+                    * time_remaining
+                    * (-self.risk_free_rate * time_remaining).exp()
+                    * normal.cdf(-d2)
+                    * 0.01
+            }
         };
 
-        Greeks { delta, gamma, vega, theta, rho }
+        Greeks {
+            delta,
+            gamma,
+            vega,
+            theta,
+            rho,
+        }
     }
 }

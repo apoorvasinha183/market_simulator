@@ -2,8 +2,12 @@
 
 use super::agent_trait::{Agent, MarketView};
 use super::config::{
-    LIMIT_AGENT_ACTION_PROB, LIMIT_AGENT_MAX_OFFSET, LIMIT_AGENT_NUM_TRADERS, // Added NUM_TRADERS
-    LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN, MARGIN_CALL_THRESHOLD,
+    LIMIT_AGENT_ACTION_PROB,
+    LIMIT_AGENT_MAX_OFFSET,
+    LIMIT_AGENT_NUM_TRADERS, // Added NUM_TRADERS
+    LIMIT_AGENT_VOL_MAX,
+    LIMIT_AGENT_VOL_MIN,
+    MARGIN_CALL_THRESHOLD,
 };
 //use super::latency;
 use crate::agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE;
@@ -48,35 +52,54 @@ impl Agent for DumbLimitAgent {
                 let best_ask = market_view.order_book.asks.keys().next().copied();
 
                 if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
-                    if bid >= ask { continue; } // Skip if book is crossed
+                    if bid >= ask {
+                        continue;
+                    } // Skip if book is crossed
 
                     // Use the "dumber" logic for each individual trader
-                    let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
+                    let side = if rng.gen_bool(0.5) {
+                        Side::Buy
+                    } else {
+                        Side::Sell
+                    };
                     let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
                     let price = match side {
                         Side::Buy => bid.saturating_add(offset),
                         Side::Sell => ask.saturating_sub(offset),
                     };
-                    
+
                     // Each trader places a small order
                     let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
-                    
-                    requests.push(OrderRequest::LimitOrder { agent_id: self.id, side, price, volume });
+
+                    requests.push(OrderRequest::LimitOrder {
+                        agent_id: self.id,
+                        side,
+                        price,
+                        volume,
+                    });
                 }
             }
         }
-        
+
         requests
     }
 
     // --- Fulfillment of the Agent Trait Contract ---
 
     fn buy_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
-        vec![OrderRequest::MarketOrder { agent_id: self.id, side: Side::Buy, volume }]
+        vec![OrderRequest::MarketOrder {
+            agent_id: self.id,
+            side: Side::Buy,
+            volume,
+        }]
     }
 
     fn sell_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
-        vec![OrderRequest::MarketOrder { agent_id: self.id, side: Side::Sell, volume }]
+        vec![OrderRequest::MarketOrder {
+            agent_id: self.id,
+            side: Side::Sell,
+            volume,
+        }]
     }
 
     fn margin_call(&mut self) -> Vec<OrderRequest> {
@@ -112,7 +135,13 @@ impl Agent for DumbLimitAgent {
         vec![]
     }
 
-    fn get_id(&self) -> usize { self.id }
-    fn get_inventory(&self) -> i64 { self.inventory }
-    fn clone_agent(&self) -> Box<dyn Agent> { Box::new(DumbLimitAgent::new(self.id)) }
+    fn get_id(&self) -> usize {
+        self.id
+    }
+    fn get_inventory(&self) -> i64 {
+        self.inventory
+    }
+    fn clone_agent(&self) -> Box<dyn Agent> {
+        Box::new(DumbLimitAgent::new(self.id))
+    }
 }

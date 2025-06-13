@@ -1,7 +1,7 @@
 // src/bin/visual_order.rs
 
 use eframe::egui;
-use egui::{Color32, RichText, Stroke, FontId, Rounding, Vec2};
+use egui::{Color32, FontId, RichText, Rounding, Stroke, Vec2};
 use egui_plot::{Legend, Line, Plot, PlotBounds, PlotPoints, Points};
 use market_simulator::{AgentType, Market, Marketable};
 use std::time::{Duration, Instant};
@@ -11,7 +11,7 @@ fn format_number(n: i32) -> String {
     let s = n.to_string();
     let mut result = String::new();
     let chars: Vec<char> = s.chars().collect();
-    
+
     for (i, c) in chars.iter().enumerate() {
         if i > 0 && (chars.len() - i) % 3 == 0 {
             result.push(',');
@@ -25,7 +25,7 @@ fn format_number_u64(n: u64) -> String {
     let s = n.to_string();
     let mut result = String::new();
     let chars: Vec<char> = s.chars().collect();
-    
+
     for (i, c) in chars.iter().enumerate() {
         if i > 0 && (chars.len() - i) % 3 == 0 {
             result.push(',');
@@ -48,10 +48,10 @@ impl eframe::App for AgentVisualizer {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Update animation time
         self.animation_time = ctx.input(|i| i.time);
-        
+
         // Apply custom styling
         self.apply_custom_style(ctx);
-        
+
         if self.is_market_running && self.last_update.elapsed() > Duration::from_millis(100) {
             let new_price = self.simulator.step();
             if self.price_history.last() != Some(&new_price) {
@@ -75,18 +75,29 @@ impl eframe::App for AgentVisualizer {
                     ui.label(
                         RichText::new("🚀 Live Agent-Based Market")
                             .font(FontId::proportional(24.0))
-                            .color(if self.theme_dark { Color32::WHITE } else { Color32::from_rgb(40, 40, 40) })
-                            .strong()
+                            .color(if self.theme_dark {
+                                Color32::WHITE
+                            } else {
+                                Color32::from_rgb(40, 40, 40)
+                            })
+                            .strong(),
                     );
-                    
+
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // Theme toggle button
-                        if ui.button(if self.theme_dark { "☀ Light" } else { "🌙 Dark" }).clicked() {
+                        if ui
+                            .button(if self.theme_dark {
+                                "☀ Light"
+                            } else {
+                                "🌙 Dark"
+                            })
+                            .clicked()
+                        {
                             self.theme_dark = !self.theme_dark;
                         }
-                        
+
                         ui.separator();
-                        
+
                         // Enhanced control buttons with icons and colors
                         let start_stop_button = if self.is_market_running {
                             egui::Button::new(RichText::new("⏸ Pause").color(Color32::WHITE))
@@ -95,15 +106,19 @@ impl eframe::App for AgentVisualizer {
                             egui::Button::new(RichText::new("▶ Start").color(Color32::WHITE))
                                 .fill(Color32::from_rgb(40, 167, 69))
                         };
-                        
-                        if ui.add(start_stop_button.rounding(Rounding::same(8.0))).clicked() {
+
+                        if ui
+                            .add(start_stop_button.rounding(Rounding::same(8.0)))
+                            .clicked()
+                        {
                             self.is_market_running = !self.is_market_running;
                         }
-                        
-                        let reset_button = egui::Button::new(RichText::new("🔄 Reset").color(Color32::WHITE))
-                            .fill(Color32::from_rgb(108, 117, 125))
-                            .rounding(Rounding::same(8.0));
-                        
+
+                        let reset_button =
+                            egui::Button::new(RichText::new("🔄 Reset").color(Color32::WHITE))
+                                .fill(Color32::from_rgb(108, 117, 125))
+                                .rounding(Rounding::same(8.0));
+
                         if ui.add(reset_button).clicked() {
                             self.reset_simulation();
                         }
@@ -121,50 +136,59 @@ impl eframe::App for AgentVisualizer {
                 .min_height(250.0)
                 .show(ctx, |ui| {
                     ui.add_space(8.0);
-                    
+
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         // Market status bar
                         self.render_market_status(ui, market);
-                        
+
                         ui.add_space(12.0);
-                        
+
                         // Enhanced order book display
                         ui.vertical_centered(|ui| {
                             ui.label(
                                 RichText::new("📊 Live Order Book")
                                     .font(FontId::proportional(18.0))
-                                    .strong()
+                                    .strong(),
                             );
                         });
-                        
+
                         ui.add_space(8.0);
-                        
+
                         ui.horizontal_top(|ui| {
                             // Enhanced Bids Panel
                             ui.vertical(|ui| {
                                 ui.set_width(ui.available_width() / 2.0 - 10.0);
-                                
+
                                 // Bids header with background
                                 let bids_rect = ui.available_rect_before_wrap();
                                 let bids_bg_rect = egui::Rect::from_min_size(
                                     bids_rect.min,
-                                    Vec2::new(bids_rect.width(), 30.0)
+                                    Vec2::new(bids_rect.width(), 30.0),
                                 );
                                 ui.painter().rect_filled(
                                     bids_bg_rect,
                                     Rounding::same(6.0),
-                                    Color32::from_rgba_unmultiplied(40, 167, 69, 30)
+                                    Color32::from_rgba_unmultiplied(40, 167, 69, 30),
                                 );
-                                
+
                                 ui.add_space(4.0);
                                 ui.horizontal(|ui| {
-                                    ui.label(RichText::new(" Bids").color(Color32::from_rgb(40, 167, 69)).strong());
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        ui.label(RichText::new("").color(Color32::GRAY).italics());
-                                    });
+                                    ui.label(
+                                        RichText::new(" Bids")
+                                            .color(Color32::from_rgb(40, 167, 69))
+                                            .strong(),
+                                    );
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            ui.label(
+                                                RichText::new("").color(Color32::GRAY).italics(),
+                                            );
+                                        },
+                                    );
                                 });
                                 ui.add_space(4.0);
-                                
+
                                 // Enhanced grid with alternating row colors
                                 let mut row_count = 0;
                                 egui::Grid::new("bids_grid")
@@ -173,40 +197,45 @@ impl eframe::App for AgentVisualizer {
                                         ui.label(RichText::new("Price").underline().strong());
                                         ui.label(RichText::new("Volume").underline().strong());
                                         ui.end_row();
-                                        
+
                                         if order_book.bids.is_empty() {
                                             // Show N/A when no bids
                                             ui.label(
-                                                RichText::new("N/A")
-                                                    .color(Color32::GRAY)
-                                                    .italics()
+                                                RichText::new("N/A").color(Color32::GRAY).italics(),
                                             );
                                             ui.label(
-                                                RichText::new("N/A")
-                                                    .color(Color32::GRAY)
-                                                    .italics()
+                                                RichText::new("N/A").color(Color32::GRAY).italics(),
                                             );
                                             ui.end_row();
                                         } else {
-                                            for (price, level) in order_book.bids.iter().rev().take(10) {
+                                            for (price, level) in
+                                                order_book.bids.iter().rev().take(10)
+                                            {
                                                 // Alternating row background
                                                 if row_count % 2 == 0 {
                                                     let row_rect = ui.available_rect_before_wrap();
                                                     ui.painter().rect_filled(
                                                         row_rect,
                                                         Rounding::same(3.0),
-                                                        Color32::from_rgba_unmultiplied(0, 0, 0, 10)
+                                                        Color32::from_rgba_unmultiplied(
+                                                            0, 0, 0, 10,
+                                                        ),
                                                     );
                                                 }
-                                                
+
                                                 ui.label(
-                                                    RichText::new(format!("${:.2}", *price as f64 / 100.0))
-                                                        .color(Color32::from_rgb(40, 167, 69))
-                                                        .monospace()
+                                                    RichText::new(format!(
+                                                        "${:.2}",
+                                                        *price as f64 / 100.0
+                                                    ))
+                                                    .color(Color32::from_rgb(40, 167, 69))
+                                                    .monospace(),
                                                 );
                                                 ui.label(
-                                                    RichText::new(format_number(level.total_volume as i32))
-                                                        .monospace()
+                                                    RichText::new(format_number(
+                                                        level.total_volume as i32,
+                                                    ))
+                                                    .monospace(),
                                                 );
                                                 ui.end_row();
                                                 row_count += 1;
@@ -214,32 +243,41 @@ impl eframe::App for AgentVisualizer {
                                         }
                                     });
                             });
-                            
+
                             ui.add_space(20.0);
-                            
+
                             // Enhanced Asks Panel
                             ui.vertical(|ui| {
                                 // Asks header with background
                                 let asks_rect = ui.available_rect_before_wrap();
                                 let asks_bg_rect = egui::Rect::from_min_size(
                                     asks_rect.min,
-                                    Vec2::new(asks_rect.width(), 30.0)
+                                    Vec2::new(asks_rect.width(), 30.0),
                                 );
                                 ui.painter().rect_filled(
                                     asks_bg_rect,
                                     Rounding::same(6.0),
-                                    Color32::from_rgba_unmultiplied(220, 53, 69, 30)
+                                    Color32::from_rgba_unmultiplied(220, 53, 69, 30),
                                 );
-                                
+
                                 ui.add_space(4.0);
                                 ui.horizontal(|ui| {
-                                    ui.label(RichText::new(" Asks").color(Color32::from_rgb(220, 53, 69)).strong());
-                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        ui.label(RichText::new("").color(Color32::GRAY).italics());
-                                    });
+                                    ui.label(
+                                        RichText::new(" Asks")
+                                            .color(Color32::from_rgb(220, 53, 69))
+                                            .strong(),
+                                    );
+                                    ui.with_layout(
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            ui.label(
+                                                RichText::new("").color(Color32::GRAY).italics(),
+                                            );
+                                        },
+                                    );
                                 });
                                 ui.add_space(4.0);
-                                
+
                                 let mut row_count = 0;
                                 egui::Grid::new("asks_grid")
                                     .spacing([20.0, 4.0])
@@ -247,18 +285,14 @@ impl eframe::App for AgentVisualizer {
                                         ui.label(RichText::new("Price").underline().strong());
                                         ui.label(RichText::new("Volume").underline().strong());
                                         ui.end_row();
-                                        
+
                                         if order_book.asks.is_empty() {
                                             // Show N/A when no asks
                                             ui.label(
-                                                RichText::new("N/A")
-                                                    .color(Color32::GRAY)
-                                                    .italics()
+                                                RichText::new("N/A").color(Color32::GRAY).italics(),
                                             );
                                             ui.label(
-                                                RichText::new("N/A")
-                                                    .color(Color32::GRAY)
-                                                    .italics()
+                                                RichText::new("N/A").color(Color32::GRAY).italics(),
                                             );
                                             ui.end_row();
                                         } else {
@@ -268,18 +302,25 @@ impl eframe::App for AgentVisualizer {
                                                     ui.painter().rect_filled(
                                                         row_rect,
                                                         Rounding::same(3.0),
-                                                        Color32::from_rgba_unmultiplied(0, 0, 0, 10)
+                                                        Color32::from_rgba_unmultiplied(
+                                                            0, 0, 0, 10,
+                                                        ),
                                                     );
                                                 }
-                                                
+
                                                 ui.label(
-                                                    RichText::new(format!("${:.2}", *price as f64 / 100.0))
-                                                        .color(Color32::from_rgb(220, 53, 69))
-                                                        .monospace()
+                                                    RichText::new(format!(
+                                                        "${:.2}",
+                                                        *price as f64 / 100.0
+                                                    ))
+                                                    .color(Color32::from_rgb(220, 53, 69))
+                                                    .monospace(),
                                                 );
                                                 ui.label(
-                                                    RichText::new(format_number(level.total_volume as i32))
-                                                        .monospace()
+                                                    RichText::new(format_number(
+                                                        level.total_volume as i32,
+                                                    ))
+                                                    .monospace(),
                                                 );
                                                 ui.end_row();
                                                 row_count += 1;
@@ -300,10 +341,10 @@ impl eframe::App for AgentVisualizer {
                             ui.label(
                                 RichText::new("📈 Order Book Depth")
                                     .font(FontId::proportional(16.0))
-                                    .strong()
+                                    .strong(),
                             );
                         });
-                        
+
                         Plot::new("order_book_plot")
                             .legend(Legend::default())
                             .show_axes([true, true])
@@ -342,7 +383,7 @@ impl eframe::App for AgentVisualizer {
                                         .stroke(Stroke::new(2.5, Color32::from_rgb(40, 167, 69)))
                                         .name("📉 Bids"),
                                 );
-                                
+
                                 let center_px = market.current_price();
                                 let half_win = 20.00;
                                 let y_max = 2_000_000.00;
@@ -359,10 +400,10 @@ impl eframe::App for AgentVisualizer {
                             ui.label(
                                 RichText::new("💹 Price History")
                                     .font(FontId::proportional(16.0))
-                                    .strong()
+                                    .strong(),
                             );
                         });
-                        
+
                         Plot::new("price_history_plot")
                             .legend(Legend::default())
                             .show_axes([true, true])
@@ -378,7 +419,7 @@ impl eframe::App for AgentVisualizer {
                                 // Enhanced blinking indicator
                                 if let Some(&last_price) = self.price_history.last() {
                                     let x = (self.price_history.len() - 1) as f64;
-                                    
+
                                     // More sophisticated pulsing animation
                                     let pulse = (self.animation_time * 4.0).sin().abs();
                                     let radius = 4.0 + pulse * 4.0;
@@ -389,12 +430,17 @@ impl eframe::App for AgentVisualizer {
                                         .color(Color32::from_rgba_unmultiplied(255, 215, 0, alpha));
 
                                     plot_ui.points(last_point_marker);
-                                    
+
                                     // Add a subtle ring effect
                                     let ring_radius = 6.0 + pulse * 2.0;
                                     let ring_marker = Points::new(vec![[x, last_price]])
                                         .radius(ring_radius as f32)
-                                        .color(Color32::from_rgba_unmultiplied(255, 215, 0, (64.0 * (1.0 - pulse)) as u8))
+                                        .color(Color32::from_rgba_unmultiplied(
+                                            255,
+                                            215,
+                                            0,
+                                            (64.0 * (1.0 - pulse)) as u8,
+                                        ))
                                         .filled(false);
                                     plot_ui.points(ring_marker);
                                 }
@@ -412,10 +458,10 @@ impl AgentVisualizer {
         self.simulator.reset();
         self.price_history = vec![self.simulator.current_price()];
     }
-    
+
     fn apply_custom_style(&self, ctx: &egui::Context) {
         let mut style = (*ctx.style()).clone();
-        
+
         if self.theme_dark {
             // Dark theme
             style.visuals.dark_mode = true;
@@ -428,20 +474,20 @@ impl AgentVisualizer {
             style.visuals.panel_fill = Color32::from_rgb(248, 249, 250);
             style.visuals.window_fill = Color32::WHITE;
         }
-        
+
         // Enhanced button styling
         style.visuals.widgets.inactive.bg_fill = Color32::from_rgb(108, 117, 125);
         style.visuals.widgets.hovered.bg_fill = Color32::from_rgb(90, 98, 104);
-        
+
         // Rounded corners
         style.visuals.widgets.noninteractive.rounding = Rounding::same(6.0);
         style.visuals.widgets.inactive.rounding = Rounding::same(6.0);
         style.visuals.widgets.hovered.rounding = Rounding::same(6.0);
         style.visuals.widgets.active.rounding = Rounding::same(6.0);
-        
+
         ctx.set_style(style);
     }
-    
+
     fn render_market_status(&self, ui: &mut egui::Ui, market: &Market) {
         let order_book = market.get_order_book();
         let best_bid = order_book.bids.keys().last().cloned();
@@ -452,29 +498,33 @@ impl AgentVisualizer {
             if ask > bid {
                 let spread = (ask - bid) as f64 / 100.0;
                 let spread_pct = (spread / (ask as f64 / 100.0)) * 100.0;
-                
+
                 // Status indicator
                 let status_color = if self.is_market_running {
                     Color32::from_rgb(40, 167, 69)
                 } else {
                     Color32::from_rgb(108, 117, 125)
                 };
-                
+
                 ui.horizontal(|ui| {
                     // Market status indicator
                     ui.add_space(8.0);
                     let circle_center = ui.cursor().min + Vec2::new(6.0, 8.0);
                     ui.painter().circle_filled(circle_center, 4.0, status_color);
                     ui.add_space(16.0);
-                    
+
                     ui.label(
-                        RichText::new(if self.is_market_running { "🟢 LIVE" } else { "⏸️ PAUSED" })
-                            .color(status_color)
-                            .strong()
+                        RichText::new(if self.is_market_running {
+                            "🟢 LIVE"
+                        } else {
+                            "⏸️ PAUSED"
+                        })
+                        .color(status_color)
+                        .strong(),
                     );
-                    
+
                     ui.separator();
-                    
+
                     // Market metrics with better formatting
                     ui.horizontal(|ui| {
                         ui.label("💰");
@@ -482,47 +532,47 @@ impl AgentVisualizer {
                         ui.label(
                             RichText::new(format!("${:.2}", bid as f64 / 100.0))
                                 .color(Color32::from_rgb(40, 167, 69))
-                                .monospace()
+                                .monospace(),
                         );
                     });
-                    
+
                     ui.separator();
-                    
+
                     ui.horizontal(|ui| {
                         ui.label("💸");
                         ui.label(RichText::new("Ask:").strong());
                         ui.label(
                             RichText::new(format!("${:.2}", ask as f64 / 100.0))
                                 .color(Color32::from_rgb(220, 53, 69))
-                                .monospace()
+                                .monospace(),
                         );
                     });
-                    
+
                     ui.separator();
-                    
+
                     ui.horizontal(|ui| {
                         ui.label("📊");
                         ui.label(RichText::new("Spread:").strong());
                         ui.label(
                             RichText::new(format!("${:.2} ({:.2}%)", spread, spread_pct))
                                 .color(Color32::from_rgb(255, 193, 7))
-                                .monospace()
+                                .monospace(),
                         );
                     });
-                    
+
                     ui.separator();
-                    
+
                     ui.horizontal(|ui| {
                         ui.label("📈");
                         ui.label(RichText::new("Volume:").strong());
                         ui.label(
                             RichText::new(format_number_u64(market.cumulative_volume()))
-                                .monospace()
+                                .monospace(),
                         );
                     });
-                    
+
                     ui.separator();
-                    
+
                     ui.horizontal(|ui| {
                         ui.label("⚖️");
                         ui.label(RichText::new("Net Inventory:").strong());
@@ -540,7 +590,7 @@ impl AgentVisualizer {
                                 } else {
                                     Color32::GRAY
                                 })
-                                .monospace()
+                                .monospace(),
                         );
                     });
                 });
@@ -556,14 +606,14 @@ fn main() -> Result<(), eframe::Error> {
             .with_min_inner_size([1000.0, 700.0]),
         ..Default::default()
     };
-    
+
     let participants = vec![
         AgentType::MarketMaker,
         AgentType::DumbLimit,
         AgentType::DumbMarket,
         AgentType::WhaleAgent,
     ];
-    
+
     let simulator: Box<dyn Marketable> = Box::new(Market::new(&participants));
     let app_state = AgentVisualizer {
         price_history: vec![simulator.current_price()],
@@ -573,7 +623,7 @@ fn main() -> Result<(), eframe::Error> {
         theme_dark: true, // Start with dark theme
         animation_time: 0.0,
     };
-    
+
     eframe::run_native(
         "🚀 Live Agent-Based Market Visualizer",
         native_options,

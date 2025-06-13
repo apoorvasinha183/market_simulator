@@ -2,30 +2,28 @@
 //! Run with:  cargo bench --bench order_book
 //! HTML:      target/criterion/report/index.html
 
-use criterion::{
-    criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput,
-};
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 use market_simulator::{
     simulators::order_book::OrderBook,
     types::order::{Order, Side},
 };
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::hint::black_box;
 
 // ────────────────────────────────────────────────────────────────────────────
 //  Parameter grids
 // ────────────────────────────────────────────────────────────────────────────
-const BOOK_SIZES: &[usize]   = &[50_000, 100_000, 500_000, 1_000_000];
-const SWEEP_VOLUMES: &[u64]  = &[25_000, 100_000, 250_000];
+const BOOK_SIZES: &[usize] = &[50_000, 100_000, 500_000, 1_000_000];
+const SWEEP_VOLUMES: &[u64] = &[25_000, 100_000, 250_000];
 
 /// Build a fresh OrderBook with `n_orders` *sell* orders.
 /// Prices cycle 100-109; volumes random 1-256.
 fn setup_book(n_orders: usize) -> OrderBook {
-    let mut rng  = StdRng::seed_from_u64(42);
+    let mut rng = StdRng::seed_from_u64(42);
     let mut book = OrderBook::new();
     for i in 0..n_orders as u64 {
-        let price  = 100 + (i % 10);               // 10 price levels
+        let price = 100 + (i % 10); // 10 price levels
         let volume = rng.gen_range(1..=256) as u64;
         let mut order = Order {
             id: i,
@@ -56,11 +54,7 @@ pub fn bench_scaling(c: &mut Criterion) {
                 b.iter_batched(
                     || setup_book(n),
                     |mut book| {
-                        let trades = book.process_market_order(
-                            black_box(999),
-                            Side::Buy,
-                            sweep,
-                        );
+                        let trades = book.process_market_order(black_box(999), Side::Buy, sweep);
                         black_box(trades);
                     },
                     BatchSize::LargeInput,

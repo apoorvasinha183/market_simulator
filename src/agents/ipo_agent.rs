@@ -40,7 +40,7 @@ impl Agent for IpoAgent {
         let num_price_levels = 20;
         let volume_per_level = (self.inventory / num_price_levels as i64) as u64;
         let start_price = 15000; // $150.00
-        let tick_size = 5;       // $0.05 per tick
+        let tick_size = 5; // $0.05 per tick
 
         for i in 0..num_price_levels {
             let price = start_price + i * tick_size;

@@ -25,7 +25,7 @@ impl DumbAgent {
         Self {
             id,
             inventory: 300000000,
-            ticks_until_active:DUMB_AGENT_TICKS_UNTIL_ACTIVE,
+            ticks_until_active: DUMB_AGENT_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
         }
     }
@@ -46,7 +46,11 @@ impl Agent for DumbAgent {
         for _ in 0..DUMB_AGENT_NUM_TRADERS {
             // Roll a dice to see if this individual acts.
             if rng.gen_range(0.0..1.0) < DUMB_AGENT_ACTION_PROB {
-                let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
+                let side = if rng.gen_bool(0.5) {
+                    Side::Buy
+                } else {
+                    Side::Sell
+                };
 
                 // Determine volume using constants from the config file.
                 let volume = if rng.gen_bool(DUMB_AGENT_LARGE_VOL_CHANCE) {

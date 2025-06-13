@@ -7,7 +7,7 @@ use std::any::Any;
 pub trait Marketable {
     /// Advances the simulation by one time step and returns the new price.
     fn step(&mut self) -> f64;
-    
+
     /// Returns the current price without advancing the simulation.
     fn current_price(&self) -> f64;
 
@@ -18,6 +18,4 @@ pub trait Marketable {
     fn get_order_book(&self) -> Option<&OrderBook>;
 
     fn as_any(&self) -> &dyn Any;
-
-    
 }

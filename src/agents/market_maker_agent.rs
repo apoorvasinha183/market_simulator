@@ -2,11 +2,20 @@
 
 use super::agent_trait::{Agent, MarketView};
 use super::config::{
+    MARGIN_CALL_THRESHOLD,
     // Import all the constants we need
-    MM_DESIRED_SPREAD, MM_INITIAL_CENTER_PRICE, MM_INITIAL_INVENTORY,
-    MM_QUOTE_VOL_MAX, MM_QUOTE_VOL_MIN, MM_SEED_DECAY, MM_SEED_DEPTH_PCT,
-    MM_SEED_LEVELS, MM_SEED_TICK_SPACING, MM_SKEW_FACTOR,
-    MM_UNSTICK_VOL_MAX, MM_UNSTICK_VOL_MIN, MARGIN_CALL_THRESHOLD
+    MM_DESIRED_SPREAD,
+    MM_INITIAL_CENTER_PRICE,
+    MM_INITIAL_INVENTORY,
+    MM_QUOTE_VOL_MAX,
+    MM_QUOTE_VOL_MIN,
+    MM_SEED_DECAY,
+    MM_SEED_DEPTH_PCT,
+    MM_SEED_LEVELS,
+    MM_SEED_TICK_SPACING,
+    MM_SKEW_FACTOR,
+    MM_UNSTICK_VOL_MAX,
+    MM_UNSTICK_VOL_MIN,
 };
 //use super::latency;
 use crate::agents::latency::MM_TICKS_UNTIL_ACTIVE;
@@ -16,8 +25,8 @@ use rand::Rng;
 use std::collections::HashMap;
 
 /// Hard guard‑rails so quotes can never leave a sensible band
-const MIN_PRICE: u64 = 1_00;    // $1.00  (in cents)
-const MAX_PRICE: u64 = 3000_00;  // $300.00 (in cents)
+const MIN_PRICE: u64 = 1_00; // $1.00  (in cents)
+const MAX_PRICE: u64 = 3000_00; // $300.00 (in cents)
 
 #[inline]
 fn clamp_price(p: i128) -> u64 {
@@ -47,7 +56,9 @@ impl MarketMakerAgent {
     fn seed_liquidity(&self) -> Vec<OrderRequest> {
         let side_budget = (self.inventory.abs() as f64 * MM_SEED_DEPTH_PCT) as u64;
         // Geometric series sum formula to calculate the initial volume
-        let mut vol_at_lvl = (side_budget as f64 * (1.0 - MM_SEED_DECAY) / (1.0 - MM_SEED_DECAY.powi(MM_SEED_LEVELS as i32))) as u64;
+        let mut vol_at_lvl = (side_budget as f64 * (1.0 - MM_SEED_DECAY)
+            / (1.0 - MM_SEED_DECAY.powi(MM_SEED_LEVELS as i32)))
+            as u64;
 
         let mut orders = Vec::with_capacity(MM_SEED_LEVELS * 2);
         for lvl in 0..MM_SEED_LEVELS {
@@ -55,14 +66,26 @@ impl MarketMakerAgent {
             vol_at_lvl = (vol_at_lvl as f64 * MM_SEED_DECAY) as u64;
 
             let bid_px = clamp_price(
-                MM_INITIAL_CENTER_PRICE as i128 - (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128,
+                MM_INITIAL_CENTER_PRICE as i128
+                    - (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128,
             );
             let ask_px = clamp_price(
-                MM_INITIAL_CENTER_PRICE as i128 + (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128,
+                MM_INITIAL_CENTER_PRICE as i128
+                    + (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128,
             );
 
-            orders.push(OrderRequest::LimitOrder { agent_id: self.id, side: Side::Buy,  price: bid_px, volume: vol });
-            orders.push(OrderRequest::LimitOrder { agent_id: self.id, side: Side::Sell, price: ask_px, volume: vol });
+            orders.push(OrderRequest::LimitOrder {
+                agent_id: self.id,
+                side: Side::Buy,
+                price: bid_px,
+                volume: vol,
+            });
+            orders.push(OrderRequest::LimitOrder {
+                agent_id: self.id,
+                side: Side::Sell,
+                price: ask_px,
+                volume: vol,
+            });
         }
         orders
     }
@@ -87,12 +110,22 @@ impl Agent for MarketMakerAgent {
         if let (Some(bid), None) = (best_bid, best_ask) {
             let ask_px = clamp_price((bid as i128) + 1);
             let volume = rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
-            return vec![OrderRequest::LimitOrder { agent_id: self.id, side: Side::Sell, price: ask_px, volume }];
+            return vec![OrderRequest::LimitOrder {
+                agent_id: self.id,
+                side: Side::Sell,
+                price: ask_px,
+                volume,
+            }];
         }
         if let (None, Some(ask)) = (best_bid, best_ask) {
             let bid_px = clamp_price((ask as i128) - 1);
             let volume = rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
-            return vec![OrderRequest::LimitOrder { agent_id: self.id, side: Side::Buy, price: bid_px, volume }];
+            return vec![OrderRequest::LimitOrder {
+                agent_id: self.id,
+                side: Side::Buy,
+                price: bid_px,
+                volume,
+            }];
         }
 
         // --- Normal two-sided quoting strategy ---
@@ -103,19 +136,31 @@ impl Agent for MarketMakerAgent {
         };
 
         let inventory_skew = (self.inventory as f64 * MM_SKEW_FACTOR) as i64;
-        
+
         // --- THE FIX: Cast inventory_skew to i128 before subtraction ---
         let our_center_price = clamp_price(center_price as i128 - inventory_skew as i128);
-        
+
         let our_bid = clamp_price(our_center_price as i128 - (MM_DESIRED_SPREAD / 2) as i128);
         let our_ask = clamp_price(our_center_price as i128 + (MM_DESIRED_SPREAD / 2) as i128);
 
         if our_ask > our_bid {
-            if best_ask.map_or(true, |ask| our_bid < ask) && best_bid.map_or(true, |bid| our_ask > bid) {
+            if best_ask.map_or(true, |ask| our_bid < ask)
+                && best_bid.map_or(true, |bid| our_ask > bid)
+            {
                 let volume = rand::thread_rng().gen_range(MM_QUOTE_VOL_MIN..=MM_QUOTE_VOL_MAX);
                 return vec![
-                    OrderRequest::LimitOrder { agent_id: self.id, side: Side::Buy,  price: our_bid, volume },
-                    OrderRequest::LimitOrder { agent_id: self.id, side: Side::Sell, price: our_ask, volume },
+                    OrderRequest::LimitOrder {
+                        agent_id: self.id,
+                        side: Side::Buy,
+                        price: our_bid,
+                        volume,
+                    },
+                    OrderRequest::LimitOrder {
+                        agent_id: self.id,
+                        side: Side::Sell,
+                        price: our_ask,
+                        volume,
+                    },
                 ];
             }
         }
@@ -123,15 +168,35 @@ impl Agent for MarketMakerAgent {
     }
 
     fn buy_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
-        if let Some(price) = self.open_orders.values().find(|o| o.side == Side::Sell).map(|o| o.price) {
-            return vec![OrderRequest::LimitOrder { agent_id: self.id, side: Side::Buy, price, volume }];
+        if let Some(price) = self
+            .open_orders
+            .values()
+            .find(|o| o.side == Side::Sell)
+            .map(|o| o.price)
+        {
+            return vec![OrderRequest::LimitOrder {
+                agent_id: self.id,
+                side: Side::Buy,
+                price,
+                volume,
+            }];
         }
         vec![]
     }
 
     fn sell_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
-        if let Some(price) = self.open_orders.values().find(|o| o.side == Side::Buy).map(|o| o.price) {
-            return vec![OrderRequest::LimitOrder { agent_id: self.id, side: Side::Sell, price, volume }];
+        if let Some(price) = self
+            .open_orders
+            .values()
+            .find(|o| o.side == Side::Buy)
+            .map(|o| o.price)
+        {
+            return vec![OrderRequest::LimitOrder {
+                agent_id: self.id,
+                side: Side::Sell,
+                price,
+                volume,
+            }];
         }
         vec![]
     }
@@ -172,9 +237,15 @@ impl Agent for MarketMakerAgent {
         vec![]
     }
 
-    fn get_id(&self) -> usize { self.id }
-    fn get_inventory(&self) -> i64 { self.inventory }
-    fn clone_agent(&self) -> Box<dyn Agent> { Box::new(MarketMakerAgent::new(self.id)) }
+    fn get_id(&self) -> usize {
+        self.id
+    }
+    fn get_inventory(&self) -> i64 {
+        self.inventory
+    }
+    fn clone_agent(&self) -> Box<dyn Agent> {
+        Box::new(MarketMakerAgent::new(self.id))
+    }
 }
 // -----------------------------------------------------------------------------
 //  Unit Tests
@@ -186,11 +257,25 @@ mod tests {
 
     // Helper to create a new order for testing.
     fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64) -> Order {
-        Order { id, agent_id, side, price, volume, filled: 0 }
+        Order {
+            id,
+            agent_id,
+            side,
+            price,
+            volume,
+            filled: 0,
+        }
     }
 
     // Helper to create a mock trade for testing.
-    fn new_trade(taker_id: usize, maker_id: usize, maker_order_id: u64, side: Side, price: u64, vol: u64) -> Trade {
+    fn new_trade(
+        taker_id: usize,
+        maker_id: usize,
+        maker_order_id: u64,
+        side: Side,
+        price: u64,
+        vol: u64,
+    ) -> Trade {
         Trade {
             price,
             volume: vol,
@@ -215,9 +300,19 @@ mod tests {
         mm.update_portfolio(expected_inventory_change, &trade);
 
         // Assert
-        let open_order = mm.open_orders.get(&101).expect("Order 101 should still be open.");
-        assert_eq!(open_order.filled, 40, "The order's filled amount should be 40.");
-        assert_eq!(mm.inventory, MM_INITIAL_INVENTORY - 40, "Inventory should be reduced by 40.");
+        let open_order = mm
+            .open_orders
+            .get(&101)
+            .expect("Order 101 should still be open.");
+        assert_eq!(
+            open_order.filled, 40,
+            "The order's filled amount should be 40."
+        );
+        assert_eq!(
+            mm.inventory,
+            MM_INITIAL_INVENTORY - 40,
+            "Inventory should be reduced by 40."
+        );
     }
 
     #[test]
@@ -234,25 +329,42 @@ mod tests {
         mm.update_portfolio(expected_inventory_change, &trade);
 
         // Assert
-        assert!(mm.open_orders.get(&101).is_none(), "Order 101 should be removed after a full fill.");
-        assert_eq!(mm.inventory, MM_INITIAL_INVENTORY - 100, "Inventory should be reduced by 100.");
-        assert!(mm.get_pending_orders().is_empty(), "There should be no pending orders.");
+        assert!(
+            mm.open_orders.get(&101).is_none(),
+            "Order 101 should be removed after a full fill."
+        );
+        assert_eq!(
+            mm.inventory,
+            MM_INITIAL_INVENTORY - 100,
+            "Inventory should be reduced by 100."
+        );
+        assert!(
+            mm.get_pending_orders().is_empty(),
+            "There should be no pending orders."
+        );
     }
-    
+
     #[test]
     fn test_update_portfolio_as_taker() {
         // Arrange
         let mut mm = MarketMakerAgent::new(1);
         // The MM has no open orders initially. It acts as the aggressor.
-        
+
         let trade = new_trade(1, 2, 202, Side::Buy, 15000, 75); // MM (agent 1) is the taker.
         let expected_inventory_change = 75; // Taker bought 75 shares.
 
         // Act
         mm.update_portfolio(expected_inventory_change, &trade);
-        
+
         // Assert
-        assert_eq!(mm.inventory, MM_INITIAL_INVENTORY + 75, "Inventory should increase by 75.");
-        assert!(mm.open_orders.is_empty(), "Open orders should be unchanged as the MM was the taker.");
+        assert_eq!(
+            mm.inventory,
+            MM_INITIAL_INVENTORY + 75,
+            "Inventory should increase by 75."
+        );
+        assert!(
+            mm.open_orders.is_empty(),
+            "Open orders should be unchanged as the MM was the taker."
+        );
     }
 }

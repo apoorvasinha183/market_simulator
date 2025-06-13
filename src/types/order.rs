@@ -23,7 +23,7 @@ pub struct Order {
     pub side: Side,
     pub price: u64,
     pub volume: u64,
-    pub filled:u64,
+    pub filled: u64,
 }
 
 #[derive(Debug)]
