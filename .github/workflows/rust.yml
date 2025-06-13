@@ -1,77 +1,119 @@
 name: CI
 
 on:
-  push:        { branches: [main] }
-  pull_request:{ branches: [main] }
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"        # treat warnings as errors
+  RUSTFLAGS: "-D warnings"
+
+concurrency:
+  group: rust-ci-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
-  #─────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
   lint-fmt:
-  #─────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
     name: Format & Clippy
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with: { toolchain: stable, profile: minimal, components: rustfmt, clippy }
-      - uses: Swatinem/rust-cache@v2        # speeds up all Rust steps
-      - name: Check formatting
-        run: cargo fmt -- --check
-      - name: Clippy (deny warnings)
-        run: cargo clippy --all-targets --all-features
 
-  #─────────────────────────────────────────────────────────────────
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+        components: rustfmt, clippy
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        # extra hash so cache busts when clippy version changes
+        key: lint-${{ runner.os }}-${{ steps.rust-version.outputs.version }}
+
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+
+    - name: Clippy (deny warnings)
+      run: cargo clippy --all-targets --all-features
+
+# ────────────────────────────────────────────────────────────────
   build-test:
-  #─────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
     name: Build & Unit-tests
     needs: lint-fmt
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with: { toolchain: stable, profile: minimal }
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo test --all --locked --verbose
 
-  #─────────────────────────────────────────────────────────────────
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Cargo test
+      run: cargo test --all --locked --verbose
+
+# ────────────────────────────────────────────────────────────────
   bench:
-  #─────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
     name: Criterion Bench (CI-size)
     needs: build-test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-         # only stress the main branch, not every PR
+    if: >-
+      ${{ github.event_name == 'push' &&
+          github.ref_name == 'main' }}  # run only on direct pushes to main
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with: { toolchain: stable, profile: minimal }
-      - uses: Swatinem/rust-cache@v2
-      # 30 samples & 5-s window keep runtime < 60 s on GitHub runners
-      - run: cargo bench --bench order_book -- --sample-size 30 --measurement-time 5
-      - name: Upload Criterion report
-        if: always()                               # upload even on failure
-        uses: actions/upload-artifact@v4
-        with:
-          name: criterion-report
-          path: target/criterion
-          retention-days: 7
 
-  #─────────────────────────────────────────────────────────────────
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Run Criterion (30 samples / 5 s)
+      run: cargo bench --bench order_book -- --sample-size 30 --measurement-time 5
+
+    - name: Upload Criterion report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: criterion-report
+        path: target/criterion
+        retention-days: 7
+
+# ────────────────────────────────────────────────────────────────
   docs:
-  #─────────────────────────────────────────────────────────────────
-    name: Doc build
+# ────────────────────────────────────────────────────────────────
+    name: Docs
     needs: build-test
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with: { toolchain: stable, profile: minimal }
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo doc --no-deps
-      - uses: actions/upload-artifact@v4
-        with: { name: docs, path: target/doc }
 
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+
+    - uses: Swatinem/rust-cache@v2
+
+    - name: cargo doc
+      run: cargo doc --no-deps --workspace --verbose
+
+    - name: Upload docs
+      uses: actions/upload-artifact@v4
+      with:
+        name: docs
+        path: target/doc
