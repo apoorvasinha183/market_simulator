@@ -1,0 +1,143 @@
+
+// -----------------------------------------------------------------------------
+//  Unit Tests
+// -----------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::order::{Order, Side};
+
+    fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64) -> Order {
+        Order {
+            id,
+            agent_id,
+            side,
+            price,
+            volume,
+            filled: 0,
+        }
+    }
+
+    #[test]
+    fn test_add_simple_limit_order() {
+        let mut book = OrderBook::new();
+        let order = new_order(1, 1, Side::Buy, 100, 50);
+        book.add_limit_order(order);
+        assert!(book.order_id_map.contains_key(&1));
+        let level = book.bids.get(&100).unwrap();
+        assert_eq!(level.total_volume, 50);
+    }
+
+    #[test]
+    fn test_duplicate_id_panics() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Buy, 100, 10));
+        let result = std::panic::catch_unwind(|| {
+            book.add_limit_order(new_order(1, 2, Side::Buy, 101, 10));
+        });
+        assert!(result.is_err(), "Duplicate ID should panic in debug builds");
+    }
+
+    #[test]
+    fn test_market_zero_volume() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
+        let trades = book.process_market_order(2, Side::Buy, 0);
+        assert!(trades.is_empty());
+        assert_eq!(book.asks.get(&100).unwrap().total_volume, 50);
+    }
+
+    #[test]
+    fn test_market_order_simple_fill() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
+        let trades = book.process_market_order(2, Side::Buy, 30);
+        assert_eq!(trades.len(), 1);
+        let ask_level = book.asks.get(&100).unwrap();
+        assert_eq!(ask_level.total_volume, 20);
+        assert_eq!(ask_level.orders[0].filled, 30);
+    }
+
+    #[test]
+    fn test_market_order_full_fill_and_remove() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
+        book.process_market_order(2, Side::Buy, 50);
+        assert!(book.asks.get(&100).is_none());
+        assert!(book.order_id_map.get(&1).is_none());
+    }
+
+    #[test]
+    fn test_marketable_limit_order() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
+        let mut aggressive_buy = new_order(2, 2, Side::Buy, 101, 30);
+        book.process_limit_order(&mut aggressive_buy);
+        assert_eq!(book.asks.get(&100).unwrap().total_volume, 20);
+        assert!(book.bids.is_empty());
+    }
+
+    #[test]
+    fn test_marketable_limit_order_partial_fill_and_rest() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 30));
+        let mut aggressive_buy = new_order(2, 2, Side::Buy, 101, 50);
+        book.process_limit_order(&mut aggressive_buy);
+        assert!(book.asks.get(&100).is_none());
+        let bid_level = book.bids.get(&101).unwrap();
+        assert_eq!(bid_level.total_volume, 20);
+    }
+
+    #[test]
+    fn test_cancel_order_simple() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Buy, 100, 50));
+        let success = book.cancel_order(1, 1);
+        assert!(success);
+        assert!(book.bids.is_empty());
+        assert!(book.order_id_map.get(&1).is_none());
+    }
+
+    #[test]
+    fn test_cancel_order_fails_for_wrong_owner() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Buy, 100, 50));
+        let success = book.cancel_order(1, 2);
+        assert!(!success);
+        assert_eq!(book.bids.get(&100).unwrap().total_volume, 50);
+    }
+
+    #[test]
+    fn test_market_order_blows_through_multiple_levels() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 20));
+        book.add_limit_order(new_order(2, 1, Side::Sell, 101, 30));
+        book.add_limit_order(new_order(3, 1, Side::Sell, 102, 40));
+
+        let trades = book.process_market_order(2, Side::Buy, 100);
+
+        assert_eq!(trades.len(), 3);
+        assert_eq!(trades.iter().map(|t| t.volume).sum::<u64>(), 90);
+        assert_eq!(trades[0].price, 100);
+        assert_eq!(trades[1].price, 101);
+        assert_eq!(trades[2].price, 102);
+        assert!(book.asks.is_empty());
+        assert!(book.order_id_map.is_empty());
+    }
+
+    #[test]
+    fn test_partial_cancel_after_partial_fill() {
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 100));
+
+        book.process_market_order(2, Side::Buy, 40);
+
+        let level = book.asks.get(&100).unwrap();
+        assert_eq!(level.total_volume, 60);
+        assert_eq!(level.orders[0].filled, 40);
+
+        let success = book.cancel_order(1, 1);
+        assert!(success);
+        assert!(book.asks.get(&100).is_none());
+    }
+}
