@@ -9,3 +9,7 @@ rand_distr = "0.4.3"
 eframe = "0.27.2"
 egui_plot = "0.27.2"
 statrs = "0.18.0"
+criterion = { version = "0.5", features = ["html_reports"] }
+[[bench]]
+name    = "order_book" 
+harness = false       

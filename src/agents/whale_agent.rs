@@ -56,7 +56,7 @@ impl Agent for WhaleAgent {
         // --- Place new orders ---
         if rng.gen_bool(CRAZY_WHALE) {
             let crazy_volume = rng.gen_range((WHALE_ORDER_VOLUME / 2)..=WHALE_ORDER_VOLUME);
-            let side = if rng.gen_bool(0.7) { Side::Buy } else { Side::Sell };
+            let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
             requests.push(OrderRequest::MarketOrder { agent_id: self.id, side, volume: crazy_volume });
         } else {
             if let Some(center_price) = market_view.get_mid_price() {
