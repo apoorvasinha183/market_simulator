@@ -8,6 +8,7 @@ use super::config::{
 };
 //use super::latency;
 use crate::agents::latency::DUMB_AGENT_TICKS_UNTIL_ACTIVE;
+//use crate::market;
 use crate::simulators::order_book::Trade;
 use crate::types::order::{Order, OrderRequest, Side};
 use rand::Rng;
@@ -18,6 +19,8 @@ pub struct DumbAgent {
     inventory: i64,
     ticks_until_active: u32,
     open_orders: HashMap<u64, Order>,
+    #[allow(dead_code)]
+    margin:i128
 }
 
 impl DumbAgent {
@@ -27,6 +30,7 @@ impl DumbAgent {
             inventory: 300000000,
             ticks_until_active: DUMB_AGENT_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
+            margin:1000000000
         }
     }
 }
@@ -68,7 +72,8 @@ impl Agent for DumbAgent {
                 requests_this_tick.extend(request);
             }
         }
-
+        let liquidity = self.evaluate_port(_market_view);
+        println!("Retail has a net position of {}",liquidity);
         requests_this_tick
     }
 
@@ -134,5 +139,15 @@ impl Agent for DumbAgent {
 
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(DumbAgent::new(self.id))
+    }
+    fn evaluate_port(&self,market_view: &MarketView) -> f64 {
+        let price_cents = match market_view.get_mid_price() {
+        Some(p) => p,
+        None    => return 0.0,                // or whatever you deem appropriate
+        };
+        let value_cents = (self.inventory as i128)
+        .checked_mul(price_cents as i128)
+        .expect("portfolio value overflow");
+        (value_cents as f64) / 100.0
     }
 }

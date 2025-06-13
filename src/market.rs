@@ -261,6 +261,16 @@ mod tests {
         fn clone_agent(&self) -> Box<dyn Agent> {
             Box::new(TestAgent::default())
         }
+        fn evaluate_port(&self,market_view: &MarketView) -> f64 {
+            let price_cents = match market_view.get_mid_price() {
+            Some(p) => p,
+            None    => return 0.0,                // or whatever you deem appropriate
+            };
+            let value_cents = (self.inventory as i128)
+            .checked_mul(price_cents as i128)
+            .expect("portfolio value overflow");
+            (value_cents as f64) / 100.0
+        }
     }
 
     #[test]

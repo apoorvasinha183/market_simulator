@@ -18,6 +18,8 @@ pub struct WhaleAgent {
     inventory: i64,
     ticks_until_active: u32,
     open_orders: HashMap<u64, Order>,
+    #[allow(dead_code)]
+    margin:i128,
 }
 
 impl WhaleAgent {
@@ -27,6 +29,7 @@ impl WhaleAgent {
             inventory: WHALE_INITIAL_INVENTORY,
             ticks_until_active: WHALE_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
+            margin:1000000000000
         }
     }
 }
@@ -87,6 +90,8 @@ impl Agent for WhaleAgent {
                 });
             }
         }
+        let liquidity = self.evaluate_port(market_view);
+        println!("Whales have a net position of {}",liquidity);
         requests
     }
 
@@ -138,6 +143,16 @@ impl Agent for WhaleAgent {
     }
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(WhaleAgent::new(self.id))
+    }
+    fn evaluate_port(&self,market_view: &MarketView) -> f64 {
+        let price_cents = match market_view.get_mid_price() {
+        Some(p) => p,
+        None    => return 0.0,                // or whatever you deem appropriate
+        };
+        let value_cents = (self.inventory as i128)
+        .checked_mul(price_cents as i128)
+        .expect("portfolio value overflow");
+        (value_cents as f64) / 100.0
     }
 }
 

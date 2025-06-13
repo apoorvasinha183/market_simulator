@@ -50,4 +50,4 @@ pub const WHALE_ACTION_PROB: f64 = 0.05; // Acts very infrequently (5% chance pe
 pub const WHALE_ORDER_VOLUME: u64 = 1_000_000; // Places massive orders
 pub const WHALE_PRICE_OFFSET_MAX: u64 = 1000;
 pub const WHALE_PRICE_OFFSET_MIN: u64 = 500;
-pub const CRAZY_WHALE: f64 = 0.1;
+pub const CRAZY_WHALE: f64 = 0.01;

@@ -21,6 +21,8 @@ pub struct DumbLimitAgent {
     inventory: i64,
     ticks_until_active: u32,
     open_orders: HashMap<u64, Order>,
+    #[allow(dead_code)]
+    margin:i128
 }
 
 impl DumbLimitAgent {
@@ -30,6 +32,7 @@ impl DumbLimitAgent {
             inventory: 200_000_000,
             ticks_until_active: LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
+            margin:100000000
         }
     }
 }
@@ -80,7 +83,8 @@ impl Agent for DumbLimitAgent {
                 }
             }
         }
-
+        let liquidity = self.evaluate_port(market_view);
+        println!("Smart retail has a net position of {}",liquidity);
         requests
     }
 
@@ -143,5 +147,15 @@ impl Agent for DumbLimitAgent {
     }
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(DumbLimitAgent::new(self.id))
+    }
+    fn evaluate_port(&self,market_view: &MarketView) -> f64 {
+        let price_cents = match market_view.get_mid_price() {
+        Some(p) => p,
+        None    => return 0.0,                // or whatever you deem appropriate
+        };
+        let value_cents = (self.inventory as i128)
+        .checked_mul(price_cents as i128)
+        .expect("portfolio value overflow");
+        (value_cents as f64) / 100.0
     }
 }

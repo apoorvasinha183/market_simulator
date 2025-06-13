@@ -39,6 +39,8 @@ pub struct MarketMakerAgent {
     ticks_until_active: u32,
     bootstrapped: bool,
     open_orders: HashMap<u64, Order>,
+    #[allow(dead_code)]
+    margin:i128,
 }
 
 impl MarketMakerAgent {
@@ -49,6 +51,7 @@ impl MarketMakerAgent {
             ticks_until_active: MM_TICKS_UNTIL_ACTIVE,
             bootstrapped: false,
             open_orders: HashMap::new(),
+            margin:100000000000
         }
     }
 
@@ -93,6 +96,7 @@ impl MarketMakerAgent {
 
 impl Agent for MarketMakerAgent {
     fn decide_actions(&mut self, market_view: &MarketView) -> Vec<OrderRequest> {
+
         if self.ticks_until_active > 0 {
             self.ticks_until_active -= 1;
             return vec![];
@@ -102,6 +106,8 @@ impl Agent for MarketMakerAgent {
             self.bootstrapped = true;
             return self.seed_liquidity();
         }
+        let liquidity = self.evaluate_port(market_view);
+        println!("MM has a net position of {}",liquidity);
 
         let best_bid = market_view.order_book.bids.keys().last().cloned();
         let best_ask = market_view.order_book.asks.keys().next().cloned();
@@ -245,6 +251,16 @@ impl Agent for MarketMakerAgent {
     }
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(MarketMakerAgent::new(self.id))
+    }
+    fn evaluate_port(&self,market_view: &MarketView) -> f64 {
+        let price_cents = match market_view.get_mid_price() {
+        Some(p) => p,
+        None    => return 0.0,                // or whatever you deem appropriate
+        };
+        let value_cents = (self.inventory as i128)
+        .checked_mul(price_cents as i128)
+        .expect("portfolio value overflow");
+        (value_cents as f64) / 100.0
     }
 }
 // -----------------------------------------------------------------------------
