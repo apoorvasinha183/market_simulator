@@ -160,7 +160,7 @@ impl eframe::App for AgentVisualizer {
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new(" Bids").color(Color32::from_rgb(40, 167, 69)).strong());
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        ui.label(RichText::new("").color(Color32::GRAY).italics());
+                                        ui.label(RichText::new("(Top 10)").color(Color32::GRAY).italics());
                                     });
                                 });
                                 ui.add_space(4.0);
@@ -174,28 +174,43 @@ impl eframe::App for AgentVisualizer {
                                         ui.label(RichText::new("Volume").underline().strong());
                                         ui.end_row();
                                         
-                                        for (price, level) in order_book.bids.iter().rev().take(10) {
-                                            // Alternating row background
-                                            if row_count % 2 == 0 {
-                                                let row_rect = ui.available_rect_before_wrap();
-                                                ui.painter().rect_filled(
-                                                    row_rect,
-                                                    Rounding::same(3.0),
-                                                    Color32::from_rgba_unmultiplied(0, 0, 0, 10)
-                                                );
-                                            }
-                                            
+                                        if order_book.bids.is_empty() {
+                                            // Show N/A when no bids
                                             ui.label(
-                                                RichText::new(format!("${:.2}", *price as f64 / 100.0))
-                                                    .color(Color32::from_rgb(40, 167, 69))
-                                                    .monospace()
+                                                RichText::new("N/A")
+                                                    .color(Color32::GRAY)
+                                                    .italics()
                                             );
                                             ui.label(
-                                                RichText::new(format_number(level.total_volume as i32))
-                                                    .monospace()
+                                                RichText::new("N/A")
+                                                    .color(Color32::GRAY)
+                                                    .italics()
                                             );
                                             ui.end_row();
-                                            row_count += 1;
+                                        } else {
+                                            for (price, level) in order_book.bids.iter().rev().take(10) {
+                                                // Alternating row background
+                                                if row_count % 2 == 0 {
+                                                    let row_rect = ui.available_rect_before_wrap();
+                                                    ui.painter().rect_filled(
+                                                        row_rect,
+                                                        Rounding::same(3.0),
+                                                        Color32::from_rgba_unmultiplied(0, 0, 0, 10)
+                                                    );
+                                                }
+                                                
+                                                ui.label(
+                                                    RichText::new(format!("${:.2}", *price as f64 / 100.0))
+                                                        .color(Color32::from_rgb(40, 167, 69))
+                                                        .monospace()
+                                                );
+                                                ui.label(
+                                                    RichText::new(format_number(level.total_volume as i32))
+                                                        .monospace()
+                                                );
+                                                ui.end_row();
+                                                row_count += 1;
+                                            }
                                         }
                                     });
                             });
@@ -233,27 +248,42 @@ impl eframe::App for AgentVisualizer {
                                         ui.label(RichText::new("Volume").underline().strong());
                                         ui.end_row();
                                         
-                                        for (price, level) in order_book.asks.iter().take(10) {
-                                            if row_count % 2 == 0 {
-                                                let row_rect = ui.available_rect_before_wrap();
-                                                ui.painter().rect_filled(
-                                                    row_rect,
-                                                    Rounding::same(3.0),
-                                                    Color32::from_rgba_unmultiplied(0, 0, 0, 10)
-                                                );
-                                            }
-                                            
+                                        if order_book.asks.is_empty() {
+                                            // Show N/A when no asks
                                             ui.label(
-                                                RichText::new(format!("${:.2}", *price as f64 / 100.0))
-                                                    .color(Color32::from_rgb(220, 53, 69))
-                                                    .monospace()
+                                                RichText::new("N/A")
+                                                    .color(Color32::GRAY)
+                                                    .italics()
                                             );
                                             ui.label(
-                                                RichText::new(format_number(level.total_volume as i32))
-                                                    .monospace()
+                                                RichText::new("N/A")
+                                                    .color(Color32::GRAY)
+                                                    .italics()
                                             );
                                             ui.end_row();
-                                            row_count += 1;
+                                        } else {
+                                            for (price, level) in order_book.asks.iter().take(10) {
+                                                if row_count % 2 == 0 {
+                                                    let row_rect = ui.available_rect_before_wrap();
+                                                    ui.painter().rect_filled(
+                                                        row_rect,
+                                                        Rounding::same(3.0),
+                                                        Color32::from_rgba_unmultiplied(0, 0, 0, 10)
+                                                    );
+                                                }
+                                                
+                                                ui.label(
+                                                    RichText::new(format!("${:.2}", *price as f64 / 100.0))
+                                                        .color(Color32::from_rgb(220, 53, 69))
+                                                        .monospace()
+                                                );
+                                                ui.label(
+                                                    RichText::new(format_number(level.total_volume as i32))
+                                                        .monospace()
+                                                );
+                                                ui.end_row();
+                                                row_count += 1;
+                                            }
                                         }
                                     });
                             });
@@ -499,7 +529,7 @@ impl AgentVisualizer {
                         let inventory_str = if total_inventory >= 0 {
                             format!("+{}", format_number(total_inventory as i32))
                         } else {
-                            format_number(total_inventory as i32 )
+                            format_number(total_inventory as i32)
                         };
                         ui.label(
                             RichText::new(inventory_str)

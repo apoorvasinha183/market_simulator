@@ -1,15 +1,49 @@
 // src/bin/visualizer.rs
 
 use eframe::egui;
-use egui::{Color32, FontId, Frame, ProgressBar, RichText, Stroke};
+use egui::{Color32, FontId, Frame, ProgressBar, RichText, Stroke, Vec2, Rounding, Margin};
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 use market_simulator::{Greeks, Marketable, OptionPricer, OptionType, GBMSimulator};
 use std::time::{Duration, Instant};
+
+// Custom color palette
+struct Theme {
+    primary: Color32,
+    secondary: Color32,
+    accent: Color32,
+    success: Color32,
+    warning: Color32,
+    danger: Color32,
+    background: Color32,
+    surface: Color32,
+    surface_variant: Color32,
+    text_primary: Color32,
+    text_secondary: Color32,
+}
+
+impl Theme {
+    fn new() -> Self {
+        Self {
+            primary: Color32::from_rgb(79, 70, 229),      // Indigo
+            secondary: Color32::from_rgb(99, 102, 241),   // Indigo lighter
+            accent: Color32::from_rgb(236, 72, 153),      // Pink
+            success: Color32::from_rgb(34, 197, 94),      // Green
+            warning: Color32::from_rgb(251, 191, 36),     // Amber
+            danger: Color32::from_rgb(239, 68, 68),       // Red
+            background: Color32::from_rgb(15, 23, 42),    // Slate 900
+            surface: Color32::from_rgb(30, 41, 59),       // Slate 800
+            surface_variant: Color32::from_rgb(51, 65, 85), // Slate 700
+            text_primary: Color32::from_rgb(248, 250, 252), // Slate 50
+            text_secondary: Color32::from_rgb(203, 213, 225), // Slate 300
+        }
+    }
+}
 
 struct VisualizerApp {
     // World state
     stock_simulator: Box<dyn Marketable>,
     option_pricer: OptionPricer,
+    theme: Theme,
 
     // --- State for Multi-Run ---
     run_price_histories: Vec<Vec<f64>>,
@@ -35,14 +69,19 @@ struct VisualizerApp {
     // UI state for the app itself
     is_playing: bool,
     last_update: Instant,
+    
+    // UI state
+    show_parameters: bool,
 }
 
 impl eframe::App for VisualizerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Set custom style
+        self.setup_custom_style(ctx);
+        
         // --- Non-blocking batch processing ---
-        // If a batch is running, process a small chunk on each UI frame.
         if self.is_batch_running {
-            let runs_per_frame = 20; // Process this many simulations per frame to keep UI smooth
+            let runs_per_frame = 20;
             let end_run = (self.batch_runs_done + runs_per_frame).min(self.num_runs_to_batch);
 
             for _ in self.batch_runs_done..end_run {
@@ -58,11 +97,11 @@ impl eframe::App for VisualizerApp {
             self.batch_runs_done = end_run;
 
             if self.batch_runs_done >= self.num_runs_to_batch {
-                self.is_batch_running = false; // Batch is complete!
+                self.is_batch_running = false;
             }
         }
         
-        // This is the interactive, animated mode
+        // Interactive, animated mode
         if self.is_playing && self.last_update.elapsed() > Duration::from_millis(50) {
             let current_day = self.current_run_history.len() - 1;
 
@@ -87,108 +126,28 @@ impl eframe::App for VisualizerApp {
         }
         ctx.request_repaint();
 
+        // Main UI
         egui::CentralPanel::default().show(ctx, |ui| {
+            self.render_header(ui);
+            ui.add_space(16.0);
+            
+            // Main content area with proper spacing
             ui.horizontal(|ui| {
-                ui.heading("Monte Carlo Option Simulator");
-                ui.add_space(20.0);
+                // Left sidebar for controls
+                ui.vertical(|ui| {
+                    ui.set_width(320.0);
+                    self.render_controls_panel(ui);
+                    ui.add_space(12.0);
+                    self.render_option_data_panel(ui);
+                });
                 
-                if ui.button(if self.is_playing { "⏸ Pause" } else { "▶ Play" }).clicked() {
-                    if !self.is_playing && self.current_run_history.is_empty() { self.start_new_run(); }
-                    self.is_playing = !self.is_playing;
-                    self.last_update = Instant::now();
-                }
-                if ui.button("▶+ Start New Run").clicked() {
-                    self.start_new_run();
-                    self.is_playing = true;
-                }
-                if ui.button("🗑 Clear All Runs").clicked() { self.clear_all_runs(); }
-            });
-
-            // --- Controls for Batch Mode ---
-            ui.horizontal(|ui| {
-                ui.label("Batch size:");
-                // Disable the input box while a batch is running
-                ui.add_enabled(!self.is_batch_running, egui::DragValue::new(&mut self.num_runs_to_batch).speed(1.0).clamp_range(1..=10000));
-                // Disable the button while a batch is running
-                if ui.add_enabled(!self.is_batch_running, egui::Button::new("⚡ Run Batch")).clicked() {
-                    self.run_batch_simulations();
-                }
-            });
-
-            // --- Display the Progress Bar ---
-            if self.is_batch_running {
-                let progress = self.batch_runs_done as f32 / self.num_runs_to_batch as f32;
-                let progress_text = format!("Running Batch... {}/{}", self.batch_runs_done, self.num_runs_to_batch);
-                ui.add(ProgressBar::new(progress).text(progress_text));
-            }
-            
-            ui.collapsing("Simulation Parameters", |ui| {
-                ui.add(egui::DragValue::new(&mut self.strike_price).prefix("Strike: $"));
-                ui.add(egui::DragValue::new(&mut self.time_to_expiration_days).suffix(" days"));
-                ui.add(egui::DragValue::new(&mut self.risk_free_rate).speed(0.001).prefix("Risk-Free Rate: "));
-                ui.add(egui::DragValue::new(&mut self.initial_volatility).speed(0.001).prefix("Initial Volatility: "));
-                ui.add(egui::DragValue::new(&mut self.volatility_window).suffix(" day window"));
-                ui.horizontal(|ui| {
-                    ui.label("Option Type:");
-                    ui.radio_value(&mut self.option_type, OptionType::Call, "Call");
-                    ui.radio_value(&mut self.option_type, OptionType::Put, "Put");
-                });
-            });
-            ui.separator();
-            
-            Frame::dark_canvas(ui.style())
-                .inner_margin(egui::Margin::symmetric(12.0, 8.0))
-                .show(ui, |ui| {
-                    ui.heading("Option Data (Current Run)");
-                    ui.separator();
-                    ui.horizontal(|ui| {
-                        let mono_font = FontId::monospace(14.0);
-                        let big_font = FontId::monospace(18.0);
-                        ui.vertical(|ui| {
-                            ui.label("Price:");
-                            ui.label(RichText::new(format!("$ {:.2}", self.current_option_price)).font(big_font).color(Color32::LIGHT_GREEN));
-                        });
-                        ui.add(egui::Separator::default().vertical());
-                        egui::Grid::new("greeks_grid").num_columns(2).spacing([20.0, 2.0]).show(ui, |ui| {
-                            ui.label(RichText::new("Delta:").strong());
-                            ui.label(RichText::new(format!("{:.4}", self.current_greeks.delta)).font(mono_font.clone()));
-                            ui.end_row();
-                            ui.label(RichText::new("Gamma:").strong());
-                            ui.label(RichText::new(format!("{:.4}", self.current_greeks.gamma)).font(mono_font.clone()));
-                            ui.end_row();
-                            ui.label(RichText::new("Vega:").strong());
-                            ui.label(RichText::new(format!("{:.4}", self.current_greeks.vega)).font(mono_font.clone()));
-                            ui.end_row();
-                            ui.label(RichText::new("Theta:").strong());
-                            ui.label(RichText::new(format!("{:.4}", self.current_greeks.theta)).font(mono_font.clone()));
-                            ui.end_row();
-                            ui.label(RichText::new("Rho:").strong());
-                            ui.label(RichText::new(format!("{:.4}", self.current_greeks.rho)).font(mono_font.clone()));
-                            ui.end_row();
-                        });
-                    });
-                });
-            ui.add_space(4.0);
-
-            Frame::dark_canvas(ui.style()).show(ui, |ui| {
-                Plot::new("stock_plot")
-                    .height(ui.available_height())
-                    .width(ui.available_width())
-                    .legend(Legend::default())
-                    .show(ui, |plot_ui| {
-                        for history in self.run_price_histories.iter() {
-                            let line = Line::new(PlotPoints::from_ys_f64(history))
-                                .color(Color32::from_gray(100).additive())
-                                .stroke(Stroke::new(1.0, Color32::from_gray(100).additive()));
-                            plot_ui.line(line);
-                        }
-                        if !self.current_run_history.is_empty() {
-                            let active_line = Line::new(PlotPoints::from_ys_f64(&self.current_run_history))
-                                .color(Color32::LIGHT_BLUE)
-                                .stroke(Stroke::new(2.0, Color32::LIGHT_BLUE))
-                                .name("Current Run");
-                            plot_ui.line(active_line);
-                        }
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(16.0);
+                
+                // Right side for the chart
+                ui.vertical(|ui| {
+                    self.render_chart_panel(ui);
                 });
             });
         });
@@ -196,6 +155,329 @@ impl eframe::App for VisualizerApp {
 }
 
 impl VisualizerApp {
+    fn render_greek_row(&self, ui: &mut egui::Ui, label: &str, value: f64, color: Color32) {
+        ui.label(RichText::new(label).color(self.theme.text_secondary));
+        ui.label(
+            RichText::new(format!("{:.4}", value))
+                .color(color)
+                .strong()
+        );
+        ui.end_row();
+    }
+    fn setup_custom_style(&self, ctx: &egui::Context) {
+        let mut style = (*ctx.style()).clone();
+        
+        // Set background colors
+        style.visuals.window_fill = self.theme.background;
+        style.visuals.panel_fill = self.theme.background;
+        style.visuals.faint_bg_color = self.theme.surface;
+        style.visuals.extreme_bg_color = self.theme.surface_variant;
+        
+        // Set widget colors
+        style.visuals.widgets.inactive.bg_fill = self.theme.surface;
+        style.visuals.widgets.hovered.bg_fill = self.theme.surface_variant;
+        style.visuals.widgets.active.bg_fill = self.theme.primary;
+        
+        // Set button styling
+        style.visuals.widgets.inactive.rounding = Rounding::same(8.0);
+        style.visuals.widgets.hovered.rounding = Rounding::same(8.0);
+        style.visuals.widgets.active.rounding = Rounding::same(8.0);
+        
+        ctx.set_style(style);
+    }
+    
+    fn render_header(&mut self, ui: &mut egui::Ui) {
+        Frame::none()
+            .fill(self.theme.surface)
+            .rounding(Rounding::same(12.0))
+            .inner_margin(Margin::symmetric(20.0, 16.0))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    // Title with icon
+                    ui.label(
+                        RichText::new("📈 Monte Carlo Options Simulator")
+                            .font(FontId::proportional(24.0))
+                            .color(self.theme.text_primary)
+                            .strong()
+                    );
+                    
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // Control buttons with custom styling
+                        if self.styled_button(ui, if self.is_playing { "⏸ Pause" } else { "▶ Play" }, self.theme.primary).clicked() {
+                            if !self.is_playing && self.current_run_history.is_empty() { 
+                                self.start_new_run(); 
+                            }
+                            self.is_playing = !self.is_playing;
+                            self.last_update = Instant::now();
+                        }
+                        
+                        ui.add_space(8.0);
+                        
+                        if self.styled_button(ui, "🆕 New Run", self.theme.success).clicked() {
+                            self.start_new_run();
+                            self.is_playing = true;
+                        }
+                        
+                        ui.add_space(8.0);
+                        
+                        if self.styled_button(ui, "🗑 Clear All", self.theme.danger).clicked() { 
+                            self.clear_all_runs(); 
+                        }
+                    });
+                });
+            });
+    }
+    
+    fn render_controls_panel(&mut self, ui: &mut egui::Ui) {
+        // Batch Controls Card
+        Frame::none()
+            .fill(self.theme.surface)
+            .rounding(Rounding::same(12.0))
+            .inner_margin(Margin::symmetric(16.0, 12.0))
+            .show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new("Batch Simulation")
+                            .font(FontId::proportional(16.0))
+                            .color(self.theme.text_primary)
+                            .strong()
+                    );
+                    ui.add_space(8.0);
+                    
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Batch size:").color(self.theme.text_secondary));
+                        ui.add_enabled(
+                            !self.is_batch_running, 
+                            egui::DragValue::new(&mut self.num_runs_to_batch)
+                                .speed(10.0)
+                                .clamp_range(1..=10000)
+                        );
+                    });
+                    
+                    ui.add_space(8.0);
+                    
+                    if self.styled_button(
+                        ui, 
+                        "⚡ Run Batch", 
+                        if self.is_batch_running { self.theme.text_secondary } else { self.theme.warning }
+                    ).clicked() && !self.is_batch_running {
+                        self.run_batch_simulations();
+                    }
+                    
+                    // Progress bar
+                    if self.is_batch_running {
+                        ui.add_space(8.0);
+                        let progress = self.batch_runs_done as f32 / self.num_runs_to_batch as f32;
+                        let progress_text = format!("{}/{} runs", self.batch_runs_done, self.num_runs_to_batch);
+                        
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Progress").color(self.theme.text_secondary).small());
+                            let progress_bar = ProgressBar::new(progress)
+                                .text(progress_text)
+                                .fill(self.theme.accent);
+                            ui.add(progress_bar);
+                        });
+                    }
+                })
+            });
+        
+        ui.add_space(12.0);
+        
+        // Parameters Card
+        Frame::none()
+            .fill(self.theme.surface)
+            .rounding(Rounding::same(12.0))
+            .inner_margin(Margin::symmetric(16.0, 12.0))
+            .show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new("Simulation Parameters")
+                            .font(FontId::proportional(16.0))
+                            .color(self.theme.text_primary)
+                            .strong()
+                    );
+                    ui.add_space(8.0);
+                    
+                    ui.collapsing("📊 Market Parameters", |ui| {
+                        ui.horizontal(|ui| {
+                            ui.set_width(ui.available_width());
+                            ui.label(RichText::new("Strike Price:").color(self.theme.text_secondary));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.add(egui::DragValue::new(&mut self.strike_price).speed(1.0).prefix("$"));
+                            });
+                        });
+                        ui.add_space(4.0);
+                        
+                        ui.horizontal(|ui| {
+                            ui.set_width(ui.available_width());
+                            ui.label(RichText::new("Days to Expiry:").color(self.theme.text_secondary));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.add(egui::DragValue::new(&mut self.time_to_expiration_days).speed(1.0).suffix(" days"));
+                            });
+                        });
+                        ui.add_space(4.0);
+                        
+                        ui.horizontal(|ui| {
+                            ui.set_width(ui.available_width());
+                            ui.label(RichText::new("Risk-Free Rate:").color(self.theme.text_secondary));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.add(egui::DragValue::new(&mut self.risk_free_rate).speed(0.001).suffix("%"));
+                            });
+                        });
+                        ui.add_space(4.0);
+                        
+                        ui.horizontal(|ui| {
+                            ui.set_width(ui.available_width());
+                            ui.label(RichText::new("Initial Volatility:").color(self.theme.text_secondary));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.add(egui::DragValue::new(&mut self.initial_volatility).speed(0.001).suffix("%"));
+                            });
+                        });
+                        ui.add_space(4.0);
+                        
+                        ui.horizontal(|ui| {
+                            ui.set_width(ui.available_width());
+                            ui.label(RichText::new("Volatility Window:").color(self.theme.text_secondary));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.add(egui::DragValue::new(&mut self.volatility_window).speed(1.0).suffix(" days"));
+                            });
+                        });
+                        ui.add_space(8.0);
+                        
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Option Type:").color(self.theme.text_secondary));
+                            ui.radio_value(&mut self.option_type, OptionType::Call, "📈 Call");
+                            ui.radio_value(&mut self.option_type, OptionType::Put, "📉 Put");
+                        });
+                    });
+                })
+            });
+    }
+    
+    fn render_option_data_panel(&self, ui: &mut egui::Ui) {
+        Frame::none()
+            .fill(self.theme.surface)
+            .rounding(Rounding::same(12.0))
+            .inner_margin(Margin::symmetric(16.0, 12.0))
+            .show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new("Option Metrics")
+                            .font(FontId::proportional(16.0))
+                            .color(self.theme.text_primary)
+                            .strong()
+                    );
+                    ui.add_space(8.0);
+                    
+                    // Option Price - Featured prominently
+                    Frame::none()
+                        .fill(self.theme.primary.linear_multiply(0.1))
+                        .rounding(Rounding::same(8.0))
+                        .inner_margin(Margin::symmetric(12.0, 8.0))
+                        .show(ui, |ui| {
+                            ui.vertical_centered(|ui| {
+                                ui.label(RichText::new("Current Price").color(self.theme.text_secondary));
+                                ui.label(
+                                    RichText::new(format!("${:.2}", self.current_option_price))
+                                        .font(FontId::proportional(28.0))
+                                        .color(self.theme.success)
+                                        .strong()
+                                );
+                            });
+                        });
+                    
+                    ui.add_space(12.0);
+                    
+                    // Greeks in a clean grid
+                    ui.label(RichText::new("The Greeks").color(self.theme.text_primary).strong());
+                    ui.add_space(4.0);
+                    
+                    egui::Grid::new("greeks_grid")
+                        .num_columns(2)
+                        .spacing([16.0, 8.0])
+                        .show(ui, |ui| {
+                            self.render_greek_row(ui, "Δ Delta", self.current_greeks.delta, self.theme.primary);
+                            self.render_greek_row(ui, "Γ Gamma", self.current_greeks.gamma, self.theme.secondary);
+                            self.render_greek_row(ui, "ν Vega", self.current_greeks.vega, self.theme.accent);
+                            self.render_greek_row(ui, "Θ Theta", self.current_greeks.theta, self.theme.warning);
+                            self.render_greek_row(ui, "ρ Rho", self.current_greeks.rho, self.theme.success);
+                        });
+                })
+            });
+    }
+    
+    fn render_chart_panel(&self, ui: &mut egui::Ui) {
+        Frame::none()
+            .fill(self.theme.surface)
+            .rounding(Rounding::same(12.0))
+            .inner_margin(Margin::symmetric(16.0, 12.0))
+            .show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new("Price Simulation")
+                            .font(FontId::proportional(16.0))
+                            .color(self.theme.text_primary)
+                            .strong()
+                    );
+                    ui.add_space(8.0);
+                    
+                    let chart_height = ui.available_height() - 40.0;
+                    
+                    Frame::none()
+                        .fill(Color32::from_rgb(10, 15, 25))
+                        .rounding(Rounding::same(8.0))
+                        .inner_margin(Margin::symmetric(8.0, 8.0))
+                        .show(ui, |ui| {
+                            Plot::new("stock_plot")
+                                .height(chart_height)
+                                .width(ui.available_width())
+                                .legend(Legend::default())
+                                .show_background(false)
+                                .show(ui, |plot_ui| {
+                                    // Historical runs with subtle styling
+                                    for (i, history) in self.run_price_histories.iter().enumerate() {
+                                        let alpha = (255.0 * (0.1 + 0.02 * (i % 10) as f32)) as u8;
+                                        let line = Line::new(PlotPoints::from_ys_f64(history))
+                                            .color(Color32::from_rgba_unmultiplied(100, 100, 120, alpha))
+                                            .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(100, 100, 120, alpha)));
+                                        plot_ui.line(line);
+                                    }
+                                    
+                                    // Current run with vibrant styling
+                                    if !self.current_run_history.is_empty() {
+                                        let active_line = Line::new(PlotPoints::from_ys_f64(&self.current_run_history))
+                                            .color(self.theme.accent)
+                                            .stroke(Stroke::new(3.0, self.theme.accent))
+                                            .name("🎯 Current Run");
+                                        plot_ui.line(active_line);
+                                    }
+                                    
+                                    // Strike price line (solid line instead of dashed)
+                                    let strike_line = Line::new(PlotPoints::from_iter(
+                                        (0..self.time_to_expiration_days + 10)
+                                            .map(|x| [x as f64, self.strike_price])
+                                    ))
+                                        .color(self.theme.warning)
+                                        .stroke(Stroke::new(2.0, self.theme.warning))
+                                        .name("💰 Strike Price");
+                                    plot_ui.line(strike_line);
+                                });
+                        });
+                })
+            });
+    }
+    
+    
+    fn styled_button(&self, ui: &mut egui::Ui, text: &str, color: Color32) -> egui::Response {
+        // Use egui's built-in button but with custom styling
+        let button = egui::Button::new(RichText::new(text).color(Color32::WHITE).strong())
+            .fill(color)
+            .rounding(Rounding::same(8.0))
+            .min_size(Vec2::new(ui.available_width().min(120.0), 32.0));
+        
+        ui.add(button)
+    }
+
     fn start_new_run(&mut self) {
         if self.current_run_history.len() > 1 {
             self.run_price_histories.push(self.current_run_history.clone());
@@ -219,12 +501,11 @@ impl VisualizerApp {
         self.start_new_run();
     }
 
-    /// Kicks off the batch process. Does not block the UI.
     fn run_batch_simulations(&mut self) {
-        self.clear_all_runs(); // Start from a clean slate
-        self.is_playing = false; // Stop any interactive run
-        self.batch_runs_done = 0; // Reset progress
-        self.is_batch_running = true; // Set the flag to start processing in the update loop
+        self.clear_all_runs();
+        self.is_playing = false;
+        self.batch_runs_done = 0;
+        self.is_batch_running = true;
     }
 }
 
@@ -249,12 +530,13 @@ fn main() -> Result<(), eframe::Error> {
     let app_state = VisualizerApp {
         stock_simulator,
         option_pricer,
+        theme: Theme::new(),
         run_price_histories: Vec::new(),
         current_run_history: vec![initial_stock_price],
         current_option_price: initial_option_price,
         current_greeks: initial_greeks,
         num_runs_to_batch: 100,
-        is_batch_running: false, // Start not running a batch
+        is_batch_running: false,
         batch_runs_done: 0,
         strike_price,
         time_to_expiration_days,
@@ -264,17 +546,19 @@ fn main() -> Result<(), eframe::Error> {
         volatility_window,
         is_playing: false,
         last_update: Instant::now(),
+        show_parameters: false,
     };
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([900.0, 700.0])
-            .with_title("Stateful Pricer Visualizer"),
+            .with_inner_size([1200.0, 800.0])
+            .with_title("Monte Carlo Options Simulator")
+            .with_min_inner_size([800.0, 600.0]),
         ..Default::default()
     };
 
     eframe::run_native(
-        "Stateful Pricer Visualizer App",
+        "Monte Carlo Options Simulator",
         native_options,
         Box::new(|_cc| Box::new(app_state)),
     )
