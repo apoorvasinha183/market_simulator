@@ -71,6 +71,7 @@ struct VisualizerApp {
     last_update: Instant,
     
     // UI state
+    #[allow(dead_code)]
     show_parameters: bool,
 }
 
