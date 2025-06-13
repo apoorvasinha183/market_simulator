@@ -83,30 +83,7 @@ cargo bench --bench order_book -- --sample-size 30 --measurement-time 6
 
 ---
 
-## Basic Usage Example
 
-```rust
-use market_simulator::{
-    Market, AgentType,
-    types::order::{Side, OrderRequest},
-};
-
-let mut market = Market::new(&[
-    AgentType::Dumb,
-    AgentType::MarketMaker,
-]);
-
-// advance one simulation tick
-market.step();
-
-// send a custom order from an external strategy
-let req = OrderRequest::MarketOrder {
-    agent_id: 99,
-    side: Side::Buy,
-    volume: 10_000,
-};
-market.handle_external_order(req);
-```
 
 ---
 
