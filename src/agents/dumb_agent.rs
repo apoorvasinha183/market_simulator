@@ -6,7 +6,7 @@ use super::config::{
     DUMB_AGENT_LARGE_VOL_MIN, DUMB_AGENT_NUM_TRADERS, DUMB_AGENT_TYPICAL_VOL_MAX,
     DUMB_AGENT_TYPICAL_VOL_MIN,
 };
-use super::latency;
+//use super::latency;
 use crate::agents::latency::DUMB_AGENT_TICKS_UNTIL_ACTIVE;
 use crate::simulators::order_book::Trade;
 use crate::types::order::{Order, OrderRequest, Side};

@@ -5,7 +5,7 @@ use super::config::{
     LIMIT_AGENT_ACTION_PROB, LIMIT_AGENT_MAX_OFFSET, LIMIT_AGENT_NUM_TRADERS, // Added NUM_TRADERS
     LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN, MARGIN_CALL_THRESHOLD, TICKS_UNTIL_ACTIVE,
 };
-use super::latency;
+//use super::latency;
 use crate::agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE;
 use crate::simulators::order_book::Trade;
 use crate::types::order::{Order, OrderRequest, Side};

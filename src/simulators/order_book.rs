@@ -218,3 +218,143 @@ impl OrderBook {
         false // Order not found or not owned by the agent.
     }
 }
+// -----------------------------------------------------------------------------
+//  Unit Tests
+// -----------------------------------------------------------------------------
+// The #[cfg(test)] attribute tells the Rust compiler to only compile this
+// module when we run `cargo test`, so it's not included in the final binary.
+#[cfg(test)]
+mod tests {
+    use super::*; // Import everything from the parent module (OrderBook, Trade, etc.)
+    use crate::types::order::{Order, Side}; // Import necessary types
+
+    // A helper function to create a new test order with less boilerplate.
+    fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64) -> Order {
+        Order { id, agent_id, side, price, volume, filled: 0 }
+    }
+
+    #[test]
+    fn test_add_simple_limit_order() {
+        // Arrange
+        let mut book = OrderBook::new();
+        let order = new_order(1, 1, Side::Buy, 100, 50);
+
+        // Act
+        book.add_limit_order(order);
+
+        // Assert
+        assert_eq!(book.bids.len(), 1, "A bid price level should have been created.");
+        let level = book.bids.get(&100).unwrap();
+        assert_eq!(level.total_volume, 50, "The total volume at the price level should be 50.");
+        assert_eq!(level.orders.len(), 1, "There should be one order in the queue.");
+        assert_eq!(level.orders[0].id, 1, "The order ID should match.");
+    }
+
+    #[test]
+    fn test_market_order_simple_fill() {
+        // Arrange
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
+
+        // Act
+        let trades = book.process_market_order(2, Side::Buy, 30);
+
+        // Assert
+        assert_eq!(trades.len(), 1, "There should have been exactly one trade.");
+        let trade = trades[0];
+        assert_eq!(trade.price, 100, "The trade price should be 100.");
+        assert_eq!(trade.volume, 30, "The trade volume should be 30.");
+        assert_eq!(trade.taker_agent_id, 2, "The taker ID should be 2.");
+        assert_eq!(trade.maker_agent_id, 1, "The maker ID should be 1.");
+        assert_eq!(trade.maker_order_id, 1, "The maker's order ID should be 1.");
+
+        let ask_level = book.asks.get(&100).unwrap();
+        assert_eq!(ask_level.total_volume, 20, "The remaining volume on the book should be 20.");
+        assert_eq!(ask_level.orders[0].filled, 30, "The resting order should show 30 filled.");
+    }
+
+    #[test]
+    fn test_market_order_full_fill_and_remove() {
+        // Arrange
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
+        book.add_limit_order(new_order(2, 1, Side::Sell, 101, 50));
+
+        // Act
+        let trades = book.process_market_order(3, Side::Buy, 50);
+
+        // Assert
+        assert_eq!(trades.len(), 1, "A single trade should occur.");
+        // --- THIS IS THE FIX ---
+        // Use the .is_none() method to check for an empty Option.
+        assert!(book.asks.get(&100).is_none(), "The price level at 100 should be completely removed.");
+        assert!(book.asks.contains_key(&101), "The price level at 101 should still exist.");
+    }
+    
+    #[test]
+    fn test_marketable_limit_order() {
+        // Arrange
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
+        let mut aggressive_buy = new_order(2, 2, Side::Buy, 101, 30); // Priced above the ask
+
+        // Act
+        let trades = book.process_limit_order(&mut aggressive_buy);
+
+        // Assert
+        assert_eq!(trades.len(), 1, "The marketable limit order should have executed a trade.");
+        assert_eq!(trades[0].price, 100, "Trade should happen at the resting order's price.");
+        assert_eq!(trades[0].volume, 30, "Trade volume should match the aggressive order's volume.");
+        assert_eq!(book.asks.get(&100).unwrap().total_volume, 20, "The resting order should have 20 volume left.");
+        assert!(book.bids.is_empty(), "The aggressive buy order should not rest on the book as it was fully filled.");
+    }
+
+    #[test]
+    fn test_marketable_limit_order_partial_fill_and_rest() {
+        // Arrange
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 30));
+        let mut aggressive_buy = new_order(2, 2, Side::Buy, 101, 50);
+
+        // Act
+        let trades = book.process_limit_order(&mut aggressive_buy);
+
+        // Assert
+        assert_eq!(trades.len(), 1, "There should be one trade.");
+        assert_eq!(trades[0].volume, 30, "The trade should be for 30 shares.");
+        assert!(!book.asks.contains_key(&100), "The ask at 100 should be completely filled and removed.");
+        
+        assert_eq!(book.bids.len(), 1, "The remaining volume should be placed on the bid side.");
+        let bid_level = book.bids.get(&101).unwrap();
+        assert_eq!(bid_level.total_volume, 20, "The new bid should have 20 remaining volume.");
+        assert_eq!(bid_level.orders[0].id, 2, "The new bid should have the correct order ID.");
+    }
+
+    #[test]
+    fn test_cancel_order_simple() {
+        // Arrange
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Buy, 100, 50));
+        
+        // Act
+        let success = book.cancel_order(1, 1);
+
+        // Assert
+        assert!(success, "The cancellation should have been successful.");
+        assert!(book.bids.is_empty(), "The bid side of the book should be empty after cancellation.");
+    }
+
+    #[test]
+    fn test_cancel_order_fails_for_wrong_owner() {
+        // Arrange
+        let mut book = OrderBook::new();
+        book.add_limit_order(new_order(1, 1, Side::Buy, 100, 50));
+        
+        // Act: Agent 2 tries to cancel Agent 1's order
+        let success = book.cancel_order(1, 2);
+
+        // Assert
+        assert!(!success, "The cancellation should have failed.");
+        assert_eq!(book.bids.get(&100).unwrap().total_volume, 50, "The order should not have been removed.");
+    }
+}

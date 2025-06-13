@@ -2,7 +2,7 @@
 
 use eframe::egui;
 use egui::{Color32, RichText, Stroke};
-use egui_plot::{Legend, Line, Plot, PlotBounds, PlotPoints};
+use egui_plot::{Legend, Line, Plot, PlotBounds, PlotPoints, Points}; // Import Points
 use market_simulator::{AgentType, Market, Marketable};
 use std::time::{Duration, Instant};
 
@@ -109,7 +109,6 @@ impl eframe::App for AgentVisualizer {
                     Plot::new("order_book_plot")
                         .legend(Legend::default())
                         .show(&mut columns[0], |plot_ui| {
-                            // --- Asks ---
                             let mut ask_pts = Vec::new();
                             let mut cum_ask = 0.0;
                             for (&px, lvl) in order_book.asks.iter() {
@@ -120,12 +119,11 @@ impl eframe::App for AgentVisualizer {
                             }
                             plot_ui.line(
                                 Line::new(PlotPoints::from(ask_pts))
-                                    .fill(0.0) // Fill down to the x-axis
+                                    .fill(0.0)
                                     .color(Color32::from_rgba_unmultiplied(255, 80, 80, 60))
                                     .name("Cumulative Asks"),
                             );
 
-                            // --- Bids ---
                             let mut bid_pts = Vec::new();
                             let mut cum_bid = 0.0;
                             for (&px, lvl) in order_book.bids.iter().rev() {
@@ -136,15 +134,13 @@ impl eframe::App for AgentVisualizer {
                             }
                             plot_ui.line(
                                 Line::new(PlotPoints::from(bid_pts))
-                                    .fill(0.0) // Fill down to the x-axis
+                                    .fill(0.0)
                                     .color(Color32::from_rgba_unmultiplied(80, 255, 80, 60))
                                     .name("Cumulative Bids"),
                             );
-
-                            // --- THE FIX: Set plot bounds manually based on last traded price ---
+                            
                             let center_px = market.current_price();
-                            let half_win = 20.00; // Show +/- $2.50
-                            //let y_max = (cum_ask.max(cum_bid) * 1.05).max(100.0); // Add a minimum y-height
+                            let half_win = 20.00;
                             let y_max = 2_000_000.00;
                             plot_ui.set_plot_bounds(PlotBounds::from_min_max(
                                 [center_px - half_win, 0.0],
@@ -156,10 +152,27 @@ impl eframe::App for AgentVisualizer {
                     Plot::new("price_history_plot")
                         .legend(Legend::default())
                         .show(&mut columns[1], |plot_ui| {
+                            // Draw the main price history line
                             let line = Line::new(PlotPoints::from_ys_f64(&self.price_history))
                                 .color(Color32::LIGHT_BLUE)
                                 .stroke(Stroke::new(2.0, Color32::LIGHT_BLUE));
                             plot_ui.line(line.name("Last Traded Price"));
+
+                            // --- NEW: Add the blinking circle for the last price ---
+                            if let Some(&last_price) = self.price_history.last() {
+                                let x = (self.price_history.len() - 1) as f64;
+                                
+                                // Create a blinking effect using a sine wave on the time
+                                let time = ctx.input(|i| i.time);
+                                let radius = 3.0 + (time * 8.0).sin().abs() * 3.0; // Pulses between 3.0 and 6.0
+
+                                // Create a Points item for just the last point
+                                let last_point_marker = Points::new(vec![[x, last_price]])
+                                    .radius(radius as f32)
+                                    .color(Color32::YELLOW);
+
+                                plot_ui.points(last_point_marker);
+                            }
                         });
                 });
             });
@@ -184,7 +197,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::MarketMaker,
         AgentType::DumbLimit,
         AgentType::DumbMarket,
-        AgentType::WhaleAgent
+        AgentType::WhaleAgent,
     ];
     let simulator: Box<dyn Marketable> = Box::new(Market::new(&participants));
     let app_state = AgentVisualizer {

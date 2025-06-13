@@ -8,7 +8,7 @@ use super::config::{
     MM_SEED_LEVELS, MM_SEED_TICK_SPACING, MM_SKEW_FACTOR,
     MM_UNSTICK_VOL_MAX, MM_UNSTICK_VOL_MIN, TICKS_UNTIL_ACTIVE, MARGIN_CALL_THRESHOLD
 };
-use super::latency;
+//use super::latency;
 use crate::agents::latency::MM_TICKS_UNTIL_ACTIVE;
 use crate::simulators::order_book::Trade;
 use crate::types::order::{Order, OrderRequest, Side};
