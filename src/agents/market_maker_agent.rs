@@ -176,3 +176,83 @@ impl Agent for MarketMakerAgent {
     fn get_inventory(&self) -> i64 { self.inventory }
     fn clone_agent(&self) -> Box<dyn Agent> { Box::new(MarketMakerAgent::new(self.id)) }
 }
+// -----------------------------------------------------------------------------
+//  Unit Tests
+// -----------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*; // Import from parent module
+    use crate::types::order::Side;
+
+    // Helper to create a new order for testing.
+    fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64) -> Order {
+        Order { id, agent_id, side, price, volume, filled: 0 }
+    }
+
+    // Helper to create a mock trade for testing.
+    fn new_trade(taker_id: usize, maker_id: usize, maker_order_id: u64, side: Side, price: u64, vol: u64) -> Trade {
+        Trade {
+            price,
+            volume: vol,
+            taker_agent_id: taker_id,
+            maker_agent_id: maker_id,
+            maker_order_id,
+            taker_side: side,
+        }
+    }
+
+    #[test]
+    fn test_update_portfolio_as_maker_partial_fill() {
+        // Arrange
+        let mut mm = MarketMakerAgent::new(1);
+        let order = new_order(101, 1, Side::Sell, 15000, 100);
+        mm.acknowledge_order(order); // Agent now tracks this open order.
+
+        let trade = new_trade(2, 1, 101, Side::Buy, 15000, 40);
+        let expected_inventory_change = -40; // Maker sold 40 shares.
+
+        // Act
+        mm.update_portfolio(expected_inventory_change, &trade);
+
+        // Assert
+        let open_order = mm.open_orders.get(&101).expect("Order 101 should still be open.");
+        assert_eq!(open_order.filled, 40, "The order's filled amount should be 40.");
+        assert_eq!(mm.inventory, MM_INITIAL_INVENTORY - 40, "Inventory should be reduced by 40.");
+    }
+
+    #[test]
+    fn test_update_portfolio_as_maker_full_fill() {
+        // Arrange
+        let mut mm = MarketMakerAgent::new(1);
+        let order = new_order(101, 1, Side::Sell, 15000, 100);
+        mm.acknowledge_order(order);
+
+        let trade = new_trade(2, 1, 101, Side::Buy, 15000, 100);
+        let expected_inventory_change = -100;
+
+        // Act
+        mm.update_portfolio(expected_inventory_change, &trade);
+
+        // Assert
+        assert!(mm.open_orders.get(&101).is_none(), "Order 101 should be removed after a full fill.");
+        assert_eq!(mm.inventory, MM_INITIAL_INVENTORY - 100, "Inventory should be reduced by 100.");
+        assert!(mm.get_pending_orders().is_empty(), "There should be no pending orders.");
+    }
+    
+    #[test]
+    fn test_update_portfolio_as_taker() {
+        // Arrange
+        let mut mm = MarketMakerAgent::new(1);
+        // The MM has no open orders initially. It acts as the aggressor.
+        
+        let trade = new_trade(1, 2, 202, Side::Buy, 15000, 75); // MM (agent 1) is the taker.
+        let expected_inventory_change = 75; // Taker bought 75 shares.
+
+        // Act
+        mm.update_portfolio(expected_inventory_change, &trade);
+        
+        // Assert
+        assert_eq!(mm.inventory, MM_INITIAL_INVENTORY + 75, "Inventory should increase by 75.");
+        assert!(mm.open_orders.is_empty(), "Open orders should be unchanged as the MM was the taker.");
+    }
+}

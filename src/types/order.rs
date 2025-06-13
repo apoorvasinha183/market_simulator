@@ -6,6 +6,15 @@ pub enum Side {
     Buy,
     Sell,
 }
+impl Side {
+    /// Returns the opposite side of the market.
+    pub fn opposite(self) -> Self {
+        match self {
+            Side::Buy => Side::Sell,
+            Side::Sell => Side::Buy,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Order {
