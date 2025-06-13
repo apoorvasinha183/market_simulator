@@ -2,19 +2,50 @@
 
 use crate::types::order::{Order, Side};
 use std::collections::{BTreeMap, VecDeque};
-
 #[derive(Debug, Clone, Copy)]
+
+
+
 pub struct Trade {
+
+
+
     pub price: u64,
+
+
+
     pub volume: u64,
+
+
+
     pub taker_agent_id: usize,
+
+
+
     pub maker_agent_id: usize,
-    pub taker_side: Side, // <-- ADD THIS FIELD
+
+
+
+    pub taker_side: Side,
+
+
+
+    pub maker_order_id: u64
+
+
+
+}
+// NEW: A struct to hold the aggregate state of a single price level.
+#[derive(Debug, Default)]
+pub struct PriceLevel {
+    pub total_volume: u64,       // For the visualizer to read directly.
+    pub orders: VecDeque<Order>, // The FIFO queue of orders for the matching engine.
 }
 
 pub struct OrderBook {
-    pub bids: BTreeMap<u64, VecDeque<Order>>,
-    pub asks: BTreeMap<u64, VecDeque<Order>>,
+    // The book now maps a price to its stateful PriceLevel.
+    pub bids: BTreeMap<u64, PriceLevel>,
+    pub asks: BTreeMap<u64, PriceLevel>,
 }
 
 impl OrderBook {
@@ -25,12 +56,14 @@ impl OrderBook {
         }
     }
 
-    pub fn add_limit_order(&mut self, order: Order) {
+    fn add_limit_order(&mut self, order: Order) {
         let book_side = match order.side {
             Side::Buy => &mut self.bids,
             Side::Sell => &mut self.asks,
         };
-        book_side.entry(order.price).or_default().push_back(order);
+        let level = book_side.entry(order.price).or_default();
+        level.total_volume += order.volume; // Update aggregate volume
+        level.orders.push_back(order);    // Add the specific order
     }
     
     pub fn process_market_order(&mut self, taker_agent_id: usize, side: Side, mut volume_to_fill: u64) -> Vec<Trade> {
@@ -49,28 +82,42 @@ impl OrderBook {
         for price in price_levels {
             if volume_to_fill == 0 { break; }
 
-            if let Some(level_queue) = book_to_match.get_mut(&price) {
-                while let Some(maker_order) = level_queue.front_mut() {
+            if let Some(level) = book_to_match.get_mut(&price) {
+                while let Some(maker_order) = level.orders.front_mut() {
                     if volume_to_fill == 0 { break; }
 
-                    let trade_volume = volume_to_fill.min(maker_order.volume);
+                    let remaining_volume = maker_order.volume.saturating_sub(maker_order.filled);
+                    if remaining_volume == 0 {
+                        level.orders.pop_front();
+                        continue;
+                    }
+
+                    let trade_volume = volume_to_fill.min(remaining_volume);
                     
-                    trades.push(Trade {
-                        price: maker_order.price,
-                        volume: trade_volume,
-                        taker_agent_id,
-                        maker_agent_id: maker_order.agent_id,
-                        taker_side: side, // <-- ADD THIS FIELD ON TRADE CREATION
-                    });
+                    if trade_volume > 0 {
+                        trades.push(Trade {
+                            price: maker_order.price,
+                            volume: trade_volume,
+                            taker_agent_id,
+                            maker_agent_id: maker_order.agent_id,
+                            maker_order_id: maker_order.id,
+                            taker_side: side,
+                        });
 
-                    maker_order.volume -= trade_volume;
-                    volume_to_fill -= trade_volume;
-
-                    if maker_order.volume == 0 {
-                        level_queue.pop_front();
+                        // --- THIS IS THE FUCKING FIX ---
+                        // Update the individual order's state
+                        maker_order.filled += trade_volume;
+                        // AND update the aggregate volume for the whole price level
+                        level.total_volume -= trade_volume;
+                        
+                        volume_to_fill -= trade_volume;
+                    }
+                    
+                    if maker_order.filled >= maker_order.volume {
+                        level.orders.pop_front();
                     }
                 }
-                if level_queue.is_empty() {
+                if level.orders.is_empty() {
                     empty_levels.push(price);
                 }
             }
@@ -83,7 +130,6 @@ impl OrderBook {
         trades
     }
     
-    // Add this function to your OrderBook impl
     pub fn process_limit_order(&mut self, order: &mut Order) -> Vec<Trade> {
         let mut trades = Vec::new();
         let taker_agent_id = order.agent_id;
@@ -99,34 +145,44 @@ impl OrderBook {
         };
 
         for price in price_levels {
-            if order.volume == 0 { break; }
+            let order_remaining = order.volume.saturating_sub(order.filled);
+            if order_remaining == 0 { break; }
+
             let price_is_good = match order.side {
                 Side::Buy => price <= order.price,
                 Side::Sell => price >= order.price,
             };
             if !price_is_good { break; }
 
-            if let Some(level_queue) = book_to_match.get_mut(&price) {
-                while let Some(maker_order) = level_queue.front_mut() {
-                    if order.volume == 0 { break; }
-                    let trade_volume = order.volume.min(maker_order.volume);
+            if let Some(level) = book_to_match.get_mut(&price) {
+                while let Some(maker_order) = level.orders.front_mut() {
+                    let order_remaining = order.volume.saturating_sub(order.filled);
+                    if order_remaining == 0 { break; }
+
+                    let maker_remaining = maker_order.volume.saturating_sub(maker_order.filled);
+                    let trade_volume = order_remaining.min(maker_remaining);
                     
-                    trades.push(Trade {
-                        price: maker_order.price,
-                        volume: trade_volume,
-                        taker_agent_id,
-                        maker_agent_id: maker_order.agent_id,
-                        taker_side: order.side, // <-- ADD THIS FIELD ON TRADE CREATION
-                    });
+                    if trade_volume > 0 {
+                        trades.push(Trade {
+                            price: maker_order.price,
+                            volume: trade_volume,
+                            taker_agent_id,
+                            maker_agent_id: maker_order.agent_id,
+                            maker_order_id: maker_order.id,
+                            taker_side: order.side,
+                        });
 
-                    maker_order.volume -= trade_volume;
-                    order.volume -= trade_volume;
+                        // --- THIS IS THE FUCKING FIX ---
+                        maker_order.filled += trade_volume;
+                        order.filled += trade_volume;
+                        level.total_volume -= trade_volume;
+                    }
 
-                    if maker_order.volume == 0 {
-                        level_queue.pop_front();
+                    if maker_order.filled >= maker_order.volume {
+                        level.orders.pop_front();
                     }
                 }
-                if level_queue.is_empty() {
+                if level.orders.is_empty() {
                     empty_levels.push(price);
                 }
             }
@@ -136,10 +192,29 @@ impl OrderBook {
             book_to_match.remove(&price);
         }
         
-        if order.volume > 0 {
+        if order.filled < order.volume {
             self.add_limit_order(*order);
         }
 
         trades
+    }
+    pub fn cancel_order(&mut self, order_id: u64, agent_id: usize) -> bool {
+        // We have to search both sides of the book.
+        for book_side in [&mut self.bids, &mut self.asks] {
+            // Find which price level the order is at.
+            if let Some(level) = book_side.values_mut().find(|level| level.orders.iter().any(|o| o.id == order_id)) {
+                // Now, find the specific order in that level's queue.
+                if let Some(index) = level.orders.iter().position(|o| o.id == order_id) {
+                    // Security check: only the owner can cancel.
+                    if level.orders[index].agent_id == agent_id {
+                        let cancelled_order = level.orders.remove(index).unwrap();
+                        let remaining_volume = cancelled_order.volume.saturating_sub(cancelled_order.filled);
+                        level.total_volume = level.total_volume.saturating_sub(remaining_volume);
+                        return true; // Success!
+                    }
+                }
+            }
+        }
+        false // Order not found or not owned by the agent.
     }
 }

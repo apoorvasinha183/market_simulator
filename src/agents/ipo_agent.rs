@@ -1,6 +1,7 @@
 // src/agents/ipo_agent.rs
 
 use super::agent_trait::{Agent, MarketView};
+use crate::simulators::order_book::Trade;
 use crate::types::order::{Order, OrderRequest, Side};
 use std::collections::HashMap;
 
@@ -36,7 +37,7 @@ impl Agent for IpoAgent {
         println!("--- IPO AGENT IS ACTING ---");
 
         let mut orders = Vec::new();
-        let num_price_levels = 20; // Increased levels for a smoother ladder
+        let num_price_levels = 20;
         let volume_per_level = (self.inventory / num_price_levels as i64) as u64;
         let start_price = 15000; // $150.00
         let tick_size = 5;       // $0.05 per tick
@@ -53,17 +54,15 @@ impl Agent for IpoAgent {
         orders
     }
 
-    // --- Fulfillment of the new Agent trait contract ---
+    // --- Fulfillment of the Agent Trait Contract ---
 
     fn buy_stock(&mut self, _volume: u64) -> Vec<OrderRequest> {
-        // The IPO agent's job is to sell, not buy. This is a no-op.
+        // The IPO agent's job is to sell, not buy.
         vec![]
     }
 
-    fn sell_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
-        // This could be used for secondary offerings later, but for now,
-        // we assume it only acts in decide_actions.
-        // For a simple implementation, we can make it a no-op.
+    fn sell_stock(&mut self, _volume: u64) -> Vec<OrderRequest> {
+        // The agent's initial selling is handled in decide_actions.
         vec![]
     }
 
@@ -76,10 +75,20 @@ impl Agent for IpoAgent {
         self.open_orders.insert(order.id, order);
     }
 
-    fn update_portfolio(&mut self, trade_volume: i64) {
+    /// This is the corrected implementation, following the blueprint exactly.
+    fn update_portfolio(&mut self, trade_volume: i64, trade: &Trade) {
+        // Update the total inventory with the explicit volume argument.
         self.inventory += trade_volume;
-        // A more advanced implementation would update the specific open orders
-        // that were filled.
+
+        // Reconcile the open orders map if this agent was the maker.
+        if trade.maker_agent_id == self.id {
+            if let Some(order) = self.open_orders.get_mut(&trade.maker_order_id) {
+                order.filled += trade.volume;
+                if order.filled >= order.volume {
+                    self.open_orders.remove(&trade.maker_order_id);
+                }
+            }
+        }
     }
 
     fn get_pending_orders(&self) -> Vec<Order> {
@@ -88,7 +97,7 @@ impl Agent for IpoAgent {
 
     fn cancel_open_order(&mut self, order_id: u64) -> Vec<OrderRequest> {
         if self.open_orders.remove(&order_id).is_some() {
-            println!("IpoAgent {} requesting cancel for order {}", self.id, order_id);
+            // A full implementation would return a real Cancel request.
         }
         vec![]
     }

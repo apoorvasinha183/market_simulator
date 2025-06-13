@@ -18,6 +18,7 @@ pub use agents::dumb_agent::DumbAgent;
 pub use agents::dumb_limit_agent::DumbLimitAgent;
 pub use agents::market_maker_agent::MarketMakerAgent;
 pub use agents::ipo_agent::IpoAgent;
+pub use agents::whale_agent::WhaleAgent;
 
 // --- From our `market` engine ---
 pub use market::Market;

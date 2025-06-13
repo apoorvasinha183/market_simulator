@@ -1,6 +1,13 @@
 // src/agents/dumb_limit_agent.rs
 
 use super::agent_trait::{Agent, MarketView};
+use super::config::{
+    LIMIT_AGENT_ACTION_PROB, LIMIT_AGENT_MAX_OFFSET, LIMIT_AGENT_NUM_TRADERS, // Added NUM_TRADERS
+    LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN, MARGIN_CALL_THRESHOLD, TICKS_UNTIL_ACTIVE,
+};
+use super::latency;
+use crate::agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE;
+use crate::simulators::order_book::Trade;
 use crate::types::order::{Order, OrderRequest, Side};
 use rand::Rng;
 use std::collections::HashMap;
@@ -8,9 +15,7 @@ use std::collections::HashMap;
 pub struct DumbLimitAgent {
     pub id: usize,
     inventory: i64,
-    action_probability: f64,
     ticks_until_active: u32,
-    /// Agent now statefully tracks its own open orders.
     open_orders: HashMap<u64, Order>,
 }
 
@@ -18,9 +23,8 @@ impl DumbLimitAgent {
     pub fn new(id: usize) -> Self {
         Self {
             id,
-            inventory: 2000000,
-            action_probability: 0.2,
-            ticks_until_active: 10,
+            inventory: 200_000_000,
+            ticks_until_active: LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
         }
     }
@@ -34,29 +38,40 @@ impl Agent for DumbLimitAgent {
         }
 
         let mut rng = rand::thread_rng();
-        if rng.gen_range(0.0..1.0) < self.action_probability {
-            if let (Some(&bid), Some(&ask)) = (market_view.order_book.bids.keys().last(), market_view.order_book.asks.keys().next()) {
-                let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
-                let volume = rng.gen_range(50000..=200000);
-                let price = match side {
-                    Side::Buy => bid + 1,
-                    Side::Sell => ask - 1,
-                };
-                if price > bid && price < ask {
-                    return vec![OrderRequest::LimitOrder { agent_id: self.id, side, price, volume }];
+        let mut requests = Vec::new();
+
+        // --- NEW: Ensemble Logic ---
+        // Loop for each "trader" in our ensemble.
+        for _ in 0..LIMIT_AGENT_NUM_TRADERS {
+            if rng.gen_bool(LIMIT_AGENT_ACTION_PROB as f64) {
+                let best_bid = market_view.order_book.bids.keys().last().copied();
+                let best_ask = market_view.order_book.asks.keys().next().copied();
+
+                if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
+                    if bid >= ask { continue; } // Skip if book is crossed
+
+                    // Use the "dumber" logic for each individual trader
+                    let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
+                    let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
+                    let price = match side {
+                        Side::Buy => bid.saturating_add(offset),
+                        Side::Sell => ask.saturating_sub(offset),
+                    };
+                    
+                    // Each trader places a small order
+                    let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
+                    
+                    requests.push(OrderRequest::LimitOrder { agent_id: self.id, side, price, volume });
                 }
             }
         }
         
-        // The short-covering logic has been moved to `margin_call`.
-        vec![]
+        requests
     }
 
-    // --- Fulfillment of the new Agent trait contract ---
+    // --- Fulfillment of the Agent Trait Contract ---
 
     fn buy_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
-        // For an RL agent, this would be a more complex decision.
-        // For this simple agent, we'll just create a market order.
         vec![OrderRequest::MarketOrder { agent_id: self.id, side: Side::Buy, volume }]
     }
 
@@ -65,10 +80,8 @@ impl Agent for DumbLimitAgent {
     }
 
     fn margin_call(&mut self) -> Vec<OrderRequest> {
-        // Moved the short-covering logic here from decide_actions.
-        if self.inventory <= -20000 {
-            println!("!!! DumbLimitAgent {} MARGIN CALL! Covering short of {} !!!", self.id, self.inventory);
-            let deficit = self.inventory.abs() as u64;
+        if self.inventory <= MARGIN_CALL_THRESHOLD {
+            let deficit = self.inventory.unsigned_abs();
             return self.buy_stock(deficit);
         }
         vec![]
@@ -78,12 +91,16 @@ impl Agent for DumbLimitAgent {
         self.open_orders.insert(order.id, order);
     }
 
-    fn update_portfolio(&mut self, trade_volume: i64) {
+    fn update_portfolio(&mut self, trade_volume: i64, trade: &Trade) {
         self.inventory += trade_volume;
-        // A more advanced agent would update its open_orders map here
-        // by checking which of its orders were filled in the trade.
-        // For now, we just update the total inventory.
-        println!("DumbLimitAgent {} new inventory: {}", self.id, self.inventory);
+        if trade.maker_agent_id == self.id {
+            if let Some(ord) = self.open_orders.get_mut(&trade.maker_order_id) {
+                ord.filled += trade.volume;
+                if ord.filled >= ord.volume {
+                    self.open_orders.remove(&trade.maker_order_id);
+                }
+            }
+        }
     }
 
     fn get_pending_orders(&self) -> Vec<Order> {
@@ -91,22 +108,11 @@ impl Agent for DumbLimitAgent {
     }
 
     fn cancel_open_order(&mut self, order_id: u64) -> Vec<OrderRequest> {
-        if self.open_orders.remove(&order_id).is_some() {
-            println!("DumbLimitAgent {} requesting cancel for order {}", self.id, order_id);
-            // This would return a real OrderRequest::Cancel in a full implementation.
-        }
+        if self.open_orders.remove(&order_id).is_some() {}
         vec![]
     }
 
-    fn get_id(&self) -> usize {
-        self.id
-    }
-
-    fn get_inventory(&self) -> i64 {
-        self.inventory
-    }
-
-    fn clone_agent(&self) -> Box<dyn Agent> {
-        Box::new(DumbLimitAgent::new(self.id))
-    }
+    fn get_id(&self) -> usize { self.id }
+    fn get_inventory(&self) -> i64 { self.inventory }
+    fn clone_agent(&self) -> Box<dyn Agent> { Box::new(DumbLimitAgent::new(self.id)) }
 }

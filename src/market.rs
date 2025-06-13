@@ -2,7 +2,7 @@
 
 use crate::{
     Agent, AgentType, DumbAgent, DumbLimitAgent, IpoAgent, MarketMakerAgent, MarketView, Marketable,
-    Order, OrderBook, OrderRequest, Side, Trade,
+    Order, OrderBook, OrderRequest, Side, Trade, WhaleAgent,
 };
 use std::any::Any;
 use std::collections::HashMap;
@@ -37,16 +37,17 @@ impl Market {
             cumulative_volume: 0,
         }
     }
-
+    
     fn create_agent_from_type(agent_type: AgentType, id: usize) -> Box<dyn Agent> {
         match agent_type {
             AgentType::DumbMarket => Box::new(DumbAgent::new(id)),
             AgentType::DumbLimit => Box::new(DumbLimitAgent::new(id)),
             AgentType::MarketMaker => Box::new(MarketMakerAgent::new(id)),
             AgentType::IPO => Box::new(IpoAgent::new(id)),
+            AgentType::WhaleAgent => Box::new(WhaleAgent::new(id)),
         }
     }
-
+    
     fn next_order_id(&mut self) -> u64 {
         self.order_id_counter += 1;
         self.order_id_counter
@@ -55,8 +56,9 @@ impl Market {
     pub fn get_order_book(&self) -> &OrderBook {
         &self.order_book
     }
-    pub fn cumulative_volume(&self) -> u64 {
-        self.cumulative_volume
+    pub fn cumulative_volume(&self) -> u64 { self.cumulative_volume }
+    pub fn get_total_inventory(&self) -> i64 {
+        self.agents.values().map(|agent| agent.get_inventory()).sum()
     }
 }
 
@@ -65,6 +67,7 @@ impl Marketable for Market {
         // --- Phase 1: Agent Decisions ---
         let market_view = MarketView {
             order_book: &self.order_book,
+            //last_traded_price: self.last_traded_price,
         };
         let mut all_requests = Vec::new();
         let agent_ids: Vec<usize> = self.agents.keys().cloned().collect();
@@ -73,37 +76,35 @@ impl Marketable for Market {
                 all_requests.extend(agent.decide_actions(&market_view));
             }
         }
-
+        
         let mut trades_this_tick: Vec<Trade> = Vec::new();
 
-        // --- Phase 2: Process Normal Orders & Fulfill Promises ---
+        // --- Phase 2: Process All Requests ---
         for request in all_requests {
-            let (mut order, is_market_order) = match request {
-                OrderRequest::MarketOrder { agent_id, side, volume } => {
-                    let price = (self.last_traded_price * 100.0).round() as u64; // Fallback price
-                    (Order { id: self.next_order_id(), agent_id, side, price, volume }, true)
-                }
+            match request {
                 OrderRequest::LimitOrder { agent_id, side, price, volume } => {
-                    (Order { id: self.next_order_id(), agent_id, side, price, volume }, false)
+                    let mut order = Order { id: self.next_order_id(), agent_id, side, price, volume, filled: 0 };
+                    if let Some(agent) = self.agents.get_mut(&agent_id) {
+                        agent.acknowledge_order(order);
+                    }
+                    trades_this_tick.extend(self.order_book.process_limit_order(&mut order));
                 }
-            };
-
-            // "Promise Fulfillment": Acknowledge the order *before* processing it.
-            if let Some(agent) = self.agents.get_mut(&order.agent_id) {
-                agent.acknowledge_order(order);
+                OrderRequest::MarketOrder { agent_id, side, volume } => {
+                     let mut order = Order { 
+                        id: self.next_order_id(), agent_id, side, 
+                        price: (self.last_traded_price * 100.0).round() as u64, // Price is notional for market order
+                        volume, filled: 0 
+                    };
+                    if let Some(agent) = self.agents.get_mut(&agent_id) {
+                        agent.acknowledge_order(order);
+                    }
+                    trades_this_tick.extend(self.order_book.process_market_order(agent_id, side, volume));
+                }
+                // --- NEW: Handle Cancel Requests ---
+                OrderRequest::CancelOrder { agent_id, order_id } => {
+                    self.order_book.cancel_order(order_id, agent_id);
+                }
             }
-
-            // Process the order against the book.
-            let trades = if is_market_order {
-                let mut trades = self.order_book.process_market_order(order.agent_id, order.side, order.volume);
-                if trades.is_empty() && order.price > 0 {
-                    trades.extend(self.order_book.process_limit_order(&mut order));
-                }
-                trades
-            } else {
-                self.order_book.process_limit_order(&mut order)
-            };
-            trades_this_tick.extend(trades);
         }
 
         // --- Phase 3: Margin Call Phase ---
@@ -113,13 +114,9 @@ impl Marketable for Market {
                  margin_requests.extend(agent.margin_call());
             }
         }
-        // Process any orders that resulted from margin calls.
         for request in margin_requests {
-             match request {
-                OrderRequest::MarketOrder { agent_id, side, volume } => {
-                    trades_this_tick.extend(self.order_book.process_market_order(agent_id, side, volume));
-                }
-                _ => { /* Ignore limit orders from margin calls for simplicity */ }
+             if let OrderRequest::MarketOrder { agent_id, side, volume } = request {
+                trades_this_tick.extend(self.order_book.process_market_order(agent_id, side, volume));
             }
         }
 
@@ -127,11 +124,11 @@ impl Marketable for Market {
         for trade in &trades_this_tick {
             if let Some(taker) = self.agents.get_mut(&trade.taker_agent_id) {
                 let change = if trade.taker_side == Side::Buy { trade.volume as i64 } else { -(trade.volume as i64) };
-                taker.update_portfolio(change);
+                taker.update_portfolio(change, trade);
             }
             if let Some(maker) = self.agents.get_mut(&trade.maker_agent_id) {
                 let change = if trade.taker_side == Side::Sell { trade.volume as i64 } else { -(trade.volume as i64) };
-                maker.update_portfolio(change);
+                maker.update_portfolio(change, trade);
             }
         }
 
@@ -148,7 +145,7 @@ impl Marketable for Market {
     fn current_price(&self) -> f64 {
         self.last_traded_price
     }
-
+    
     fn reset(&mut self) {
         let mut agents = HashMap::new();
         for (id, agent_type) in self.initial_agent_types.iter().enumerate() {

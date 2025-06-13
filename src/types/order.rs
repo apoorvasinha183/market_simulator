@@ -14,6 +14,7 @@ pub struct Order {
     pub side: Side,
     pub price: u64,
     pub volume: u64,
+    pub filled:u64,
 }
 
 #[derive(Debug)]
@@ -28,5 +29,10 @@ pub enum OrderRequest {
         agent_id: usize,
         side: Side,
         volume: u64,
+    },
+    // A request to cancel a previously placed order.
+    CancelOrder {
+        agent_id: usize, // To verify ownership
+        order_id: u64,
     },
 }

@@ -6,5 +6,6 @@ pub enum AgentType {
     DumbLimit,
     MarketMaker,
     IPO,
+    WhaleAgent
     // We can add more here later, like MarketMaker, Institutional, etc.
 }
