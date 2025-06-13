@@ -160,7 +160,7 @@ impl eframe::App for AgentVisualizer {
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new(" Bids").color(Color32::from_rgb(40, 167, 69)).strong());
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                        ui.label(RichText::new("(Top 10)").color(Color32::GRAY).italics());
+                                        ui.label(RichText::new("").color(Color32::GRAY).italics());
                                     });
                                 });
                                 ui.add_space(4.0);
