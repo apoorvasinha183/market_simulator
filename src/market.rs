@@ -90,7 +90,7 @@ impl Marketable for Market {
                     trades_this_tick.extend(self.order_book.process_limit_order(&mut order));
                 }
                 OrderRequest::MarketOrder { agent_id, side, volume } => {
-                     let mut order = Order { 
+                     let order = Order { 
                         id: self.next_order_id(), agent_id, side, 
                         price: (self.last_traded_price * 100.0).round() as u64, // Price is notional for market order
                         volume, filled: 0 
