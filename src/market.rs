@@ -261,7 +261,7 @@ mod tests {
         fn clone_agent(&self) -> Box<dyn Agent> {
             Box::new(TestAgent::default())
         }
-        fn evaluate_port(&self, market_view: &MarketView) -> f64 {
+        fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
             let price_cents = match market_view.get_mid_price() {
                 Some(p) => p,
                 None => return 0.0, // or whatever you deem appropriate

@@ -19,7 +19,11 @@ pub struct WhaleAgent {
     ticks_until_active: u32,
     open_orders: HashMap<u64, Order>,
     #[allow(dead_code)]
-    margin: i128,
+    cash: f64,
+    #[allow(dead_code)]
+    margin: f64,
+    #[allow(dead_code)]
+    port_value: f64,
 }
 
 impl WhaleAgent {
@@ -29,7 +33,9 @@ impl WhaleAgent {
             inventory: WHALE_INITIAL_INVENTORY,
             ticks_until_active: WHALE_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
-            margin: 1000000000000,
+            cash: 1000000000000.0,
+            margin: 10000000000000.0,
+            port_value: 0.0,
         }
     }
 }
@@ -117,6 +123,9 @@ impl Agent for WhaleAgent {
                 if order.filled >= order.volume {
                     self.open_orders.remove(&trade.maker_order_id);
                 }
+                // Update the cash balance 
+                let cash_change = (trade_volume as f64) * (trade.price as f64 / 100.0);
+                self.cash -= cash_change;
             }
         }
     }
@@ -144,7 +153,7 @@ impl Agent for WhaleAgent {
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(WhaleAgent::new(self.id))
     }
-    fn evaluate_port(&self, market_view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
         let price_cents = match market_view.get_mid_price() {
             Some(p) => p,
             None => return 0.0, // or whatever you deem appropriate
@@ -152,7 +161,8 @@ impl Agent for WhaleAgent {
         let value_cents = (self.inventory as i128)
             .checked_mul(price_cents as i128)
             .expect("portfolio value overflow");
-        (value_cents as f64) / 100.0
+        self.port_value=(value_cents as f64) / 100.0;
+        self.port_value
     }
 }
 

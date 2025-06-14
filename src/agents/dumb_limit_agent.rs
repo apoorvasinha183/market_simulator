@@ -22,7 +22,11 @@ pub struct DumbLimitAgent {
     ticks_until_active: u32,
     open_orders: HashMap<u64, Order>,
     #[allow(dead_code)]
-    margin: i128,
+    cash: f64,
+    #[allow(dead_code)]
+    margin: f64,
+    #[allow(dead_code)]
+    port_value: f64,
 }
 
 impl DumbLimitAgent {
@@ -32,7 +36,9 @@ impl DumbLimitAgent {
             inventory: 200_000_000,
             ticks_until_active: LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
-            margin: 100000000,
+            cash:100000000.0,
+            margin: 10000000000.0,
+            port_value:0.0,
         }
     }
 }
@@ -126,6 +132,8 @@ impl Agent for DumbLimitAgent {
                 if ord.filled >= ord.volume {
                     self.open_orders.remove(&trade.maker_order_id);
                 }
+                let cash_change = (trade_volume as f64) * (trade.price as f64 / 100.0);
+                self.cash -= cash_change;
             }
         }
     }
@@ -148,7 +156,7 @@ impl Agent for DumbLimitAgent {
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(DumbLimitAgent::new(self.id))
     }
-    fn evaluate_port(&self, market_view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
         let price_cents = match market_view.get_mid_price() {
             Some(p) => p,
             None => return 0.0, // or whatever you deem appropriate
@@ -156,6 +164,7 @@ impl Agent for DumbLimitAgent {
         let value_cents = (self.inventory as i128)
             .checked_mul(price_cents as i128)
             .expect("portfolio value overflow");
-        (value_cents as f64) / 100.0
+        self.port_value=(value_cents as f64) / 100.0;
+        self.port_value
     }
 }

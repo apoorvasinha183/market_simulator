@@ -2,7 +2,7 @@
 
 use super::agent_trait::{Agent, MarketView};
 use super::config::{
-    MARGIN_CALL_THRESHOLD,
+    
     // Import all the constants we need
     MM_DESIRED_SPREAD,
     MM_INITIAL_CENTER_PRICE,
@@ -40,7 +40,11 @@ pub struct MarketMakerAgent {
     bootstrapped: bool,
     open_orders: HashMap<u64, Order>,
     #[allow(dead_code)]
-    margin: i128,
+    cash: f64,
+    #[allow(dead_code)]
+    margin: f64,
+    #[allow(dead_code)]
+    port_value: f64,
 }
 
 impl MarketMakerAgent {
@@ -51,7 +55,9 @@ impl MarketMakerAgent {
             ticks_until_active: MM_TICKS_UNTIL_ACTIVE,
             bootstrapped: false,
             open_orders: HashMap::new(),
-            margin: 100000000000,
+            cash:100000000000.0,
+            margin: 400000000000.0,
+            port_value:0.0,
         }
     }
 
@@ -207,12 +213,11 @@ impl Agent for MarketMakerAgent {
     }
 
     fn margin_call(&mut self) -> Vec<OrderRequest> {
-        if self.inventory <= MARGIN_CALL_THRESHOLD {
-            return vec![OrderRequest::MarketOrder {
-                agent_id: self.id,
-                side: Side::Buy,
-                volume: self.inventory.abs() as u64,
-            }];
+        // Liquidate if you are way below margin !
+        if self.cash <= - self.margin{
+            // Sell all inventory!! -- EXPERIMENTAL
+            println!("Liquidation!");
+            return self.sell_stock(self.inventory as u64);
         }
         vec![]
     }
@@ -229,6 +234,9 @@ impl Agent for MarketMakerAgent {
                 if order.filled >= order.volume {
                     self.open_orders.remove(&trade.maker_order_id);
                 }
+                // Update the cash balance 
+                let cash_change = (trade_volume as f64) * (trade.price as f64 / 100.0);
+                self.cash -= cash_change;
             }
         }
     }
@@ -251,7 +259,7 @@ impl Agent for MarketMakerAgent {
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(MarketMakerAgent::new(self.id))
     }
-    fn evaluate_port(&self, market_view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
         let price_cents = match market_view.get_mid_price() {
             Some(p) => p,
             None => return 0.0, // or whatever you deem appropriate
@@ -259,7 +267,8 @@ impl Agent for MarketMakerAgent {
         let value_cents = (self.inventory as i128)
             .checked_mul(price_cents as i128)
             .expect("portfolio value overflow");
-        (value_cents as f64) / 100.0
+        self.port_value=(value_cents as f64) / 100.0;
+        self.port_value
     }
 }
 // -----------------------------------------------------------------------------

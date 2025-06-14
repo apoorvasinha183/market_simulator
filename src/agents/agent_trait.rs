@@ -30,7 +30,7 @@ pub trait Agent {
     /// A way for the simulation engine to update the agent's internal state after a trade.
     fn update_portfolio(&mut self, trade_volume: i64, trade: &Trade);
     /// A way for the agent to look at the net worth of their portfolio
-    fn evaluate_port(&self, market_view: &MarketView) -> f64;
+    fn evaluate_port(&mut self, market_view: &MarketView) -> f64;
     /// Get a list of all currently open orders for this agent.
     fn get_pending_orders(&self) -> Vec<Order>;
 
