@@ -46,7 +46,7 @@ pub const LIMIT_AGENT_MAX_OFFSET: u64 = 200; // $5.00 in cents
 pub const LIMIT_AGENT_NUM_TRADERS: u32 = 200;
 // The whales are here
 pub const WHALE_INITIAL_INVENTORY: i64 = 50_000_000;
-pub const WHALE_ACTION_PROB: f64 = 0.05; // Acts very infrequently (5% chance per tick)
+pub const WHALE_ACTION_PROB: f64 = 0.01; // Acts very infrequently (5% chance per tick)
 pub const WHALE_ORDER_VOLUME: u64 = 1_000_000; // Places massive orders
 pub const WHALE_PRICE_OFFSET_MAX: u64 = 1000;
 pub const WHALE_PRICE_OFFSET_MIN: u64 = 500;

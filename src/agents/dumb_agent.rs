@@ -187,9 +187,9 @@ mod tests {
         Trade {
             price: price_cents,
             volume,
-            taker_agent_id: 1, // Doesn't matter for these tests
-            maker_agent_id: 2, // Doesn't matter for these tests
-            maker_order_id: 101, // Doesn't matter
+            taker_agent_id: 1,     // Doesn't matter for these tests
+            maker_agent_id: 2,     // Doesn't matter for these tests
+            maker_order_id: 101,   // Doesn't matter
             taker_side: Side::Buy, // Doesn't matter, we use trade_volume sign
         }
     }
@@ -210,7 +210,10 @@ mod tests {
         // Assert
         assert_eq!(agent.inventory, 300_000_000 + trade_volume_shares as i64);
         // Using float comparison with a small epsilon
-        assert!((agent.cash - (initial_cash - cost)).abs() < 1e-9, "Cash should decrease by the cost of the trade.");
+        assert!(
+            (agent.cash - (initial_cash - cost)).abs() < 1e-9,
+            "Cash should decrease by the cost of the trade."
+        );
     }
 
     #[test]
@@ -228,7 +231,10 @@ mod tests {
 
         // Assert
         assert_eq!(agent.inventory, 300_000_000 - trade_volume_shares as i64);
-        assert!((agent.cash - (initial_cash + proceeds)).abs() < 1e-9, "Cash should increase by the proceeds of the trade.");
+        assert!(
+            (agent.cash - (initial_cash + proceeds)).abs() < 1e-9,
+            "Cash should increase by the proceeds of the trade."
+        );
     }
 
     #[test]
@@ -244,7 +250,11 @@ mod tests {
         // Assert
         assert_eq!(requests.len(), 1, "Should generate one liquidation order.");
         match &requests[0] {
-            OrderRequest::MarketOrder { agent_id, side, volume } => {
+            OrderRequest::MarketOrder {
+                agent_id,
+                side,
+                volume,
+            } => {
                 assert_eq!(*agent_id, agent.id);
                 assert_eq!(*side, Side::Sell);
                 assert_eq!(*volume, 500, "Should liquidate the entire inventory.");
@@ -262,11 +272,10 @@ mod tests {
         // Arrange: Agent has negative cash but is within the margin limit
         let mut agent_within_margin = DumbAgent::new(0);
         agent_within_margin.cash = -3_999_999_999.9;
-        
+
         // Arrange: Agent is exactly at the margin limit
         let mut agent_at_margin = DumbAgent::new(0);
         agent_at_margin.cash = -4_000_000_000.0;
-
 
         // Act
         let requests_positive = agent_positive_cash.margin_call();
@@ -274,9 +283,17 @@ mod tests {
         let requests_at_limit = agent_at_margin.margin_call();
 
         // Assert
-        assert!(requests_positive.is_empty(), "Should not trigger margin call with positive cash.");
-        assert!(requests_within.is_empty(), "Should not trigger margin call when within margin limit.");
-        assert!(requests_at_limit.is_empty(), "Should not trigger margin call when exactly at the margin limit.");
+        assert!(
+            requests_positive.is_empty(),
+            "Should not trigger margin call with positive cash."
+        );
+        assert!(
+            requests_within.is_empty(),
+            "Should not trigger margin call when within margin limit."
+        );
+        assert!(
+            requests_at_limit.is_empty(),
+            "Should not trigger margin call when exactly at the margin limit."
+        );
     }
 }
-
