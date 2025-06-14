@@ -105,8 +105,8 @@ impl Agent for MarketMakerAgent {
             self.bootstrapped = true;
             return self.seed_liquidity();
         }
-        let liquidity = self.evaluate_port(market_view);
-        println!("MM has a net position of {}", liquidity);
+        //let liquidity = self.evaluate_port(market_view);
+        //println!("MM has a net position of {}", liquidity);
 
         let best_bid = market_view.order_book.bids.keys().last().cloned();
         let best_ask = market_view.order_book.asks.keys().next().cloned();

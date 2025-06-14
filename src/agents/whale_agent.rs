@@ -90,8 +90,8 @@ impl Agent for WhaleAgent {
                 });
             }
         }
-        let liquidity = self.evaluate_port(market_view);
-        println!("Whales have a net position of {}", liquidity);
+        //let liquidity = self.evaluate_port(market_view);
+        //println!("Whales have a net position of {}", liquidity);
         requests
     }
 

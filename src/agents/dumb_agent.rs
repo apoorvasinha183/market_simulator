@@ -72,8 +72,8 @@ impl Agent for DumbAgent {
                 requests_this_tick.extend(request);
             }
         }
-        let liquidity = self.evaluate_port(_market_view);
-        println!("Retail has a net position of {}", liquidity);
+        //let liquidity = self.evaluate_port(_market_view);
+        //println!("Retail has a net position of {}", liquidity);
         requests_this_tick
     }
 

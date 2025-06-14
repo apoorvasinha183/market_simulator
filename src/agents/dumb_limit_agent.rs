@@ -83,8 +83,8 @@ impl Agent for DumbLimitAgent {
                 }
             }
         }
-        let liquidity = self.evaluate_port(market_view);
-        println!("Smart retail has a net position of {}", liquidity);
+        //let liquidity = self.evaluate_port(market_view);
+        //println!("Smart retail has a net position of {}", liquidity);
         requests
     }
 
