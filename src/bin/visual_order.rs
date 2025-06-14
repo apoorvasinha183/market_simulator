@@ -42,6 +42,9 @@ struct AgentVisualizer {
     last_update: Instant,
     theme_dark: bool,
     animation_time: f64,
+    // --- NEW: Added fields to track session high and low ---
+    ath: f64,
+    atl: f64,
 }
 
 impl eframe::App for AgentVisualizer {
@@ -54,6 +57,11 @@ impl eframe::App for AgentVisualizer {
 
         if self.is_market_running && self.last_update.elapsed() > Duration::from_millis(100) {
             let new_price = self.simulator.step();
+
+            // --- NEW: Update ATH and ATL with the new price ---
+            self.ath = self.ath.max(new_price);
+            self.atl = self.atl.min(new_price);
+
             if self.price_history.last() != Some(&new_price) {
                 self.price_history.push(new_price);
                 // Keep only last 1000 points for performance
@@ -456,7 +464,11 @@ impl AgentVisualizer {
     fn reset_simulation(&mut self) {
         self.is_market_running = false;
         self.simulator.reset();
-        self.price_history = vec![self.simulator.current_price()];
+        let initial_price = self.simulator.current_price();
+        self.price_history = vec![initial_price];
+        // --- NEW: Reset ATH and ATL on simulation reset ---
+        self.ath = initial_price;
+        self.atl = initial_price;
     }
 
     fn apply_custom_style(&self, ctx: &egui::Context) {
@@ -559,6 +571,32 @@ impl AgentVisualizer {
                                 .monospace(),
                         );
                     });
+                    
+                    // --- NEW: Added ATH and ATL Display ---
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        ui.label("🚀");
+                        ui.label(RichText::new("ATH:").strong());
+                        ui.label(
+                            RichText::new(format!("${:.2}", self.ath))
+                                .color(Color32::from_rgb(40, 167, 69)) // Green for high
+                                .monospace(),
+                        );
+                    });
+
+                    ui.separator();
+
+                    ui.horizontal(|ui| {
+                        ui.label("⚓");
+                        ui.label(RichText::new("ATL:").strong());
+                        ui.label(
+                            RichText::new(format!("${:.2}", self.atl))
+                                .color(Color32::from_rgb(220, 53, 69)) // Red for low
+                                .monospace(),
+                        );
+                    });
+                    // --- END OF NEW ---
 
                     ui.separator();
 
@@ -615,13 +653,17 @@ fn main() -> Result<(), eframe::Error> {
     ];
 
     let simulator: Box<dyn Marketable> = Box::new(Market::new(&participants));
+    // --- NEW: Capture initial price to set starting ATH/ATL ---
+    let initial_price = simulator.current_price();
     let app_state = AgentVisualizer {
-        price_history: vec![simulator.current_price()],
+        price_history: vec![initial_price],
         simulator,
         is_market_running: false,
         last_update: Instant::now(),
         theme_dark: true, // Start with dark theme
         animation_time: 0.0,
+        ath: initial_price,
+        atl: initial_price,
     };
 
     eframe::run_native(
