@@ -571,7 +571,7 @@ impl AgentVisualizer {
                                 .monospace(),
                         );
                     });
-                    
+
                     // --- NEW: Added ATH and ATL Display ---
                     ui.separator();
 
