@@ -2,7 +2,6 @@
 
 use super::agent_trait::{Agent, MarketView};
 use super::config::{
-    
     // Import all the constants we need
     MM_DESIRED_SPREAD,
     MM_INITIAL_CENTER_PRICE,
@@ -55,9 +54,9 @@ impl MarketMakerAgent {
             ticks_until_active: MM_TICKS_UNTIL_ACTIVE,
             bootstrapped: false,
             open_orders: HashMap::new(),
-            cash:100000000000.0,
+            cash: 100000000000.0,
             margin: 400000000000.0,
-            port_value:0.0,
+            port_value: 0.0,
         }
     }
 
@@ -214,7 +213,7 @@ impl Agent for MarketMakerAgent {
 
     fn margin_call(&mut self) -> Vec<OrderRequest> {
         // Liquidate if you are way below margin !
-        if self.cash <= - self.margin{
+        if self.cash <= -self.margin {
             // Sell all inventory!! -- EXPERIMENTAL
             println!("Liquidation!");
             return self.sell_stock(self.inventory as u64);
@@ -234,7 +233,7 @@ impl Agent for MarketMakerAgent {
                 if order.filled >= order.volume {
                     self.open_orders.remove(&trade.maker_order_id);
                 }
-                // Update the cash balance 
+                // Update the cash balance
                 let cash_change = (trade_volume as f64) * (trade.price as f64 / 100.0);
                 self.cash -= cash_change;
             }
@@ -267,7 +266,7 @@ impl Agent for MarketMakerAgent {
         let value_cents = (self.inventory as i128)
             .checked_mul(price_cents as i128)
             .expect("portfolio value overflow");
-        self.port_value=(value_cents as f64) / 100.0;
+        self.port_value = (value_cents as f64) / 100.0;
         self.port_value
     }
 }

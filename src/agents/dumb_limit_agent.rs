@@ -36,9 +36,9 @@ impl DumbLimitAgent {
             inventory: 200_000_000,
             ticks_until_active: LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
-            cash:100000000.0,
+            cash: 100000000.0,
             margin: 10000000000.0,
-            port_value:0.0,
+            port_value: 0.0,
         }
     }
 }
@@ -164,7 +164,7 @@ impl Agent for DumbLimitAgent {
         let value_cents = (self.inventory as i128)
             .checked_mul(price_cents as i128)
             .expect("portfolio value overflow");
-        self.port_value=(value_cents as f64) / 100.0;
+        self.port_value = (value_cents as f64) / 100.0;
         self.port_value
     }
 }

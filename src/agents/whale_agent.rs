@@ -123,7 +123,7 @@ impl Agent for WhaleAgent {
                 if order.filled >= order.volume {
                     self.open_orders.remove(&trade.maker_order_id);
                 }
-                // Update the cash balance 
+                // Update the cash balance
                 let cash_change = (trade_volume as f64) * (trade.price as f64 / 100.0);
                 self.cash -= cash_change;
             }
@@ -161,7 +161,7 @@ impl Agent for WhaleAgent {
         let value_cents = (self.inventory as i128)
             .checked_mul(price_cents as i128)
             .expect("portfolio value overflow");
-        self.port_value=(value_cents as f64) / 100.0;
+        self.port_value = (value_cents as f64) / 100.0;
         self.port_value
     }
 }

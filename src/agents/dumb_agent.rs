@@ -72,7 +72,7 @@ impl Agent for DumbAgent {
                         }
                     }
                 }
-                
+
                 let request = if side == Side::Buy {
                     self.buy_stock(volume)
                 } else {
@@ -121,8 +121,6 @@ impl Agent for DumbAgent {
     }
 
     fn update_portfolio(&mut self, trade_volume: i64, trade: &Trade) {
-        
-        
         // 1. Update inventory.
         self.inventory += trade_volume;
 
@@ -163,12 +161,11 @@ impl Agent for DumbAgent {
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(DumbAgent::new(self.id))
     }
-    
 
     fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
         let price_cents = match market_view.get_mid_price() {
             Some(p) => p,
-            None => return 0.0, 
+            None => return 0.0,
         };
         let value_cents = (self.inventory as i128)
             .checked_mul(price_cents as i128)
