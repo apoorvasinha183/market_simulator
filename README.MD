@@ -22,9 +22,10 @@ A high-performance financial-market simulator written in Rust for designing, tra
 | **1 – Single-Asset Price Path** | Geometric Brownian Motion time series                           | **Complete** |
 | **2 – Fair Option Pricing** | Black–Scholes model (price and Greeks)                          | **Complete** |
 | **3 – Order-Book Dynamics** | Iterative price-level generation and matching engine            | **Complete** |
-| **4 – Market Participants** | Ensemble of agents (market makers, whales, dumb flow)           | *In progress* |
-| **5 – RL Bridge** | Streaming interface (ZeroMQ / gRPC) for external policy control | Planned      |
-| **6 – Multi-Asset Support** | Per-symbol sharded books, cross-asset interaction               | Planned      |
+| **4 – Market Participants** | Ensemble of agents (market makers, whales, dumb flow)           | *Satisfactory* |
+| **5 – RL Bridge** | Streaming interface (ZeroMQ / gRPC) for external policy control | Deferred/Sep Project      |
+| **6 – Multi-Asset Support** | Per-symbol sharded books, cross-asset interaction               | **Ongoing**      |
+| **7 – OrderBook Options** | Options Pricing and trades, separate Options Market               | Planned      |
 
 ---
 
