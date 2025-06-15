@@ -1,5 +1,5 @@
 // src/types/order.rs
-
+use crate::stocks::definitions::{Symbol};
 // --- ADD THIS DERIVE MACRO ---
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
@@ -16,10 +16,11 @@ impl Side {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Order {
     pub id: u64,
     pub agent_id: usize,
+    pub symbol: Symbol,
     pub side: Side,
     pub price: u64,
     pub volume: u64,
@@ -30,18 +31,21 @@ pub struct Order {
 pub enum OrderRequest {
     LimitOrder {
         agent_id: usize,
+        symbol: Symbol,
         side: Side,
         price: u64,
         volume: u64,
     },
     MarketOrder {
         agent_id: usize,
+        symbol: Symbol,
         side: Side,
         volume: u64,
     },
     // A request to cancel a previously placed order.
     CancelOrder {
         agent_id: usize, // To verify ownership
+        symbol: Symbol,
         order_id: u64,
     },
 }

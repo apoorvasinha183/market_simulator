@@ -4,7 +4,7 @@ use crate::simulators::order_book::{OrderBook, Trade};
 use crate::types::order::{Order, OrderRequest};
 /// A read-only snapshot of the market given to an agent for decision-making.
 pub struct MarketView<'a> {
-    pub order_book: &'a OrderBook,
+    pub order_books: &'a OrderBook,
 }
 
 /// The core trait that all our participant types will implement.

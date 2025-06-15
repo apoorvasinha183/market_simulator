@@ -2,10 +2,11 @@
 
 use crate::types::order::{Order, Side};
 use std::collections::{BTreeMap, HashMap, VecDeque};
-
+use crate::stocks::definitions::Symbol;
 pub struct Trade {
     pub price: u64,
     pub volume: u64,
+    pub symbol:Symbol,
     pub taker_agent_id: usize,
     pub maker_agent_id: usize,
     pub taker_side: Side,
@@ -149,6 +150,7 @@ impl OrderBook {
                         trades.push(Trade {
                             price,
                             volume: trade_volume,
+                            symbol:order.symbol.clone(),
                             taker_agent_id: order.agent_id,
                             maker_agent_id: maker_order.agent_id,
                             maker_order_id: maker_order.id,

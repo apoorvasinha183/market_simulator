@@ -393,8 +393,8 @@ impl eframe::App for AgentVisualizer {
                                 );
 
                                 let center_px = market.current_price();
-                                let half_win = 20.00;
-                                let y_max = 2_000_000.00;
+                                let half_win = 25.00;
+                                let y_max = 2_00_000.00;
                                 plot_ui.set_plot_bounds(PlotBounds::from_min_max(
                                     [center_px - half_win, 0.0],
                                     [center_px + half_win, y_max],
