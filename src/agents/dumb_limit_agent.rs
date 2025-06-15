@@ -1,15 +1,14 @@
 // src/agents/dumb_limit_agent.rs
 
-// FIXED: Corrected the use path from `stocks` to `stock`.
 use crate::stocks::definitions::Symbol;
-use super::agent_trait::{Agent, MarketView};
+use super::agent_trait::Agent;
 use super::config::{
     LIMIT_AGENT_ACTION_PROB, LIMIT_AGENT_MAX_OFFSET, LIMIT_AGENT_NUM_TRADERS,
     LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN,
 };
 use crate::agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE;
-use crate::simulators::order_book::Trade;
-use crate::types::order::{Order, OrderRequest, Side};
+// FIXED: Use the top-level re-exported types.
+use crate::{MarketView, Order, OrderRequest, Side, Trade};
 use rand::Rng;
 use std::collections::HashMap;
 
@@ -101,12 +100,11 @@ impl Agent for DumbLimitAgent {
         }]
     }
 
-    // FIXED: Corrected the borrow checker error in margin call logic.
     fn margin_call(&mut self) -> Vec<OrderRequest> {
         if self.cash < -self.margin {
             let to_liquidate: Vec<(Symbol, i64)> = self.get_inventory()
                 .iter()
-                .filter(|(_, &amount)| amount > 0)
+                .filter(|&(_, &amount)| amount > 0)
                 .map(|(symbol, &amount)| (symbol.clone(), amount))
                 .collect();
             
@@ -149,8 +147,6 @@ impl Agent for DumbLimitAgent {
     }
 
     fn cancel_open_order(&mut self, _order_id: u64) -> Vec<OrderRequest> {
-        // A full implementation would need to look up the order, get its symbol,
-        // and then create a CancelOrder request.
         vec![]
     }
 

@@ -2,11 +2,10 @@
 
 // NEW: We need the Symbol type for the HashMap.
 use crate::stocks::definitions::Symbol;
-use super::agent_trait::{Agent, MarketView};
-use crate::simulators::order_book::Trade;
-use crate::types::order::{Order, OrderRequest, Side};
+use super::agent_trait::Agent;
+// FIXED: Use the top-level re-exported types.
+use crate::{MarketView, Order, OrderRequest, Side, Trade};
 use std::collections::HashMap;
-
 /// An agent that acts only once at the beginning of the simulation
 /// to place the entire initial float of assets on the market.
 pub struct IpoAgent {

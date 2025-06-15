@@ -1,5 +1,5 @@
 // src/stocks/registry.rs
-use super::definitions::{Stock, Symbol};
+use super::definitions::{Stock};
 
 // This function will define the entire tradable universe for a simulation run.
 pub fn get_tradable_universe() -> Vec<Stock> {

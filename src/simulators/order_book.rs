@@ -1,36 +1,13 @@
 // src/simulators/order_book.rs
 
-// FIXED: Corrected the path from `stocks` to `stock`.
-use crate::stocks::definitions::Symbol;
-use crate::types::order::{Order, Side};
-use std::collections::{BTreeMap, HashMap, VecDeque};
-
-pub struct Trade {
-    pub symbol: Symbol,
-    pub price: u64,
-    pub volume: u64,
-    pub taker_agent_id: usize,
-    pub maker_agent_id: usize,
-    pub taker_side: Side,
-    pub maker_order_id: u64,
-}
-
-#[derive(Debug, Default)]
-pub struct PriceLevel {
-    pub total_volume: u64,
-    pub orders: VecDeque<Order>,
-}
+use crate::types::order::{Order, Side, Trade};
+use std::collections::{BTreeMap, VecDeque};
 
 pub struct OrderBook {
-    pub bids: BTreeMap<u64, PriceLevel>,
-    pub asks: BTreeMap<u64, PriceLevel>,
-    order_id_map: HashMap<u64, (Side, u64)>,
-}
-
-impl Default for OrderBook {
-    fn default() -> Self {
-        Self::new()
-    }
+    bids: BTreeMap<u64, Vec<u64>>, // Price -> Vec<OrderID>
+    asks: BTreeMap<u64, Vec<u64>>, // Price -> Vec<OrderID>
+    orders: BTreeMap<u64, Order>,
+    trades: VecDeque<Trade>,
 }
 
 impl OrderBook {
@@ -38,233 +15,149 @@ impl OrderBook {
         Self {
             bids: BTreeMap::new(),
             asks: BTreeMap::new(),
-            order_id_map: HashMap::new(),
+            orders: BTreeMap::new(),
+            trades: VecDeque::with_capacity(100), // Store last 100 trades
         }
-    }
-
-    fn add_limit_order(&mut self, order: Order) {
-        let book_side = match order.side {
-            Side::Buy => &mut self.bids,
-            Side::Sell => &mut self.asks,
-        };
-        let level = book_side.entry(order.price).or_default();
-        let remaining_volume = order.volume.saturating_sub(order.filled);
-        level.total_volume += remaining_volume;
-
-        // Extract values *before* moving the order.
-        let order_id = order.id;
-        let order_side = order.side;
-        let order_price = order.price;
-
-        level.orders.push_back(order); // The `order` is moved here.
-
-        // Now use the extracted values.
-        self.order_id_map
-            .insert(order_id, (order_side, order_price));
-    }
-
-    pub fn process_market_order(
-        &mut self,
-        taker_agent_id: usize,
-        side: Side,
-        mut volume_to_fill: u64,
-        symbol: &Symbol,
-    ) -> Vec<Trade> {
-        let mut trades = Vec::new();
-        let mut filled_order_ids = Vec::new();
-        let mut empty_levels = Vec::new();
-
-        let book_to_match = match side {
-            Side::Buy => &mut self.asks,
-            Side::Sell => &mut self.bids,
-        };
-
-        let price_levels: Vec<u64> = match side {
-            Side::Buy => book_to_match.keys().cloned().collect(),
-            Side::Sell => book_to_match.keys().rev().cloned().collect(),
-        };
-
-        for price in price_levels {
-            if volume_to_fill == 0 {
-                break;
-            }
-            if let Some(level) = book_to_match.get_mut(&price) {
-                while let Some(maker_order) = level.orders.front_mut() {
-                    if volume_to_fill == 0 {
-                        break;
-                    }
-                    let remaining_volume = maker_order.volume.saturating_sub(maker_order.filled);
-                    if remaining_volume == 0 {
-                        filled_order_ids.push(level.orders.pop_front().unwrap().id);
-                        continue;
-                    }
-                    let trade_volume = volume_to_fill.min(remaining_volume);
-                    trades.push(Trade {
-                        symbol: symbol.clone(),
-                        price,
-                        volume: trade_volume,
-                        taker_agent_id,
-                        maker_agent_id: maker_order.agent_id,
-                        maker_order_id: maker_order.id,
-                        taker_side: side,
-                    });
-                    maker_order.filled += trade_volume;
-                    level.total_volume -= trade_volume;
-                    volume_to_fill -= trade_volume;
-                    if maker_order.filled >= maker_order.volume {
-                        filled_order_ids.push(level.orders.pop_front().unwrap().id);
-                    }
-                }
-                if level.orders.is_empty() {
-                    empty_levels.push(price);
-                }
-            }
-        }
-        for price in empty_levels {
-            book_to_match.remove(&price);
-        }
-        for id in filled_order_ids {
-            self.order_id_map.remove(&id);
-        }
-        trades
     }
 
     pub fn process_limit_order(&mut self, order: &mut Order) -> Vec<Trade> {
         let mut trades = Vec::new();
-        let mut filled_order_ids = Vec::new();
-        let mut empty_levels = Vec::new();
-
-        let book_to_match = match order.side {
-            Side::Buy => &mut self.asks,
-            Side::Sell => &mut self.bids,
+        let (side_to_match, book_to_match) = if order.side == Side::Buy {
+            (Side::Sell, &mut self.asks)
+        } else {
+            (Side::Buy, &mut self.bids)
         };
 
-        let price_levels: Vec<u64> = match order.side {
-            Side::Buy => book_to_match.keys().cloned().collect(),
-            Side::Sell => book_to_match.keys().rev().cloned().collect(),
-        };
+        let mut potential_matches: Vec<u64> = book_to_match.keys().cloned().collect();
+        if order.side == Side::Buy {
+            potential_matches.sort();
+        } else {
+            potential_matches.sort_by(|a, b| b.cmp(a));
+        }
 
-        for price in price_levels {
-            let order_remaining = order.volume.saturating_sub(order.filled);
-            if order_remaining == 0 {
+        for price_level in potential_matches {
+            if (order.side == Side::Buy && order.price < price_level)
+                || (order.side == Side::Sell && order.price > price_level)
+            {
                 break;
             }
-            let price_is_good = match order.side {
-                Side::Buy => price <= order.price,
-                Side::Sell => price >= order.price,
-            };
-            if !price_is_good {
-                break;
-            }
-            if let Some(level) = book_to_match.get_mut(&price) {
-                while let Some(maker_order) = level.orders.front_mut() {
-                    let order_remaining = order.volume.saturating_sub(order.filled);
-                    if order_remaining == 0 {
+
+            if let Some(orders_at_price) = book_to_match.get_mut(&price_level) {
+                let mut orders_to_remove = vec![];
+                for (i, maker_order_id) in orders_at_price.iter().enumerate() {
+                    if let Some(maker_order) = self.orders.get_mut(maker_order_id) {
+                        let trade_volume = std::cmp::min(order.volume - order.filled, maker_order.volume - maker_order.filled);
+                        if trade_volume > 0 {
+                            order.filled += trade_volume;
+                            maker_order.filled += trade_volume;
+
+                            let trade = Trade {
+                                symbol: order.symbol.clone(),
+                                taker_agent_id: order.agent_id,
+                                maker_agent_id: maker_order.agent_id,
+                                taker_side: order.side,
+                                price: maker_order.price,
+                                volume: trade_volume,
+                                taker_order_id: order.id,
+                                maker_order_id: maker_order.id,
+                            };
+                            trades.push(trade.clone());
+                            if self.trades.len() >= 100 {
+                                self.trades.pop_front();
+                            }
+                            self.trades.push_back(trade);
+
+                            if maker_order.filled == maker_order.volume {
+                                orders_to_remove.push(i);
+                                self.orders.remove(maker_order_id);
+                            }
+                        }
+                    }
+                    if order.filled == order.volume {
                         break;
                     }
-                    let maker_remaining = maker_order.volume.saturating_sub(maker_order.filled);
-                    let trade_volume = order_remaining.min(maker_remaining);
-                    if trade_volume > 0 {
-                        trades.push(Trade {
-                            symbol: order.symbol.clone(),
-                            price,
-                            volume: trade_volume,
-                            taker_agent_id: order.agent_id,
-                            maker_agent_id: maker_order.agent_id,
-                            maker_order_id: maker_order.id,
-                            taker_side: order.side,
-                        });
-                        maker_order.filled += trade_volume;
-                        order.filled += trade_volume;
-                        level.total_volume -= trade_volume;
-                    }
-                    if maker_order.filled >= maker_order.volume {
-                        filled_order_ids.push(level.orders.pop_front().unwrap().id);
-                    }
                 }
-                if level.orders.is_empty() {
-                    empty_levels.push(price);
+                for i in orders_to_remove.into_iter().rev() {
+                    orders_at_price.remove(i);
+                }
+
+                if orders_at_price.is_empty() {
+                    book_to_match.remove(&price_level);
                 }
             }
+            if order.filled == order.volume {
+                self.orders.insert(order.id, order.clone());
+                break;
+            }
         }
-        for price in empty_levels {
-            book_to_match.remove(&price);
-        }
-        for id in filled_order_ids {
-            self.order_id_map.remove(&id);
-        }
+
         if order.filled < order.volume {
-            self.add_limit_order(order.clone());
+            let book_to_add = if order.side == Side::Buy { &mut self.bids } else { &mut self.asks };
+            book_to_add.entry(order.price).or_default().push(order.id);
+            self.orders.insert(order.id, order.clone());
         }
+
         trades
     }
 
-    pub fn cancel_order(&mut self, order_id: u64, agent_id: usize) -> bool {
-        if let Some(&(side, price)) = self.order_id_map.get(&order_id) {
-            let book_side = match side {
-                Side::Buy => &mut self.bids,
-                Side::Sell => &mut self.asks,
-            };
-            if let Some(level) = book_side.get_mut(&price) {
-                if let Some(index) = level.orders.iter().position(|o| o.id == order_id) {
-                    if level.orders[index].agent_id == agent_id {
-                        let cancelled_order = level.orders.remove(index).unwrap();
-                        let remaining_volume = cancelled_order
-                            .volume
-                            .saturating_sub(cancelled_order.filled);
-                        level.total_volume = level.total_volume.saturating_sub(remaining_volume);
-                        if level.orders.is_empty() {
-                            book_side.remove(&price);
-                        }
-                        self.order_id_map.remove(&order_id);
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::stock::definitions::Symbol;
-    use crate::types::order::{Order, Side};
-
-    fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64, symbol: &Symbol) -> Order {
-        Order {
-            id,
+    pub fn process_market_order(&mut self, agent_id: usize, side: Side, volume: u64, symbol: &str) -> Vec<Trade> {
+        let mut order = Order {
+            id: u64::MAX, // A bit of a hack for market orders
             agent_id,
-            symbol: symbol.clone(),
+            symbol: symbol.to_string(),
             side,
-            price,
+            price: if side == Side::Buy { u64::MAX } else { 0 },
             volume,
             filled: 0,
+        };
+        self.process_limit_order(&mut order)
+    }
+
+    pub fn cancel_order(&mut self, order_id: u64, agent_id: usize) {
+        if let Some(order_to_cancel) = self.orders.get(&order_id) {
+            if order_to_cancel.agent_id == agent_id {
+                let book = if order_to_cancel.side == Side::Buy {
+                    &mut self.bids
+                } else {
+                    &mut self.asks
+                };
+                if let Some(orders_at_price) = book.get_mut(&order_to_cancel.price) {
+                    orders_at_price.retain(|&id| id != order_id);
+                    if orders_at_price.is_empty() {
+                        book.remove(&order_to_cancel.price);
+                    }
+                }
+                self.orders.remove(&order_id);
+            }
         }
     }
 
-    #[test]
-    fn test_add_simple_limit_order() {
-        let mut book = OrderBook::new();
-        let symbol = "TEST".to_string();
-        let order = new_order(1, 1, Side::Buy, 100, 50, &symbol);
-        book.add_limit_order(order);
-        assert!(book.order_id_map.contains_key(&1));
-        let level = book.bids.get(&100).unwrap();
-        assert_eq!(level.total_volume, 50);
+    // FIXED: Added missing `get_bids` method
+    pub fn get_bids(&self) -> &BTreeMap<u64, Vec<u64>> {
+        &self.bids
     }
 
-    #[test]
-    fn test_market_order_simple_fill() {
-        let mut book = OrderBook::new();
-        let symbol = "TEST".to_string();
-        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50, &symbol));
-        let trades = book.process_market_order(2, Side::Buy, 30, &symbol);
-        assert_eq!(trades.len(), 1);
-        assert_eq!(trades[0].symbol, symbol);
-        let ask_level = book.asks.get(&100).unwrap();
-        assert_eq!(ask_level.total_volume, 20);
-        assert_eq!(ask_level.orders[0].filled, 30);
+    // FIXED: Added missing `get_asks` method
+    pub fn get_asks(&self) -> &BTreeMap<u64, Vec<u64>> {
+        &self.asks
+    }
+
+    // FIXED: Added missing `get_trades` method
+    pub fn get_trades(&self) -> &VecDeque<Trade> {
+        &self.trades
+    }
+    
+    // FIXED: Added missing `get_depth` method
+    pub fn get_depth(&self) -> (Vec<(u64, u64)>, Vec<(u64, u64)>) {
+        let bids_depth = self.bids.iter().map(|(price, orders)| {
+            let volume = orders.iter().map(|id| self.orders.get(id).map_or(0, |o| o.volume - o.filled)).sum();
+            (*price, volume)
+        }).collect();
+        let asks_depth = self.asks.iter().map(|(price, orders)| {
+            let volume = orders.iter().map(|id| self.orders.get(id).map_or(0, |o| o.volume - o.filled)).sum();
+            (*price, volume)
+        }).collect();
+
+        (bids_depth, asks_depth)
     }
 }

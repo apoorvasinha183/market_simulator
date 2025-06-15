@@ -49,3 +49,14 @@ pub enum OrderRequest {
         order_id: u64,
     },
 }
+#[derive(Debug, Clone)]
+pub struct Trade {
+    pub symbol: Symbol,
+    pub taker_agent_id: usize,
+    pub maker_agent_id: usize,
+    pub taker_side: Side,
+    pub price: u64,
+    pub volume: u64,
+    pub taker_order_id: u64,
+    pub maker_order_id: u64,
+}

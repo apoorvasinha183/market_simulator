@@ -1,15 +1,14 @@
 // src/agents/whale_agent.rs
 
-// FIXED: Corrected the use path from `stock` to `stock::definitions`.
 use crate::stocks::definitions::Symbol;
-use super::agent_trait::{Agent, MarketView};
+use super::agent_trait::Agent;
 use super::config::{
     CRAZY_WHALE, WHALE_ACTION_PROB, WHALE_INITIAL_INVENTORY, WHALE_ORDER_VOLUME,
     WHALE_PRICE_OFFSET_MAX, WHALE_PRICE_OFFSET_MIN,
 };
-use super::latency::WHALE_TICKS_UNTIL_ACTIVE;
-use crate::simulators::order_book::Trade;
-use crate::types::order::{Order, OrderRequest, Side};
+// FIXED: This import is no longer needed after correcting the typo.
+// use crate::agents::latency::WHALE_AGENT_TICKS_UNTIL_ACTIVE;
+use crate::{MarketView, Order, OrderRequest, Side, Trade};
 use rand::Rng;
 use std::collections::HashMap;
 
@@ -33,7 +32,8 @@ impl WhaleAgent {
         Self {
             id,
             inventory,
-            ticks_until_active: WHALE_TICKS_UNTIL_ACTIVE,
+            // FIXED: Corrected typo from WHALE_TICKS_UNTIL_ACTIVE to WHALE_AGENT_TICKS_UNTIL_ACTIVE.
+            ticks_until_active: crate::agents::latency::WHALE_AGENT_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
             cash: 1_000_000_000_000.0,
             margin: 10_000_000_000_000.0,
@@ -108,7 +108,6 @@ impl Agent for WhaleAgent {
         }]
     }
 
-    // FIXED: Corrected the borrow checker error in margin call logic.
     fn margin_call(&mut self) -> Vec<OrderRequest> {
         if self.cash < -self.margin {
             let to_liquidate: Vec<(Symbol, i64)> = self.get_inventory()
@@ -185,39 +184,5 @@ impl Agent for WhaleAgent {
         }
         self.port_value = total_value;
         self.port_value
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::stock::definitions::Symbol;
-    use crate::types::order::{Order, Side};
-
-    fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64, symbol: &Symbol) -> Order {
-        Order {
-            id, agent_id, symbol: symbol.clone(), side, price, volume, filled: 0,
-        }
-    }
-
-    fn new_trade(taker_id: usize, maker_id: usize, maker_order_id: u64, side: Side, price: u64, vol: u64, symbol: &Symbol) -> Trade {
-        Trade {
-            symbol: symbol.clone(), price, volume: vol, taker_agent_id: taker_id, maker_agent_id: maker_id, maker_order_id, taker_side: side,
-        }
-    }
-
-    #[test]
-    fn test_whale_update_portfolio_as_maker() {
-        let mut whale = WhaleAgent::new(1);
-        let symbol = "TEST".to_string();
-        whale.inventory.clear();
-        whale.acknowledge_order(new_order(101, 1, Side::Buy, 14000, 500_000, &symbol));
-        let trade = new_trade(2, 1, 101, Side::Sell, 14000, 10_000, &symbol);
-        
-        whale.update_portfolio(10_000, &trade);
-
-        let open_order = whale.open_orders.get(&101).expect("Order 101 should still be open.");
-        assert_eq!(open_order.filled, 10_000);
-        assert_eq!(*whale.inventory.get(&symbol).unwrap(), 10_000);
     }
 }

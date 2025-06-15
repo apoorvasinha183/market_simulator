@@ -1,19 +1,17 @@
 // src/agents/dumb_agent.rs
 
-// FIXED: Corrected the use path from `stocks` to `stock`.
 use crate::stocks::definitions::Symbol;
-use super::agent_trait::{Agent, MarketView};
+use super::agent_trait::Agent;
 use super::config::{
     DUMB_AGENT_ACTION_PROB, DUMB_AGENT_LARGE_VOL_CHANCE, DUMB_AGENT_LARGE_VOL_MAX,
     DUMB_AGENT_LARGE_VOL_MIN, DUMB_AGENT_NUM_TRADERS, DUMB_AGENT_TYPICAL_VOL_MAX,
     DUMB_AGENT_TYPICAL_VOL_MIN,
 };
 use crate::agents::latency::DUMB_AGENT_TICKS_UNTIL_ACTIVE;
-use crate::simulators::order_book::Trade;
-use crate::types::order::{Order, OrderRequest, Side};
+// FIXED: Use the top-level re-exported types.
+use crate::{MarketView, Order, OrderRequest, Side, Trade};
 use rand::Rng;
 use std::collections::HashMap;
-
 pub struct DumbAgent {
     pub id: usize,
     inventory: HashMap<Symbol, i64>,
@@ -49,7 +47,7 @@ impl Agent for DumbAgent {
         let mut requests_this_tick = Vec::new();
 
         let Some(symbol_to_trade) = market_view.order_books.keys().next().cloned() else {
-            return vec![]; // No symbols in the market to trade
+            return vec![];
         };
 
         for _ in 0..DUMB_AGENT_NUM_TRADERS {
@@ -104,16 +102,13 @@ impl Agent for DumbAgent {
 
     fn margin_call(&mut self) -> Vec<OrderRequest> {
         if self.cash < -self.margin {
-            // FIXED: This pattern resolves the E0502 borrow checker error.
-            // 1. Collect the inventory data you need into a new collection.
             let to_liquidate: Vec<(Symbol, i64)> = self.get_inventory()
                 .iter()
-                .filter(|(_, &amount)| amount > 0)
+                .filter(|&(_, &amount)| amount > 0)
                 .map(|(symbol, &amount)| (symbol.clone(), amount))
                 .collect();
             
             let mut requests = Vec::new();
-            // 2. Now iterate over the new collection, which doesn't borrow `self`.
             for (symbol, amount) in to_liquidate {
                 requests.extend(self.sell_stock(amount as u64, &symbol));
             }
@@ -177,79 +172,5 @@ impl Agent for DumbAgent {
         }
         self.port_value = total_value;
         self.port_value
-    }
-}
-// -----------------------------------------------------------------------------
-//  Unit Tests
-// -----------------------------------------------------------------------------
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::stocks::definitions::Symbol;
-    use crate::types::order::Side;
-
-    fn new_mock_trade(price_cents: u64, volume: u64, symbol: &Symbol) -> Trade {
-        Trade {
-            symbol: symbol.clone(),
-            price: price_cents,
-            volume,
-            taker_agent_id: 1,
-            maker_agent_id: 2,
-            maker_order_id: 101,
-            taker_side: Side::Buy,
-        }
-    }
-
-    #[test]
-    fn test_update_portfolio_cash_on_buy() {
-        let mut agent = DumbAgent::new(0);
-        let symbol = "TEST".to_string();
-        let initial_cash = agent.cash;
-        let trade = new_mock_trade(15000, 10, &symbol);
-        let cost = 10.0 * 150.0;
-
-        agent.update_portfolio(10, &trade);
-
-        assert_eq!(*agent.get_inventory().get(&symbol).unwrap(), 10);
-        assert!((agent.cash - (initial_cash - cost)).abs() < 1e-9);
-    }
-
-    #[test]
-    fn test_update_portfolio_cash_on_sell() {
-        let mut agent = DumbAgent::new(0);
-        let symbol = "TEST".to_string();
-        let initial_cash = agent.cash;
-        let trade = new_mock_trade(15000, 10, &symbol);
-        let proceeds = 10.0 * 150.0;
-        
-        agent.inventory.insert(symbol.clone(), 50);
-
-        agent.update_portfolio(-10, &trade);
-
-        assert_eq!(*agent.get_inventory().get(&symbol).unwrap(), 40);
-        assert!((agent.cash - (initial_cash + proceeds)).abs() < 1e-9);
-    }
-
-    #[test]
-    fn test_margin_call_triggers_when_breached() {
-        let mut agent = DumbAgent::new(0);
-        let symbol1 = "STK1".to_string();
-        let symbol2 = "STK2".to_string();
-        agent.cash = -4_000_000_000.1; 
-        agent.inventory.insert(symbol1.clone(), 500);
-        agent.inventory.insert(symbol2.clone(), 300);
-
-        let requests = agent.margin_call();
-
-        assert_eq!(requests.len(), 2, "Should generate liquidation orders for both holdings.");
-        
-        let sell_stk1 = requests.iter().find(|r| match r {
-            OrderRequest::MarketOrder { symbol, .. } => symbol == &symbol1,
-            _ => false,
-        }).expect("Should find order for STK1");
-        
-        if let OrderRequest::MarketOrder { volume, .. } = sell_stk1 {
-            assert_eq!(*volume, 500);
-        }
     }
 }

@@ -1,38 +1,32 @@
 // src/lib.rs
 
-// === 1. Declare all the top-level modules ===
 pub mod agents;
 pub mod market;
 pub mod pricing;
 pub mod shared_types;
 pub mod simulators;
+pub mod stocks;
 pub mod types;
 
-// === 2. Re-export the public-facing components to create a clean API ===
+// Re-export key components for easier access in binaries and other crates.
+pub use agents::{
+    agent_trait::Agent, agent_type::AgentType, dumb_agent::DumbAgent,
+    dumb_limit_agent::DumbLimitAgent, ipo_agent::IpoAgent, market_maker_agent::MarketMakerAgent,
+    whale_agent::WhaleAgent,
+};
 
-// --- From `agents` ---
-pub use agents::agent_trait::{Agent, MarketView};
-pub use agents::agent_type::AgentType; // <-- EXPORT THE NEW ENUM
-pub use agents::dumb_agent::DumbAgent;
-pub use agents::dumb_limit_agent::DumbLimitAgent;
-pub use agents::ipo_agent::IpoAgent;
-pub use agents::market_maker_agent::MarketMakerAgent;
-pub use agents::whale_agent::WhaleAgent;
-
-// --- From our `market` engine ---
 pub use market::Market;
 
-// --- From `simulators` ---
-pub use simulators::gbm::GBMSimulator;
-pub use simulators::market_trait::Marketable;
-pub use simulators::order_book::{OrderBook, Trade};
+// FIXED: Correctly re-exporting MarketView and Marketable.
+pub use simulators::{
+    market_trait::{MarketView, Marketable},
+    order_book::OrderBook,
+};
 
-// --- From `pricing` ---
-pub use pricing::{Greeks, OptionPricer};
+pub use stocks::{
+    definitions::{Stock, Symbol},
+    registry,
+};
 
-// --- From `types` ---
-pub use types::order::{Order, OrderRequest, Side};
-//pub use types::order::{Order, OrderRequest, Side};
-// --- From `shared_types` ---
-pub use shared_types::OptionType;
-pub mod stocks;
+// FIXED: Correctly re-exporting all types from the order module.
+pub use types::order::{Order, OrderRequest, Side, Trade};

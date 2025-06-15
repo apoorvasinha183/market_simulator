@@ -1,7 +1,7 @@
 // src/market.rs
 
-// FIXED: Corrected the path from `stocks` to `stock`.
-use crate::stocks::definitions::{Stock, Symbol};
+// FIXED: Removed the unused `Stock` import.
+use crate::stocks::definitions::Symbol;
 use crate::stocks::registry;
 use crate::{
     Agent, AgentType, DumbAgent, DumbLimitAgent, IpoAgent, MarketMakerAgent, MarketView,
@@ -104,14 +104,16 @@ impl Marketable for Market {
                 OrderRequest::CancelOrder { symbol, .. } => symbol.clone(),
             };
 
+            // FIXED: Get the order ID *before* the mutable borrow on order_books.
+            let new_order_id = self.next_order_id();
+
             // Process the request for that symbol.
             if let Some(book) = self.order_books.get_mut(&symbol) {
                 match request {
                     OrderRequest::LimitOrder { agent_id, side, price, volume, symbol } => {
                         let mut order = Order {
-                            symbol, id: self.next_order_id(), agent_id, side, price, volume, filled: 0,
+                            symbol, id: new_order_id, agent_id, side, price, volume, filled: 0,
                         };
-                        // FIXED: Clone the order before moving it into acknowledge_order
                         if let Some(agent) = self.agents.get_mut(&agent_id) {
                             agent.acknowledge_order(order.clone());
                         }
@@ -120,7 +122,7 @@ impl Marketable for Market {
                     OrderRequest::MarketOrder { agent_id, side, volume, symbol } => {
                         let last_price = self.last_traded_prices.get(&symbol).cloned().unwrap_or(0.0);
                         let order = Order {
-                            symbol: symbol.clone(), id: self.next_order_id(), agent_id, side,
+                            symbol: symbol.clone(), id: new_order_id, agent_id, side,
                             price: (last_price * 100.0).round() as u64,
                             volume, filled: 0,
                         };
@@ -177,7 +179,6 @@ impl Marketable for Market {
         self.last_traded_prices.get(symbol).cloned()
     }
     
-    // FIXED: Correctly implement the trait methods.
     fn get_order_book(&self, symbol: &Symbol) -> Option<&OrderBook> {
         self.order_books.get(symbol)
     }
@@ -187,12 +188,30 @@ impl Marketable for Market {
     }
 
     fn reset(&mut self) {
-        // ... (reset logic is correct)
+        let stocks = registry::get_tradable_universe();
+        self.order_books.clear();
+        self.last_traded_prices.clear();
+        self.cumulative_volumes.clear();
+        for stock in stocks {
+            self.order_books
+                .insert(stock.symbol.clone(), OrderBook::new());
+            self.last_traded_prices
+                .insert(stock.symbol.clone(), stock.initial_price);
+            self.cumulative_volumes.insert(stock.symbol.clone(), 0);
+        }
+
+        self.agents.clear();
+        let mut agent_id_counter = 0;
+        for agent_type in &self.initial_agent_types {
+            let agent = Self::create_agent_from_type(*agent_type, agent_id_counter);
+            self.agents.insert(agent_id_counter, agent);
+            agent_id_counter += 1;
+        }
+
+        self.order_id_counter = 0;
     }
 
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
-
-// ... (tests will need updates but let's focus on compiling first)
