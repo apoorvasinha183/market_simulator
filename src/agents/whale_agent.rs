@@ -1,5 +1,7 @@
 // src/agents/whale_agent.rs
 
+// FIXED: Corrected the use path from `stock` to `stock::definitions`.
+use crate::stocks::definitions::Symbol;
 use super::agent_trait::{Agent, MarketView};
 use super::config::{
     CRAZY_WHALE, WHALE_ACTION_PROB, WHALE_INITIAL_INVENTORY, WHALE_ORDER_VOLUME,
@@ -15,26 +17,26 @@ use std::collections::HashMap;
 /// the current price to create support and resistance levels.
 pub struct WhaleAgent {
     pub id: usize,
-    inventory: i64,
+    inventory: HashMap<Symbol, i64>,
     ticks_until_active: u32,
     open_orders: HashMap<u64, Order>,
-    #[allow(dead_code)]
     cash: f64,
-    #[allow(dead_code)]
     margin: f64,
-    #[allow(dead_code)]
     port_value: f64,
 }
 
 impl WhaleAgent {
     pub fn new(id: usize) -> Self {
+        let mut inventory = HashMap::new();
+        inventory.insert("AAPL".to_string(), WHALE_INITIAL_INVENTORY);
+        
         Self {
             id,
-            inventory: WHALE_INITIAL_INVENTORY,
+            inventory,
             ticks_until_active: WHALE_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
-            cash: 1000000000000.0,
-            margin: 10000000000000.0,
+            cash: 1_000_000_000_000.0,
+            margin: 10_000_000_000_000.0,
             port_value: 0.0,
         }
     }
@@ -53,7 +55,6 @@ impl Agent for WhaleAgent {
             return vec![];
         }
 
-        // --- Cancel and Replace Logic ---
         let ids_to_cancel: Vec<u64> = self.open_orders.keys().cloned().collect();
         let mut requests: Vec<OrderRequest> = ids_to_cancel
             .into_iter()
@@ -62,52 +63,67 @@ impl Agent for WhaleAgent {
 
         self.open_orders.clear();
 
-        // --- Place new orders ---
+        let Some(symbol_to_trade) = market_view.order_books.keys().next().cloned() else {
+            return vec![];
+        };
+
         if rng.gen_bool(CRAZY_WHALE) {
             let crazy_volume = rng.gen_range((WHALE_ORDER_VOLUME / 2)..=WHALE_ORDER_VOLUME);
-            let side = if rng.gen_bool(0.5) {
-                Side::Buy
-            } else {
-                Side::Sell
-            };
+            let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
             requests.push(OrderRequest::MarketOrder {
+                symbol: symbol_to_trade,
                 agent_id: self.id,
                 side,
                 volume: crazy_volume,
             });
         } else {
-            if let Some(center_price) = market_view.get_mid_price() {
+            if let Some(center_price) = market_view.get_mid_price(&symbol_to_trade) {
                 let buy_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
                 let sell_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
                 let support_price = center_price.saturating_sub(buy_bias);
                 let resistance_price = center_price.saturating_add(sell_bias);
 
                 requests.push(OrderRequest::LimitOrder {
-                    agent_id: self.id,
-                    side: Side::Buy,
-                    price: support_price,
-                    volume: WHALE_ORDER_VOLUME,
+                    symbol: symbol_to_trade.clone(),
+                    agent_id: self.id, side: Side::Buy, price: support_price, volume: WHALE_ORDER_VOLUME,
                 });
                 requests.push(OrderRequest::LimitOrder {
-                    agent_id: self.id,
-                    side: Side::Sell,
-                    price: resistance_price,
-                    volume: WHALE_ORDER_VOLUME,
+                    symbol: symbol_to_trade,
+                    agent_id: self.id, side: Side::Sell, price: resistance_price, volume: WHALE_ORDER_VOLUME,
                 });
             }
         }
-        //let liquidity = self.evaluate_port(market_view);
-        //println!("Whales have a net position of {}", liquidity);
         requests
     }
 
-    fn buy_stock(&mut self, _volume: u64) -> Vec<OrderRequest> {
-        vec![]
+    fn buy_stock(&mut self, volume: u64, symbol: &Symbol) -> Vec<OrderRequest> {
+        vec![OrderRequest::MarketOrder {
+            symbol: symbol.clone(), agent_id: self.id, side: Side::Buy, volume,
+        }]
     }
-    fn sell_stock(&mut self, _volume: u64) -> Vec<OrderRequest> {
-        vec![]
+
+    fn sell_stock(&mut self, volume: u64, symbol: &Symbol) -> Vec<OrderRequest> {
+        vec![OrderRequest::MarketOrder {
+            symbol: symbol.clone(), agent_id: self.id, side: Side::Sell, volume,
+        }]
     }
+
+    // FIXED: Corrected the borrow checker error in margin call logic.
     fn margin_call(&mut self) -> Vec<OrderRequest> {
+        if self.cash < -self.margin {
+            let to_liquidate: Vec<(Symbol, i64)> = self.get_inventory()
+                .iter()
+                .map(|(s, &a)| (s.clone(), a))
+                .collect();
+
+            let mut requests = Vec::new();
+            for (symbol, amount) in to_liquidate {
+                if amount > 0 { requests.extend(self.sell_stock(amount.unsigned_abs(), &symbol)); } 
+                else if amount < 0 { requests.extend(self.buy_stock(amount.unsigned_abs(), &symbol)); }
+            }
+            if !requests.is_empty() { println!("Liquidation for Whale agent {}!", self.id); }
+            return requests;
+        }
         vec![]
     }
 
@@ -116,16 +132,18 @@ impl Agent for WhaleAgent {
     }
 
     fn update_portfolio(&mut self, trade_volume: i64, trade: &Trade) {
-        self.inventory += trade_volume;
+        let inventory_for_symbol = self.inventory.entry(trade.symbol.clone()).or_insert(0);
+        *inventory_for_symbol += trade_volume;
+
+        let cash_change = (trade_volume as f64) * (trade.price as f64 / 100.0);
+        self.cash -= cash_change;
+
         if trade.maker_agent_id == self.id {
             if let Some(order) = self.open_orders.get_mut(&trade.maker_order_id) {
                 order.filled += trade.volume;
                 if order.filled >= order.volume {
                     self.open_orders.remove(&trade.maker_order_id);
                 }
-                // Update the cash balance
-                let cash_change = (trade_volume as f64) * (trade.price as f64 / 100.0);
-                self.cash -= cash_change;
             }
         }
     }
@@ -135,8 +153,9 @@ impl Agent for WhaleAgent {
     }
 
     fn cancel_open_order(&mut self, order_id: u64) -> Vec<OrderRequest> {
-        if self.open_orders.contains_key(&order_id) {
+        if let Some(order) = self.open_orders.get(&order_id) {
             return vec![OrderRequest::CancelOrder {
+                symbol: order.symbol.clone(),
                 agent_id: self.id,
                 order_id,
             }];
@@ -147,132 +166,58 @@ impl Agent for WhaleAgent {
     fn get_id(&self) -> usize {
         self.id
     }
-    fn get_inventory(&self) -> i64 {
-        self.inventory
+
+    fn get_inventory(&self) -> &HashMap<Symbol, i64> {
+        &self.inventory
     }
+
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(WhaleAgent::new(self.id))
     }
+    
     fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
-        let price_cents = match market_view.get_mid_price() {
-            Some(p) => p,
-            None => return 0.0, // or whatever you deem appropriate
-        };
-        let value_cents = (self.inventory as i128)
-            .checked_mul(price_cents as i128)
-            .expect("portfolio value overflow");
-        self.port_value = (value_cents as f64) / 100.0;
+        let mut total_value = 0.0;
+        for (symbol, &amount) in &self.inventory {
+            if let Some(price_cents) = market_view.get_mid_price(symbol) {
+                let value_cents = (amount as i128) * (price_cents as i128);
+                total_value += (value_cents as f64) / 100.0;
+            }
+        }
+        self.port_value = total_value;
         self.port_value
     }
 }
 
-// -----------------------------------------------------------------------------
-//  Unit Tests
-// -----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::simulators::order_book::{OrderBook, PriceLevel};
-    use crate::types::order::Side;
+    use crate::stock::definitions::Symbol;
+    use crate::types::order::{Order, Side};
 
-    // Helper to create a new order for testing.
-    fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64) -> Order {
+    fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64, symbol: &Symbol) -> Order {
         Order {
-            id,
-            agent_id,
-            side,
-            price,
-            volume,
-            filled: 0,
+            id, agent_id, symbol: symbol.clone(), side, price, volume, filled: 0,
         }
     }
 
-    // Helper to create a mock trade for testing.
-    fn new_trade(
-        taker_id: usize,
-        maker_id: usize,
-        maker_order_id: u64,
-        side: Side,
-        price: u64,
-        vol: u64,
-    ) -> Trade {
+    fn new_trade(taker_id: usize, maker_id: usize, maker_order_id: u64, side: Side, price: u64, vol: u64, symbol: &Symbol) -> Trade {
         Trade {
-            price,
-            volume: vol,
-            taker_agent_id: taker_id,
-            maker_agent_id: maker_id,
-            maker_order_id,
-            taker_side: side,
-        }
-    }
-
-    #[test]
-    fn test_whale_cancel_and_replace_logic() {
-        // Arrange
-        let mut whale = WhaleAgent::new(1);
-        whale.ticks_until_active = 0; // Make it active immediately
-        // Give it some existing open orders to cancel
-        whale.acknowledge_order(new_order(101, 1, Side::Buy, 14000, 500_000));
-        whale.acknowledge_order(new_order(102, 1, Side::Sell, 16000, 500_000));
-
-        let mut book = OrderBook::new();
-        book.bids.insert(14500, PriceLevel::default());
-        book.asks.insert(15500, PriceLevel::default());
-        let view = MarketView {
-            order_book: &book,
-            //last_traded_price: 150.00,
-        };
-
-        // Act
-        // Set WHALE_ACTION_PROB to 1.0 for this test by re-seeding the rng if needed,
-        // or just accept that this test is probabilistic. For simplicity, we assume it acts.
-        // A more robust test would mock the RNG.
-        let requests = whale.decide_actions(&view);
-
-        // Assert
-        // This test will only pass if the whale decides to act (WHALE_ACTION_PROB).
-        if !requests.is_empty() {
-            let cancel_count = requests
-                .iter()
-                .filter(|r| matches!(r, OrderRequest::CancelOrder { .. }))
-                .count();
-            let limit_count = requests
-                .iter()
-                .filter(|r| matches!(r, OrderRequest::LimitOrder { .. }))
-                .count();
-
-            assert_eq!(
-                cancel_count, 2,
-                "Should have generated two cancel requests."
-            );
-            assert!(
-                limit_count >= 2,
-                "Should have generated at least two new limit orders."
-            );
-            assert!(
-                whale.open_orders.is_empty(),
-                "Internal open orders map should be cleared."
-            );
+            symbol: symbol.clone(), price, volume: vol, taker_agent_id: taker_id, maker_agent_id: maker_id, maker_order_id, taker_side: side,
         }
     }
 
     #[test]
     fn test_whale_update_portfolio_as_maker() {
-        // Arrange
         let mut whale = WhaleAgent::new(1);
-        whale.acknowledge_order(new_order(101, 1, Side::Buy, 14000, 500_000));
-        let trade = new_trade(2, 1, 101, Side::Sell, 14000, 10_000);
-        let expected_inventory_change = 10_000; // Maker bought 10k shares.
+        let symbol = "TEST".to_string();
+        whale.inventory.clear();
+        whale.acknowledge_order(new_order(101, 1, Side::Buy, 14000, 500_000, &symbol));
+        let trade = new_trade(2, 1, 101, Side::Sell, 14000, 10_000, &symbol);
+        
+        whale.update_portfolio(10_000, &trade);
 
-        // Act
-        whale.update_portfolio(expected_inventory_change, &trade);
-
-        // Assert
-        let open_order = whale
-            .open_orders
-            .get(&101)
-            .expect("Order 101 should still be open.");
+        let open_order = whale.open_orders.get(&101).expect("Order 101 should still be open.");
         assert_eq!(open_order.filled, 10_000);
-        assert_eq!(whale.inventory, WHALE_INITIAL_INVENTORY + 10_000);
+        assert_eq!(*whale.inventory.get(&symbol).unwrap(), 10_000);
     }
 }

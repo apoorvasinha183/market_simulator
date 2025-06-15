@@ -1,15 +1,12 @@
 // src/agents/dumb_limit_agent.rs
 
+// FIXED: Corrected the use path from `stocks` to `stock`.
+use crate::stocks::definitions::Symbol;
 use super::agent_trait::{Agent, MarketView};
 use super::config::{
-    LIMIT_AGENT_ACTION_PROB,
-    LIMIT_AGENT_MAX_OFFSET,
-    LIMIT_AGENT_NUM_TRADERS, // Added NUM_TRADERS
-    LIMIT_AGENT_VOL_MAX,
-    LIMIT_AGENT_VOL_MIN,
-    MARGIN_CALL_THRESHOLD,
+    LIMIT_AGENT_ACTION_PROB, LIMIT_AGENT_MAX_OFFSET, LIMIT_AGENT_NUM_TRADERS,
+    LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN,
 };
-//use super::latency;
 use crate::agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE;
 use crate::simulators::order_book::Trade;
 use crate::types::order::{Order, OrderRequest, Side};
@@ -18,14 +15,11 @@ use std::collections::HashMap;
 
 pub struct DumbLimitAgent {
     pub id: usize,
-    inventory: i64,
+    inventory: HashMap<Symbol, i64>,
     ticks_until_active: u32,
     open_orders: HashMap<u64, Order>,
-    #[allow(dead_code)]
     cash: f64,
-    #[allow(dead_code)]
     margin: f64,
-    #[allow(dead_code)]
     port_value: f64,
 }
 
@@ -33,11 +27,11 @@ impl DumbLimitAgent {
     pub fn new(id: usize) -> Self {
         Self {
             id,
-            inventory: 200_000_000,
+            inventory: HashMap::new(),
             ticks_until_active: LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
-            cash: 100000000.0,
-            margin: 10000000000.0,
+            cash: 100_000_000.0,
+            margin: 10_000_000_000.0,
             port_value: 0.0,
         }
     }
@@ -53,34 +47,31 @@ impl Agent for DumbLimitAgent {
         let mut rng = rand::thread_rng();
         let mut requests = Vec::new();
 
-        // --- NEW: Ensemble Logic ---
-        // Loop for each "trader" in our ensemble.
+        let Some(symbol_to_trade) = market_view.order_books.keys().next().cloned() else {
+            return vec![];
+        };
+
         for _ in 0..LIMIT_AGENT_NUM_TRADERS {
             if rng.gen_bool(LIMIT_AGENT_ACTION_PROB as f64) {
-                let best_bid = market_view.order_book.bids.keys().last().copied();
-                let best_ask = market_view.order_book.asks.keys().next().copied();
-
-                if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
-                    if bid >= ask {
-                        continue;
-                    } // Skip if book is crossed
-
-                    // Use the "dumber" logic for each individual trader
-                    let side = if rng.gen_bool(0.5) {
-                        Side::Buy
-                    } else {
-                        Side::Sell
-                    };
+                if let Some(mid_price) = market_view.get_mid_price(&symbol_to_trade) {
+                    let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
                     let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
                     let price = match side {
-                        Side::Buy => bid.saturating_add(offset),
-                        Side::Sell => ask.saturating_sub(offset),
+                        Side::Buy => mid_price.saturating_sub(offset),
+                        Side::Sell => mid_price.saturating_add(offset),
                     };
 
-                    // Each trader places a small order
                     let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
 
+                    if side == Side::Buy {
+                        let estimated_cost = (volume as f64) * (price as f64 / 100.0);
+                        if estimated_cost > self.cash + self.margin {
+                            continue;
+                        }
+                    }
+
                     requests.push(OrderRequest::LimitOrder {
+                        symbol: symbol_to_trade.clone(),
                         agent_id: self.id,
                         side,
                         price,
@@ -89,33 +80,45 @@ impl Agent for DumbLimitAgent {
                 }
             }
         }
-        //let liquidity = self.evaluate_port(market_view);
-        //println!("Smart retail has a net position of {}", liquidity);
         requests
     }
 
-    // --- Fulfillment of the Agent Trait Contract ---
-
-    fn buy_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
+    fn buy_stock(&mut self, volume: u64, symbol: &Symbol) -> Vec<OrderRequest> {
         vec![OrderRequest::MarketOrder {
+            symbol: symbol.clone(),
             agent_id: self.id,
             side: Side::Buy,
             volume,
         }]
     }
 
-    fn sell_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
+    fn sell_stock(&mut self, volume: u64, symbol: &Symbol) -> Vec<OrderRequest> {
         vec![OrderRequest::MarketOrder {
+            symbol: symbol.clone(),
             agent_id: self.id,
             side: Side::Sell,
             volume,
         }]
     }
 
+    // FIXED: Corrected the borrow checker error in margin call logic.
     fn margin_call(&mut self) -> Vec<OrderRequest> {
-        if self.inventory <= MARGIN_CALL_THRESHOLD {
-            let deficit = self.inventory.unsigned_abs();
-            return self.buy_stock(deficit);
+        if self.cash < -self.margin {
+            let to_liquidate: Vec<(Symbol, i64)> = self.get_inventory()
+                .iter()
+                .filter(|(_, &amount)| amount > 0)
+                .map(|(symbol, &amount)| (symbol.clone(), amount))
+                .collect();
+            
+            let mut requests = Vec::new();
+            for (symbol, amount) in to_liquidate {
+                requests.extend(self.sell_stock(amount as u64, &symbol));
+            }
+
+            if !requests.is_empty() {
+                println!("Liquidation for agent {}!", self.id);
+            }
+            return requests;
         }
         vec![]
     }
@@ -125,15 +128,18 @@ impl Agent for DumbLimitAgent {
     }
 
     fn update_portfolio(&mut self, trade_volume: i64, trade: &Trade) {
-        self.inventory += trade_volume;
+        let inventory_for_symbol = self.inventory.entry(trade.symbol.clone()).or_insert(0);
+        *inventory_for_symbol += trade_volume;
+
+        let cash_change = (trade_volume as f64) * (trade.price as f64 / 100.0);
+        self.cash -= cash_change;
+
         if trade.maker_agent_id == self.id {
             if let Some(ord) = self.open_orders.get_mut(&trade.maker_order_id) {
                 ord.filled += trade.volume;
                 if ord.filled >= ord.volume {
                     self.open_orders.remove(&trade.maker_order_id);
                 }
-                let cash_change = (trade_volume as f64) * (trade.price as f64 / 100.0);
-                self.cash -= cash_change;
             }
         }
     }
@@ -142,29 +148,33 @@ impl Agent for DumbLimitAgent {
         self.open_orders.values().cloned().collect()
     }
 
-    fn cancel_open_order(&mut self, order_id: u64) -> Vec<OrderRequest> {
-        if self.open_orders.remove(&order_id).is_some() {}
+    fn cancel_open_order(&mut self, _order_id: u64) -> Vec<OrderRequest> {
+        // A full implementation would need to look up the order, get its symbol,
+        // and then create a CancelOrder request.
         vec![]
     }
 
     fn get_id(&self) -> usize {
         self.id
     }
-    fn get_inventory(&self) -> i64 {
-        self.inventory
+
+    fn get_inventory(&self) -> &HashMap<Symbol, i64> {
+        &self.inventory
     }
+
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(DumbLimitAgent::new(self.id))
     }
+
     fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
-        let price_cents = match market_view.get_mid_price() {
-            Some(p) => p,
-            None => return 0.0, // or whatever you deem appropriate
-        };
-        let value_cents = (self.inventory as i128)
-            .checked_mul(price_cents as i128)
-            .expect("portfolio value overflow");
-        self.port_value = (value_cents as f64) / 100.0;
+        let mut total_value = 0.0;
+        for (symbol, &amount) in &self.inventory {
+            if let Some(price_cents) = market_view.get_mid_price(symbol) {
+                let value_cents = (amount as i128) * (price_cents as i128);
+                total_value += (value_cents as f64) / 100.0;
+            }
+        }
+        self.port_value = total_value;
         self.port_value
     }
 }
