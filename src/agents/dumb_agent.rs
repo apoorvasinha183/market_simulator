@@ -1,14 +1,14 @@
 // src/agents/dumb_agent.rs
 
 use super::agent_trait::{Agent, MarketView};
+use crate::stocks::definitions::default_stock_universe;
 use super::config::{
     DUMB_AGENT_ACTION_PROB, DUMB_AGENT_LARGE_VOL_CHANCE, DUMB_AGENT_LARGE_VOL_MAX,
     DUMB_AGENT_LARGE_VOL_MIN, DUMB_AGENT_NUM_TRADERS, DUMB_AGENT_TYPICAL_VOL_MAX,
     DUMB_AGENT_TYPICAL_VOL_MIN,
 };
 use crate::agents::latency::DUMB_AGENT_TICKS_UNTIL_ACTIVE;
-use crate::simulators::order_book::Trade;
-use crate::types::order::{Order, OrderRequest, Side};
+use crate::types::order::{Order, OrderRequest, Side,Trade};
 use rand::Rng;
 use std::collections::HashMap;
 
@@ -19,7 +19,6 @@ pub struct DumbAgent {
     open_orders: HashMap<u64, Order>,
     cash: f64,
     margin: f64,
-    // --- Restored as requested ---
     port_value: f64,
 }
 
@@ -32,7 +31,6 @@ impl DumbAgent {
             open_orders: HashMap::new(),
             cash: 1_000_000_000.0,
             margin: 4_000_000_000.0,
-            // --- Restored as requested ---
             port_value: 0.0,
         }
     }
@@ -47,6 +45,7 @@ impl Agent for DumbAgent {
 
         let mut rng = rand::thread_rng();
         let mut requests_this_tick = Vec::new();
+        let sym = &default_stock_universe()[0].ticker;
 
         for _ in 0..DUMB_AGENT_NUM_TRADERS {
             if rng.gen_bool(DUMB_AGENT_ACTION_PROB) {
@@ -64,7 +63,7 @@ impl Agent for DumbAgent {
 
                 // --- Buying Power Check ---
                 if side == Side::Buy {
-                    if let Some(price_cents) = market_view.get_mid_price() {
+                    if let Some(price_cents) = market_view.get_mid_price(sym) {
                         let estimated_cost = (volume as f64) * (price_cents as f64 / 100.0);
                         let buying_power = self.cash + self.margin;
                         if estimated_cost > buying_power {
@@ -88,16 +87,20 @@ impl Agent for DumbAgent {
     }
 
     fn buy_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
+        let sym = &default_stock_universe()[0].ticker;
         vec![OrderRequest::MarketOrder {
             agent_id: self.id,
+            symbol:sym.clone(),
             side: Side::Buy,
             volume,
         }]
     }
 
     fn sell_stock(&mut self, volume: u64) -> Vec<OrderRequest> {
+        let sym = &default_stock_universe()[0].ticker;
         vec![OrderRequest::MarketOrder {
             agent_id: self.id,
+            symbol:sym.clone(),
             side: Side::Sell,
             volume,
         }]
@@ -163,7 +166,8 @@ impl Agent for DumbAgent {
     }
 
     fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
-        let price_cents = match market_view.get_mid_price() {
+        let sym = &default_stock_universe()[0].ticker;
+        let price_cents = match market_view.get_mid_price(sym) {
             Some(p) => p,
             None => return 0.0,
         };
@@ -184,9 +188,12 @@ mod tests {
 
     // Helper to create a mock trade for testing.
     fn new_mock_trade(price_cents: u64, volume: u64) -> Trade {
+        let sym = &default_stock_universe()[0].ticker;
         Trade {
             price: price_cents,
+
             volume,
+            symbol:sym.clone(),
             taker_agent_id: 1,     // Doesn't matter for these tests
             maker_agent_id: 2,     // Doesn't matter for these tests
             maker_order_id: 101,   // Doesn't matter
@@ -241,6 +248,8 @@ mod tests {
     fn test_margin_call_triggers_when_breached() {
         // Arrange
         let mut agent = DumbAgent::new(0);
+        let sym = &default_stock_universe()[0].ticker;
+
         agent.cash = -4_000_000_000.1; // Breaches the -4B margin
         agent.inventory = 500; // Has inventory to liquidate
 
@@ -252,6 +261,7 @@ mod tests {
         match &requests[0] {
             OrderRequest::MarketOrder {
                 agent_id,
+                symbol,
                 side,
                 volume,
             } => {

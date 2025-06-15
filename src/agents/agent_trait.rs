@@ -1,10 +1,13 @@
 // src/agents/agent_trait.rs
 
-use crate::simulators::order_book::{OrderBook, Trade};
-use crate::types::order::{Order, OrderRequest};
+use crate::simulators::order_book::{OrderBook};
+use crate::types::order::{Order, OrderRequest,Trade};
+use crate::stocks::definitions::Symbol;
+use std::collections::HashMap;
 /// A read-only snapshot of the market given to an agent for decision-making.
 pub struct MarketView<'a> {
-    pub order_book: &'a OrderBook,
+    /// One book per ticker.
+    pub order_books: &'a HashMap<Symbol, OrderBook>,
 }
 
 /// The core trait that all our participant types will implement.
@@ -44,22 +47,16 @@ pub trait Agent {
 }
 /// The whale needs this
 impl<'a> MarketView<'a> {
-    /// Calculates the mid-price if a valid spread exists.
-    pub fn get_mid_price(&self) -> Option<u64> {
-        let best_bid = self.order_book.bids.keys().last();
-        let best_ask = self.order_book.asks.keys().next();
+    /// Convenience: get the book for a specific symbol.
+    pub fn book(&self, symbol: &Symbol) -> Option<&OrderBook> {
+        self.order_books.get(symbol)
+    }
 
-        if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
-            if ask > bid {
-                // Return the average of the best bid and ask
-                Some((bid + ask) / 2)
-            } else {
-                // The book is crossed, so there's no valid mid-price
-                None
-            }
-        } else {
-            // One or both sides of the book are empty
-            None
-        }
+    /// Mid-price helper (best bid + ask)/2 in cents.
+    pub fn get_mid_price(&self, symbol: &Symbol) -> Option<u64> {
+        let book = self.book(symbol)?;
+        let best_bid = book.bids.keys().next_back()?;
+        let best_ask = book.asks.keys().next()?;
+        Some((best_bid + best_ask) / 2)
     }
 }
