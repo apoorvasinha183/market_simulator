@@ -15,3 +15,6 @@ serde_json = "1.0"
 [[bench]]
 name    = "order_book" 
 harness = false       
+[[bench]]
+name = "order_book_enhanced"
+harness = false
