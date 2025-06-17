@@ -50,7 +50,7 @@ impl MarketMakerAgent {
 
     /* seed one instrument’s book with geometric depth */
     // Adding one more argument that is the opening stock price.
-    fn seed_liquidity(&self, stock_id: u64,starting_price:u64) -> Vec<OrderRequest> {
+    fn seed_liquidity(&self, stock_id: u64, starting_price: u64) -> Vec<OrderRequest> {
         let side_budget = (self.inventory.abs() as f64 * MM_SEED_DEPTH_PCT) as u64;
         let mut vol_at_lvl = (side_budget as f64 * (1.0 - MM_SEED_DECAY)
             / (1.0 - MM_SEED_DECAY.powi(MM_SEED_LEVELS as i32)))
@@ -119,7 +119,7 @@ impl Agent for MarketMakerAgent {
         /* one-time seeding per instrument */
         if !*self.bootstrapped.entry(stock_id).or_insert(false) {
             self.bootstrapped.insert(stock_id, true);
-            return self.seed_liquidity(stock_id,initial_price);
+            return self.seed_liquidity(stock_id, initial_price);
         }
 
         let best_bid = book.bids.keys().next_back().copied();
