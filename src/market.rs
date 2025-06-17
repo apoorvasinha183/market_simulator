@@ -1,73 +1,72 @@
 // src/market.rs
 //
-// Multi-ticker version — each Symbol gets its own OrderBook.
-// Agents already send a `symbol` inside every OrderRequest, so all
-// routing happens here without touching the order-book logic.
+// Multi-ticker engine: one OrderBook per stock-id.
+// All routing keys on `stock_id: u64`; no String clones on the hot path.
+
+use std::{any::Any, collections::HashMap};
 
 use crate::{
-    stocks::definitions::{default_stock_universe, Symbol},
-    types::{Order, OrderRequest, Side, Trade},
     Agent, AgentType, DumbAgent, DumbLimitAgent, IpoAgent, MarketMakerAgent, MarketView,
     Marketable, OrderBook, WhaleAgent,
+    stocks::definitions::StockMarket,
+    types::{Order, OrderRequest, Side, Trade},
 };
-
-use std::any::Any;
-use std::collections::HashMap;
 
 // -----------------------------------------------------------------------------
 //  Market
 // -----------------------------------------------------------------------------
 pub struct Market {
-    /// One order-book per listed symbol.
-    order_books: HashMap<Symbol, OrderBook>,
+    /* static universe */
+    stocks: StockMarket,
 
-    /// All participating agents by ID.
+    /* per-symbol state */
+    order_books: HashMap<u64, OrderBook>, // id → book
+    last_traded_price: HashMap<u64, f64>, // id → dollars
+    cumulative_volume: HashMap<u64, u64>, // id → shares
+
+    /* participants */
     agents: HashMap<usize, Box<dyn Agent>>,
-
-    /// Last traded price per symbol  (cents ⇒ divide by 100.0 for dollars).
-    last_traded_price: HashMap<Symbol, f64>,
-
     initial_agent_types: Vec<AgentType>,
-    order_id_counter: u64,
 
-    /// Cumulative executed volume per symbol.
-    cumulative_volume: HashMap<Symbol, u64>,
+    /* counters */
+    order_id_counter: u64,
 }
 
 impl Market {
     // ---------------------------------------------------------------------
     //  Construction
     // ---------------------------------------------------------------------
-    pub fn new(participant_types: &[AgentType]) -> Self {
-        // --- 1. build the stock universe ---
+    pub fn new(participant_types: &[AgentType], stocks: StockMarket) -> Self {
+        /* build empty books + price/vol maps */
         let mut order_books = HashMap::new();
         let mut last_traded_price = HashMap::new();
         let mut cumulative_volume = HashMap::new();
 
-        for stock in default_stock_universe() {
-            order_books.insert(stock.ticker.clone(), OrderBook::new());
-            last_traded_price.insert(stock.ticker.clone(), stock.initial_price);
-            cumulative_volume.insert(stock.ticker.clone(), 0);
+        for s in stocks.get_all_stocks() {
+            order_books.insert(s.id, OrderBook::new());
+            last_traded_price.insert(s.id, s.initial_price);
+            cumulative_volume.insert(s.id, 0);
         }
 
-        // --- 2. instantiate agents ---
+        /* instantiate agents */
         let agents = participant_types
             .iter()
             .enumerate()
-            .map(|(id, t)| (id, Self::make_agent(*t, id)))
+            .map(|(id, t)| (id, Self::spawn_agent(*t, id)))
             .collect();
 
         Self {
+            stocks,
             order_books,
-            agents,
             last_traded_price,
+            cumulative_volume,
+            agents,
             initial_agent_types: participant_types.to_vec(),
             order_id_counter: 0,
-            cumulative_volume,
         }
     }
 
-    fn make_agent(t: AgentType, id: usize) -> Box<dyn Agent> {
+    fn spawn_agent(t: AgentType, id: usize) -> Box<dyn Agent> {
         match t {
             AgentType::DumbMarket => Box::new(DumbAgent::new(id)),
             AgentType::DumbLimit => Box::new(DumbLimitAgent::new(id)),
@@ -77,6 +76,7 @@ impl Market {
         }
     }
 
+    #[inline]
     fn next_order_id(&mut self) -> u64 {
         self.order_id_counter += 1;
         self.order_id_counter
@@ -85,16 +85,36 @@ impl Market {
     // ---------------------------------------------------------------------
     //  Convenience getters
     // ---------------------------------------------------------------------
-    pub fn get_order_book(&self, symbol: &Symbol) -> Option<&OrderBook> {
-        self.order_books.get(symbol)
+    pub fn order_book(&self, stock_id: u64) -> Option<&OrderBook> {
+        self.order_books.get(&stock_id)
     }
 
-    pub fn get_cumulative_volume(&self, symbol: &Symbol) -> Option<u64> {
-        self.cumulative_volume.get(symbol).copied()
+    pub fn cumulative_volume(&self, stock_id: u64) -> Option<u64> {
+        self.cumulative_volume.get(&stock_id).copied()
     }
 
-    pub fn get_total_inventory(&self) -> i64 {
+    pub fn total_inventory(&self) -> i64 {
         self.agents.values().map(|a| a.get_inventory()).sum()
+    }
+    #[inline]
+    pub fn order_books(&self) -> &HashMap<u64, OrderBook> {
+        &self.order_books
+    }
+
+    #[inline]
+    pub fn last_price(&self, stock_id: u64) -> f64 {
+        *self.last_traded_price.get(&stock_id).unwrap_or(&150.0)
+    }
+
+    #[inline]
+    pub fn last_price_map_iter(&self) -> impl Iterator<Item = (&u64, &f64)> {
+        self.last_traded_price.iter()
+    }
+    pub fn ticker(&self, stock_id: u64) -> &str {
+        self.stocks
+            .get_ticker_by_id(stock_id)
+            .map(String::as_str)
+            .unwrap_or("??")
     }
 }
 
@@ -103,86 +123,76 @@ impl Market {
 // -----------------------------------------------------------------------------
 impl Marketable for Market {
     fn step(&mut self) -> f64 {
-        // -------- Phase 1: Agents decide --------
-        // Provide *all* books so complex agents can inspect cross-asset state.
-        let market_view = MarketView {
+        /* -------- Phase 1: agent decisions -------- */
+        let view = MarketView {
             order_books: &self.order_books,
+            stocks: &self.stocks,
         };
 
         let mut requests = Vec::<OrderRequest>::new();
-        let mut ids: Vec<_> = self.agents.keys().cloned().collect();
+        let mut ids: Vec<_> = self.agents.keys().copied().collect();
         ids.sort_unstable();
 
         for id in &ids {
             if let Some(a) = self.agents.get_mut(id) {
-                requests.extend(a.decide_actions(&market_view));
+                requests.extend(a.decide_actions(&view));
             }
         }
 
-        // -------- Phase 2: Execute requests --------
-        let mut trades_this_tick = Vec::<Trade>::new();
+        /* -------- Phase 2: execute orders -------- */
+        let mut trades = Vec::<Trade>::new();
 
         for req in requests {
             match req {
                 OrderRequest::LimitOrder {
                     agent_id,
-                    symbol,
+                    stock_id,
                     side,
                     price,
                     volume,
                 } => {
-                    let mut order = Order {
+                    let mut o = Order {
                         id: self.next_order_id(),
                         agent_id,
-                        symbol: symbol.clone(),
+                        stock_id,
                         side,
                         price,
                         volume,
                         filled: 0,
                     };
-                    if let Some(a) = self.agents.get_mut(&agent_id) {
-                        a.acknowledge_order(order);
-                    }
-                    if let Some(book) = self.order_books.get_mut(&symbol) {
-                        trades_this_tick.extend(book.process_limit_order(&mut order));
+                    self.agents.get_mut(&agent_id).unwrap().acknowledge_order(o);
+                    if let Some(book) = self.order_books.get_mut(&stock_id) {
+                        trades.extend(book.process_limit_order(&mut o));
                     }
                 }
-
                 OrderRequest::MarketOrder {
                     agent_id,
-                    symbol,
+                    stock_id,
                     side,
                     volume,
                 } => {
-                    // Use last traded price of that symbol as reference.
-                    let px_cents = self
+                    let px_cents = (self
                         .last_traded_price
-                        .get(&symbol)
+                        .get(&stock_id)
                         .copied()
-                        .unwrap_or(150.00) // fallback
-                        * 100.0;
-                    let order = Order {
+                        .unwrap_or(150.0)
+                        * 100.0)
+                        .round() as u64;
+                    let o = Order {
                         id: self.next_order_id(),
                         agent_id,
-                        symbol: symbol.clone(),
+                        stock_id,
                         side,
-                        price: px_cents.round() as u64,
+                        price: px_cents,
                         volume,
                         filled: 0,
                     };
-                    if let Some(a) = self.agents.get_mut(&agent_id) {
-                        a.acknowledge_order(order);
-                    }
-                    if let Some(book) = self.order_books.get_mut(&symbol) {
-                        trades_this_tick.extend(book.process_market_order(agent_id, side, volume));
+                    self.agents.get_mut(&agent_id).unwrap().acknowledge_order(o);
+                    if let Some(book) = self.order_books.get_mut(&stock_id) {
+                        trades.extend(book.process_market_order(agent_id, side, volume));
                     }
                 }
-
-                OrderRequest::CancelOrder {
-                    agent_id,
-                    order_id,
-                } => {
-                    // We don’t know which book holds the order; try both sides quickly.
+                OrderRequest::CancelOrder { agent_id, order_id } => {
                     for book in self.order_books.values_mut() {
                         if book.cancel_order(order_id, agent_id) {
                             break;
@@ -192,29 +202,29 @@ impl Marketable for Market {
             }
         }
 
-        // -------- Phase 3: Margin calls --------
-        let mut margin_reqs = Vec::<OrderRequest>::new();
+        /* -------- Phase 3: margin calls -------- */
+        let mut margin = Vec::<OrderRequest>::new();
         for id in &ids {
             if let Some(a) = self.agents.get_mut(id) {
-                margin_reqs.extend(a.margin_call());
+                margin.extend(a.margin_call());
             }
         }
-        for req in margin_reqs {
+        for req in margin {
             if let OrderRequest::MarketOrder {
                 agent_id,
-                symbol,
+                stock_id,
                 side,
                 volume,
             } = req
             {
-                if let Some(book) = self.order_books.get_mut(&symbol) {
-                    trades_this_tick.extend(book.process_market_order(agent_id, side, volume));
+                if let Some(book) = self.order_books.get_mut(&stock_id) {
+                    trades.extend(book.process_market_order(agent_id, side, volume));
                 }
             }
         }
 
-        // -------- Phase 4: Update portfolios --------
-        for tr in &trades_this_tick {
+        /* -------- Phase 4: update portfolios -------- */
+        for tr in &trades {
             if let Some(taker) = self.agents.get_mut(&tr.taker_agent_id) {
                 let delta = if tr.taker_side == Side::Buy {
                     tr.volume as i64
@@ -233,21 +243,21 @@ impl Marketable for Market {
             }
         }
 
-        // -------- Phase 5: Market-level bookkeeping --------
-        if let Some(last) = trades_this_tick.last() {
+        /* -------- Phase 5: book-level bookkeeping -------- */
+        if let Some(last) = trades.last() {
             self.last_traded_price
-                .insert(last.symbol.clone(), last.price as f64 / 100.0);
+                .insert(last.stock_id, last.price as f64 / 100.0);
         }
-        for tr in &trades_this_tick {
-            *self.cumulative_volume.entry(tr.symbol.clone()).or_insert(0) += tr.volume;
+        for tr in &trades {
+            *self.cumulative_volume.entry(tr.stock_id).or_insert(0) += tr.volume;
         }
 
-        // Return *any* one price (first symbol) so existing callers still work.
+        /* Return any price (first) for backward compatibility */
         self.last_traded_price
             .values()
             .next()
             .copied()
-            .unwrap_or(150.00)
+            .unwrap_or(150.0)
     }
 
     fn current_price(&self) -> f64 {
@@ -255,35 +265,35 @@ impl Marketable for Market {
             .values()
             .next()
             .copied()
-            .unwrap_or(150.00)
+            .unwrap_or(150.0)
     }
 
     fn reset(&mut self) {
-        // Re-spin agents
+        /* agents */
         self.agents = self
             .initial_agent_types
             .iter()
             .enumerate()
-            .map(|(id, t)| (id, Self::make_agent(*t, id)))
+            .map(|(id, t)| (id, Self::spawn_agent(*t, id)))
             .collect();
 
-        // Reset books and counters
+        /* per-symbol state */
+        // fresh books
         for book in self.order_books.values_mut() {
             *book = OrderBook::new();
         }
-        for price in self.last_traded_price.values_mut() {
-            *price = 150.00;
+
+        // restore initial prices **per instrument** (instead of hard-coding 150)
+        for s in self.stocks.get_all_stocks() {
+            self.last_traded_price.insert(s.id, s.initial_price);
+            self.cumulative_volume.insert(s.id, 0);
         }
-        for vol in self.cumulative_volume.values_mut() {
-            *vol = 0;
-        }
+
         self.order_id_counter = 0;
     }
 
-    /// Return the full map so GUI/tests can pick any symbol.
     fn get_order_book(&self) -> Option<&OrderBook> {
-        // default to the first book for backward compatibility
-        self.order_books.values().next()
+        self.order_books.values().next() // for legacy callers
     }
 
     fn as_any(&self) -> &dyn Any {

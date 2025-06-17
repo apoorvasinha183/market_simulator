@@ -1,13 +1,16 @@
 // src/agents/agent_trait.rs
 
-use crate::simulators::order_book::{OrderBook};
-use crate::types::order::{Order, OrderRequest,Trade};
-use crate::stocks::definitions::Symbol;
-use std::collections::HashMap;
+use crate::simulators::order_book::OrderBook;
+use crate::stocks::definitions::StockMarket;
+use crate::types::order::{Order, OrderRequest, Trade}; // replaces Symbol import
+//use std::collections::HashMap;
 /// A read-only snapshot of the market given to an agent for decision-making.
 pub struct MarketView<'a> {
-    /// One book per ticker.
-    pub order_books: &'a HashMap<Symbol, OrderBook>,
+    /// One book per stock id.
+    /// Live order books keyed by stock-id.
+    pub order_books: &'a std::collections::HashMap<u64, OrderBook>,
+    /// Static instrument metadata if an agent wants names, floats, etc.
+    pub stocks: &'a StockMarket,
 }
 
 /// The core trait that all our participant types will implement.
@@ -18,9 +21,9 @@ pub trait Agent {
 
     // === High-Level API for RL / External Controllers ===
     /// Creates a request to buy a certain volume of the asset.
-    fn buy_stock(&mut self, volume: u64) -> Vec<OrderRequest>;
+    fn buy_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest>;
     /// Creates a request to sell a certain volume of the asset.
-    fn sell_stock(&mut self, volume: u64) -> Vec<OrderRequest>;
+    fn sell_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest>;
 
     // === Order & Position Management ===
     /// The "promise fulfillment" callback from the Market.
@@ -47,14 +50,11 @@ pub trait Agent {
 }
 /// The whale needs this
 impl<'a> MarketView<'a> {
-    /// Convenience: get the book for a specific symbol.
-    pub fn book(&self, symbol: &Symbol) -> Option<&OrderBook> {
-        self.order_books.get(symbol)
+    pub fn book(&self, stock_id: u64) -> Option<&OrderBook> {
+        self.order_books.get(&stock_id)
     }
-
-    /// Mid-price helper (best bid + ask)/2 in cents.
-    pub fn get_mid_price(&self, symbol: &Symbol) -> Option<u64> {
-        let book = self.book(symbol)?;
+    pub fn get_mid_price(&self, stock_id: u64) -> Option<u64> {
+        let book = self.book(stock_id)?;
         let best_bid = book.bids.keys().next_back()?;
         let best_ask = book.asks.keys().next()?;
         Some((best_bid + best_ask) / 2)

@@ -6,8 +6,8 @@ pub mod market;
 pub mod pricing;
 pub mod shared_types;
 pub mod simulators;
-pub mod types;
 pub mod stocks;
+pub mod types;
 
 // === 2. Re-export the public-facing components to create a clean API ===
 
@@ -26,16 +26,16 @@ pub use market::Market;
 // --- From `simulators` ---
 pub use simulators::gbm::GBMSimulator;
 pub use simulators::market_trait::Marketable;
-pub use simulators::order_book::{OrderBook};
+pub use simulators::order_book::OrderBook;
 
 // --- From `pricing` ---
 pub use pricing::{Greeks, OptionPricer};
 
 // --- From `types` ---
-pub use types::order::{Order, OrderRequest, Side,Trade};
+pub use types::order::{Order, OrderRequest, Side, Trade};
 //pub use types::order::{Order, OrderRequest, Side};
 // --- From `shared_types` ---
 pub use shared_types::OptionType;
 
-// stocks
-pub use stocks::definitions;
+// --- From `stocks` ---
+pub use stocks::{Stock, StockMarket, Symbol, default_stock_universe};
