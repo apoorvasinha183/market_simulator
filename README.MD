@@ -24,7 +24,7 @@ A high-performance financial-market simulator written in Rust for designing, tra
 | **3 – Order-Book Dynamics** | Iterative price-level generation and matching engine            | **Complete** |
 | **4 – Market Participants** | Ensemble of agents (market makers, whales, dumb flow)           | *Satisfactory* |
 | **5 – RL Bridge** | Streaming interface (ZeroMQ / gRPC) for external policy control | Deferred/Sep Project      |
-| **6 – Multi-Asset Support** | Per-symbol sharded books, cross-asset interaction               | **Ongoing**      |
+| **6 – Multi-Asset Support** | Per-symbol sharded books, cross-asset interaction               | **Complete**      |
 | **7 – OrderBook Options** | Options Pricing and trades, separate Options Market               | Planned      |
 
 ---
