@@ -49,7 +49,8 @@ impl MarketMakerAgent {
     }
 
     /* seed one instrument’s book with geometric depth */
-    fn seed_liquidity(&self, stock_id: u64) -> Vec<OrderRequest> {
+    // Adding one more argument that is the opening stock price.
+    fn seed_liquidity(&self, stock_id: u64,starting_price:u64) -> Vec<OrderRequest> {
         let side_budget = (self.inventory.abs() as f64 * MM_SEED_DEPTH_PCT) as u64;
         let mut vol_at_lvl = (side_budget as f64 * (1.0 - MM_SEED_DECAY)
             / (1.0 - MM_SEED_DECAY.powi(MM_SEED_LEVELS as i32)))
@@ -61,11 +62,11 @@ impl MarketMakerAgent {
             vol_at_lvl = (vol_at_lvl as f64 * MM_SEED_DECAY) as u64;
 
             let bid_px = clamp(
-                MM_INITIAL_CENTER_PRICE as i128
+                starting_price as i128
                     - (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128,
             );
             let ask_px = clamp(
-                MM_INITIAL_CENTER_PRICE as i128
+                starting_price as i128
                     + (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128,
             );
 
@@ -104,6 +105,12 @@ impl Agent for MarketMakerAgent {
             return vec![];
         }
         let stock_id = *ids.choose(&mut rand::thread_rng()).unwrap();
+        // extract stock initial price by first fetching the stock by id and extracting rpcie from there
+        let initial_price = view
+            .stocks
+            .get_stock_by_id(stock_id)
+            .map(|s| (s.initial_price * 100.0) as u64)
+            .unwrap_or(MM_INITIAL_CENTER_PRICE);
         let book = match view.book(stock_id) {
             Some(b) => b,
             None => return vec![],
@@ -112,7 +119,7 @@ impl Agent for MarketMakerAgent {
         /* one-time seeding per instrument */
         if !*self.bootstrapped.entry(stock_id).or_insert(false) {
             self.bootstrapped.insert(stock_id, true);
-            return self.seed_liquidity(stock_id);
+            return self.seed_liquidity(stock_id,initial_price);
         }
 
         let best_bid = book.bids.keys().next_back().copied();
