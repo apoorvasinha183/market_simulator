@@ -2,10 +2,7 @@
 //! Run with:  cargo bench --bench order_book_enhanced
 //! HTML:      target/criterion/report/index.html
 
-use criterion::{
-    BatchSize, BenchmarkId, Criterion, Throughput, 
-    criterion_group, criterion_main
-};
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use market_simulator::{
     simulators::order_book::OrderBook,
     types::{Order, Side},
@@ -112,18 +109,16 @@ pub fn bench_market_order_scaling(c: &mut Criterion) {
 
         for &sweep in SWEEP_VOLUMES {
             // Skip combinations where sweep > book size to avoid empty results
-            if sweep > (n as u64 * 256) { continue; }
+            if sweep > (n as u64 * 256) {
+                continue;
+            }
 
             let id = BenchmarkId::from_parameter(format!("sell_book_{}_sweep_{}", n, sweep));
             group.bench_function(id, |b| {
                 b.iter_batched(
                     || setup_sell_book(n),
                     |mut book| {
-                        let trades = book.process_market_order(
-                            black_box(999),
-                            Side::Buy,
-                            sweep,
-                        );
+                        let trades = book.process_market_order(black_box(999), Side::Buy, sweep);
                         black_box(trades);
                     },
                     BatchSize::LargeInput,
@@ -147,17 +142,19 @@ pub fn bench_limit_order_insertion(c: &mut Criterion) {
                 || {
                     let book = setup_sell_book(n);
                     let mut rng = StdRng::seed_from_u64(123);
-                    let orders: Vec<Order> = (0..1000).map(|i| {
-                        Order {
-                            id: (n as u64) + i,
-                            agent_id: (i % 10) as usize,
-                            stock_id: 0,
-                            side: Side::Sell,
-                            price: 110 + (i % 20) as u64, // New price levels
-                            volume: rng.gen_range(1..=100),
-                            filled: 0,
-                        }
-                    }).collect();
+                    let orders: Vec<Order> = (0..1000)
+                        .map(|i| {
+                            Order {
+                                id: (n as u64) + i,
+                                agent_id: (i % 10) as usize,
+                                stock_id: 0,
+                                side: Side::Sell,
+                                price: 110 + (i % 20) as u64, // New price levels
+                                volume: rng.gen_range(1..=100),
+                                filled: 0,
+                            }
+                        })
+                        .collect();
                     (book, orders)
                 },
                 |(mut book, mut orders)| {
@@ -181,24 +178,24 @@ pub fn bench_mixed_book_operations(c: &mut Criterion) {
         group.throughput(Throughput::Elements(n as u64));
 
         for &sweep in &[25_000, 100_000, 250_000] {
-            if sweep > (n as u64 * 128) { continue; } // Mixed book has less depth per side
+            if sweep > (n as u64 * 128) {
+                continue;
+            } // Mixed book has less depth per side
 
             // Test both buy and sell market orders against mixed book
             for side in [Side::Buy, Side::Sell] {
-                let side_str = match side { Side::Buy => "buy", Side::Sell => "sell" };
-                let id = BenchmarkId::from_parameter(
-                    format!("mixed_book_{}_{}_{}", n, side_str, sweep)
-                );
-                
+                let side_str = match side {
+                    Side::Buy => "buy",
+                    Side::Sell => "sell",
+                };
+                let id =
+                    BenchmarkId::from_parameter(format!("mixed_book_{}_{}_{}", n, side_str, sweep));
+
                 group.bench_function(id, |b| {
                     b.iter_batched(
                         || setup_mixed_book(n),
                         |mut book| {
-                            let trades = book.process_market_order(
-                                black_box(999),
-                                side,
-                                sweep,
-                            );
+                            let trades = book.process_market_order(black_box(999), side, sweep);
                             black_box(trades);
                         },
                         BatchSize::LargeInput,
@@ -213,7 +210,7 @@ pub fn bench_mixed_book_operations(c: &mut Criterion) {
 
 pub fn bench_price_level_impact(c: &mut Criterion) {
     let mut group = c.benchmark_group("price_level_scaling");
-    
+
     const FIXED_ORDERS: usize = 100_000;
     const FIXED_SWEEP: u64 = 50_000;
 
@@ -225,11 +222,7 @@ pub fn bench_price_level_impact(c: &mut Criterion) {
             b.iter_batched(
                 || setup_book_with_params(FIXED_ORDERS, levels, Side::Sell, 100, 42),
                 |mut book| {
-                    let trades = book.process_market_order(
-                        black_box(999),
-                        Side::Buy,
-                        FIXED_SWEEP,
-                    );
+                    let trades = book.process_market_order(black_box(999), Side::Buy, FIXED_SWEEP);
                     black_box(trades);
                 },
                 BatchSize::LargeInput,
@@ -277,9 +270,9 @@ pub fn bench_short_covering_scenarios(c: &mut Criterion) {
 
     // Simulate different short covering scenarios
     let scenarios = [
-        ("light_covering", 10_000),    // Small short cover
-        ("medium_covering", 50_000),   // Medium short cover  
-        ("heavy_covering", 200_000),   // Large short cover (force multiple levels)
+        ("light_covering", 10_000),  // Small short cover
+        ("medium_covering", 50_000), // Medium short cover
+        ("heavy_covering", 200_000), // Large short cover (force multiple levels)
     ];
 
     const BOOK_SIZE: usize = 100_000;
@@ -311,7 +304,7 @@ pub fn bench_negative_inventory_patterns(c: &mut Criterion) {
 
     // Simulate agents with negative inventory being forced to cover
     const BOOK_SIZE: usize = 50_000;
-    
+
     // Different patterns of short covering frequency
     let patterns = [
         ("frequent_small", vec![5_000, 5_000, 5_000, 5_000]), // 4 small covers
@@ -351,7 +344,8 @@ pub fn bench_negative_inventory_patterns(c: &mut Criterion) {
 //  Criterion configuration
 // ──────────────────────────────────────────────────────────────────────────────
 
-criterion_group!(benches, 
+criterion_group!(
+    benches,
     bench_market_order_scaling,
     bench_limit_order_insertion,
     bench_mixed_book_operations,
