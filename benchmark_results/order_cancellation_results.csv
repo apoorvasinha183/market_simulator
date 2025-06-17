@@ -1,0 +1,4 @@
+benchmark_group,test_name,parameter,book_size,sweep_volume,price_levels,side,mean_time_ns,std_dev_ns,throughput_elements_per_sec,sample_count
+order_cancellation,batch_cancel,book_size_10000,10000,,,,128597.54,11366.12,77761985.18,50
+order_cancellation,batch_cancel,book_size_50000,50000,,,,350651.64,43000.96,142591661.63,50
+order_cancellation,batch_cancel,book_size_100000,100000,,,,742053.28,51664.79,134761212.83,50

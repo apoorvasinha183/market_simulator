@@ -1,0 +1,5 @@
+benchmark_group,test_name,parameter,book_size,sweep_volume,price_levels,side,mean_time_ns,std_dev_ns,throughput_elements_per_sec,sample_count
+price_level_scaling,price_level_impact,levels_5,100000,50000,5,Buy,14897.66,1255.68,6712463568.10,50
+price_level_scaling,price_level_impact,levels_10,100000,50000,10,Buy,13737.52,826.17,7279334261.21,50
+price_level_scaling,price_level_impact,levels_50,100000,50000,50,Buy,21836.68,10384.12,4579450722.36,50
+price_level_scaling,price_level_impact,levels_100,100000,50000,100,Buy,14813.26,1171.57,6750708486.86,50
