@@ -122,8 +122,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools-preview
       
