@@ -5,9 +5,9 @@ use eframe::egui;
 use egui::{Color32, FontId, RichText, Rounding, Stroke, Vec2};
 use egui_plot::{Legend, Line, Plot, PlotBounds, PlotPoints, Points};
 use market_simulator::{
+    AgentType, Market, Marketable,
     simulators::order_book::{OrderBook, PriceLevel},
     stocks::definitions::StockMarket,
-    AgentType, Market, Marketable,
 };
 //use egui_plot::PlotItem;
 use std::collections::HashMap;
@@ -18,15 +18,23 @@ fn debug_order_book(order_book: &OrderBook, stock_id: u64) {
     println!("=== DEBUG ORDER BOOK FOR STOCK {} ===", stock_id);
     println!("Bids count: {}", order_book.bids.len());
     println!("Asks count: {}", order_book.asks.len());
-    
+
     println!("First 5 bids:");
     for (price, level) in order_book.bids.iter().rev().take(5) {
-        println!("  ${:.2} -> {} shares", *price as f64 / 100.0, level.total_volume);
+        println!(
+            "  ${:.2} -> {} shares",
+            *price as f64 / 100.0,
+            level.total_volume
+        );
     }
-    
+
     println!("First 5 asks:");
     for (price, level) in order_book.asks.iter().take(5) {
-        println!("  ${:.2} -> {} shares", *price as f64 / 100.0, level.total_volume);
+        println!(
+            "  ${:.2} -> {} shares",
+            *price as f64 / 100.0,
+            level.total_volume
+        );
     }
     println!("=== END DEBUG ===");
 }
@@ -43,11 +51,7 @@ fn format_number(n: i32) -> String {
         out = format!(",{tail}{out}");
     }
     out = format!("{s}{out}");
-    if negative {
-        format!("-{out}")
-    } else {
-        out
-    }
+    if negative { format!("-{out}") } else { out }
 }
 fn format_number_u64(n: u64) -> String {
     format_number(n as i32)
@@ -106,7 +110,9 @@ impl eframe::App for AgentVisualizer {
                         // Add debug button
                         if ui.button("🐛 Debug").clicked() {
                             if let Some(market) = self.simulator.as_any().downcast_ref::<Market>() {
-                                if let Some(order_book) = market.order_books().get(&self.selected_id) {
+                                if let Some(order_book) =
+                                    market.order_books().get(&self.selected_id)
+                                {
                                     debug_order_book(order_book, self.selected_id);
                                 }
                             }
@@ -115,7 +121,11 @@ impl eframe::App for AgentVisualizer {
 
                         // theme toggle
                         if ui
-                            .button(if self.theme_dark { "☀ Light" } else { "🌙 Dark" })
+                            .button(if self.theme_dark {
+                                "☀ Light"
+                            } else {
+                                "🌙 Dark"
+                            })
                             .clicked()
                         {
                             self.theme_dark = !self.theme_dark;
@@ -135,9 +145,10 @@ impl eframe::App for AgentVisualizer {
                         }
 
                         // reset
-                        let reset = egui::Button::new(RichText::new("🔄 Reset").color(Color32::WHITE))
-                            .fill(Color32::from_rgb(108, 117, 125))
-                            .rounding(Rounding::same(8.0));
+                        let reset =
+                            egui::Button::new(RichText::new("🔄 Reset").color(Color32::WHITE))
+                                .fill(Color32::from_rgb(108, 117, 125))
+                                .rounding(Rounding::same(8.0));
                         if ui.add(reset).clicked() {
                             self.reset_simulation();
                         }
@@ -165,8 +176,12 @@ impl eframe::App for AgentVisualizer {
             });
 
         /* ────────── rest requires Market down-cast ────────── */
-        let Some(market) = self.simulator.as_any().downcast_ref::<Market>() else { return; };
-        let Some(order_book) = market.order_books().get(&self.selected_id) else { return; };
+        let Some(market) = self.simulator.as_any().downcast_ref::<Market>() else {
+            return;
+        };
+        let Some(order_book) = market.order_books().get(&self.selected_id) else {
+            return;
+        };
 
         // Debug logging every 60 frames (roughly once per second)
         self.debug_counter += 1;
@@ -265,23 +280,23 @@ impl AgentVisualizer {
                         // Make sure both tables get equal space
                         let available_width = ui.available_width();
                         let table_width = (available_width - 40.0) / 2.0; // 20px spacing on each side
-                        
+
                         ui.allocate_ui_with_layout(
                             egui::Vec2::new(table_width, ui.available_height()),
                             egui::Layout::top_down(egui::Align::LEFT),
                             |ui| {
                                 self.render_side_table(ui, &order_book.bids, true);
-                            }
+                            },
                         );
-                        
+
                         ui.add_space(20.0);
-                        
+
                         ui.allocate_ui_with_layout(
                             egui::Vec2::new(table_width, ui.available_height()),
                             egui::Layout::top_down(egui::Align::LEFT),
                             |ui| {
                                 self.render_side_table(ui, &order_book.asks, false);
-                            }
+                            },
                         );
                     });
                 });
@@ -302,7 +317,7 @@ impl AgentVisualizer {
 
         ui.vertical(|ui| {
             ui.set_width(ui.available_width());
-            
+
             // header with better visibility
             let rect = ui.available_rect_before_wrap();
             let header = egui::Rect::from_min_size(rect.min, Vec2::new(rect.width(), 35.0));
@@ -323,188 +338,180 @@ impl AgentVisualizer {
             ui.add_space(6.0);
 
             let mut row = 0;
-            egui::Grid::new(col)
-                .spacing([20.0, 6.0])
-                .show(ui, |ui| {
-                    ui.label(RichText::new("Price").underline().strong());
-                    ui.label(RichText::new("Volume").underline().strong());
-                    ui.end_row();
+            egui::Grid::new(col).spacing([20.0, 6.0]).show(ui, |ui| {
+                ui.label(RichText::new("Price").underline().strong());
+                ui.label(RichText::new("Volume").underline().strong());
+                ui.end_row();
 
-                    if book_side.is_empty() {
-                        ui.label(RichText::new("No orders").color(Color32::GRAY).italics());
-                        ui.label(RichText::new("—").color(Color32::GRAY).italics());
-                        ui.end_row();
-                        
+                if book_side.is_empty() {
+                    ui.label(RichText::new("No orders").color(Color32::GRAY).italics());
+                    ui.label(RichText::new("—").color(Color32::GRAY).italics());
+                    ui.end_row();
+                } else {
+                    let iter: Box<dyn Iterator<Item = (&u64, &PriceLevel)>> = if is_bid {
+                        Box::new(book_side.iter().rev())
                     } else {
-                        let iter: Box<dyn Iterator<Item = (&u64, &PriceLevel)>> =
-                            if is_bid {
-                                Box::new(book_side.iter().rev())
-                            } else {
-                                Box::new(book_side.iter())
-                            };
-                        
-                        let entries: Vec<_> = iter.take(10).collect();
-                        
-                        for (price, lvl) in entries {
-                            if row % 2 == 0 {
-                                let r = ui.available_rect_before_wrap();
-                                ui.painter().rect_filled(
-                                    r,
-                                    Rounding::same(3.0),
-                                    Color32::from_rgba_unmultiplied(0, 0, 0, 20),
-                                );
-                            }
-                            ui.label(
-                                RichText::new(format!(
-                                    "${:.2}",
-                                    *price as f64 / 100.0
-                                ))
+                        Box::new(book_side.iter())
+                    };
+
+                    let entries: Vec<_> = iter.take(10).collect();
+
+                    for (price, lvl) in entries {
+                        if row % 2 == 0 {
+                            let r = ui.available_rect_before_wrap();
+                            ui.painter().rect_filled(
+                                r,
+                                Rounding::same(3.0),
+                                Color32::from_rgba_unmultiplied(0, 0, 0, 20),
+                            );
+                        }
+                        ui.label(
+                            RichText::new(format!("${:.2}", *price as f64 / 100.0))
                                 .color(Color32::from_rgb(rgb.0, rgb.1, rgb.2))
                                 .font(FontId::monospace(14.0))
                                 .strong(),
-                            );
-                            ui.label(
-                                RichText::new(format_number(lvl.total_volume as i32))
-                                    .font(FontId::monospace(14.0)),
-                            );
-                            ui.end_row();
-                            row += 1;
-                        }
+                        );
+                        ui.label(
+                            RichText::new(format_number(lvl.total_volume as i32))
+                                .font(FontId::monospace(14.0)),
+                        );
+                        ui.end_row();
+                        row += 1;
                     }
-                });
+                }
+            });
         });
     }
 
-    fn render_plots(
-    &self,
-    ctx: &egui::Context,
-    order_book: &OrderBook,
-    market: &Market,
-) {
-    egui::CentralPanel::default().show(ctx, |ui| {
-        ui.columns(2, |cols| {
-            // ─── Depth Chart ─────────────────────────────────────────
-            cols[0].group(|ui| {
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        RichText::new("📈 Order Book Depth")
-                            .font(FontId::proportional(16.0))
-                            .strong(),
-                    );
+    fn render_plots(&self, ctx: &egui::Context, order_book: &OrderBook, market: &Market) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.columns(2, |cols| {
+                // ─── Depth Chart ─────────────────────────────────────────
+                cols[0].group(|ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            RichText::new("📈 Order Book Depth")
+                                .font(FontId::proportional(16.0))
+                                .strong(),
+                        );
+                    });
+
+                    Plot::new("depth_plot")
+                        .legend(Legend::default())
+                        .show_axes([true, true])
+                        .show_grid([true, true])
+                        .show(ui, |p| {
+                            // ASKS curve + fill
+                            if !order_book.asks.is_empty() {
+                                let mut ask_pts = Vec::new();
+                                let mut cum = 0.0;
+                                for (&px, lvl) in order_book.asks.iter() {
+                                    let price = px as f64 / 100.0;
+                                    ask_pts.push([price, cum]);
+                                    cum += lvl.total_volume as f64;
+                                    ask_pts.push([price, cum]);
+                                }
+                                p.line(
+                                    Line::new(PlotPoints::from(ask_pts))
+                                        .fill(0.0)
+                                        .stroke(Stroke::new(2.5, Color32::from_rgb(220, 53, 69)))
+                                        .color(Color32::from_rgb(220, 53, 69))
+                                        .name("📈 Asks"),
+                                );
+                            }
+
+                            // BIDS curve + fill
+                            if !order_book.bids.is_empty() {
+                                let mut bid_pts = Vec::new();
+                                let mut cum = 0.0;
+                                for (&px, lvl) in order_book.bids.iter().rev() {
+                                    let price = px as f64 / 100.0;
+                                    bid_pts.push([price, cum]);
+                                    cum += lvl.total_volume as f64;
+                                    bid_pts.push([price, cum]);
+                                }
+                                p.line(
+                                    Line::new(PlotPoints::from(bid_pts))
+                                        .fill(0.0)
+                                        .stroke(Stroke::new(2.5, Color32::from_rgb(40, 167, 69)))
+                                        .color(Color32::from_rgb(40, 167, 69))
+                                        .name("📉 Bids"),
+                                );
+                            }
+
+                            // Current price indicator
+                            if let Some(m) = self.simulator.as_any().downcast_ref::<Market>() {
+                                let cp = m.last_price(self.selected_id);
+                                p.line(
+                                    Line::new(PlotPoints::from(vec![[cp, 0.0], [cp, 1_000_000.0]]))
+                                        .color(Color32::from_rgba_unmultiplied(255, 255, 255, 100))
+                                        .stroke(Stroke::new(
+                                            1.0,
+                                            Color32::from_rgba_unmultiplied(255, 255, 255, 150),
+                                        ))
+                                        .style(egui_plot::LineStyle::Dashed { length: 10.0 })
+                                        .name("Current Price"),
+                                );
+                            }
+
+                            // Zoom bounds around current price
+                            let center = market.last_price(self.selected_id);
+                            p.set_plot_bounds(PlotBounds::from_min_max(
+                                [center - 20.0, 0.0],
+                                [center + 20.0, 2_000_000.0],
+                            ));
+                        });
                 });
 
-                Plot::new("depth_plot")
-                    .legend(Legend::default())
-                    .show_axes([true, true])
-                    .show_grid([true, true])
-                    .show(ui, |p| {
-                        // ASKS curve + fill
-                        if !order_book.asks.is_empty() {
-                            let mut ask_pts = Vec::new();
-                            let mut cum = 0.0;
-                            for (&px, lvl) in order_book.asks.iter() {
-                                let price = px as f64 / 100.0;
-                                ask_pts.push([price, cum]);
-                                cum += lvl.total_volume as f64;
-                                ask_pts.push([price, cum]);
-                            }
-                            p.line(
-                                Line::new(PlotPoints::from(ask_pts))
-                                    .fill(0.0)
-                                    .stroke(Stroke::new(2.5, Color32::from_rgb(220, 53, 69)))
-                                    .color(Color32::from_rgb(220, 53, 69))
-                                    .name("📈 Asks"),
-                            );
-                        }
-
-                        // BIDS curve + fill
-                        if !order_book.bids.is_empty() {
-                            let mut bid_pts = Vec::new();
-                            let mut cum = 0.0;
-                            for (&px, lvl) in order_book.bids.iter().rev() {
-                                let price = px as f64 / 100.0;
-                                bid_pts.push([price, cum]);
-                                cum += lvl.total_volume as f64;
-                                bid_pts.push([price, cum]);
-                            }
-                            p.line(
-                                Line::new(PlotPoints::from(bid_pts))
-                                    .fill(0.0)
-                                    .stroke(Stroke::new(2.5, Color32::from_rgb(40, 167, 69)))
-                                    .color(Color32::from_rgb(40, 167, 69))
-                                    .name("📉 Bids"),
-                            );
-                        }
-
-                        // Current price indicator
-                        if let Some(m) = self.simulator.as_any().downcast_ref::<Market>() {
-                            let cp = m.last_price(self.selected_id);
-                            p.line(
-                                Line::new(PlotPoints::from(vec![[cp, 0.0], [cp, 1_000_000.0]]))
-                                    .color(Color32::from_rgba_unmultiplied(255, 255, 255, 100))
-                                    .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(255, 255, 255, 150)))
-                                    .style(egui_plot::LineStyle::Dashed { length: 10.0 })
-                                    .name("Current Price"),
-                            );
-                        }
-
-                        // Zoom bounds around current price
-                        let center = market.last_price(self.selected_id);
-                        p.set_plot_bounds(PlotBounds::from_min_max(
-                            [center - 20.0, 0.0],
-                            [center + 20.0, 2_000_000.0],
-                        ));
+                // ─── Price History ────────────────────────────────────────
+                cols[1].group(|ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            RichText::new("💹 Price History")
+                                .font(FontId::proportional(16.0))
+                                .strong(),
+                        );
                     });
-            });
 
-            // ─── Price History ────────────────────────────────────────
-            cols[1].group(|ui| {
-                ui.vertical_centered(|ui| {
-                    ui.label(
-                        RichText::new("💹 Price History")
-                            .font(FontId::proportional(16.0))
-                            .strong(),
-                    );
+                    let empty: Vec<f64> = Vec::new();
+                    let history = self
+                        .price_histories
+                        .get(&self.selected_id)
+                        .unwrap_or(&empty);
+
+                    Plot::new("hist_plot")
+                        .legend(Legend::default())
+                        .show_axes([true, true])
+                        .show_grid([true, true])
+                        .show(ui, |p| {
+                            let line = Line::new(PlotPoints::from_ys_f64(history))
+                                .color(Color32::from_rgb(0, 123, 255))
+                                .stroke(Stroke::new(3.0, Color32::from_rgb(0, 123, 255)))
+                                .fill(-1.0);
+                            p.line(line.name("price"));
+
+                            if let Some(&last) = history.last() {
+                                let x = (history.len() - 1) as f64;
+                                let pulse = (self.animation_time * 4.0).sin().abs();
+                                let radius = 4.0 + pulse * 4.0;
+                                let alpha = (128.0 + pulse * 127.0) as u8;
+                                p.points(
+                                    Points::new(vec![[x, last]])
+                                        .radius(radius as f32)
+                                        .color(Color32::from_rgba_unmultiplied(255, 215, 0, alpha)),
+                                );
+                            }
+                        });
                 });
-
-                let empty: Vec<f64> = Vec::new();
-                let history = self
-                    .price_histories
-                    .get(&self.selected_id)
-                    .unwrap_or(&empty);
-
-                Plot::new("hist_plot")
-                    .legend(Legend::default())
-                    .show_axes([true, true])
-                    .show_grid([true, true])
-                    .show(ui, |p| {
-                        let line = Line::new(PlotPoints::from_ys_f64(history))
-                            .color(Color32::from_rgb(0, 123, 255))
-                            .stroke(Stroke::new(3.0, Color32::from_rgb(0, 123, 255)))
-                            .fill(-1.0);
-                        p.line(line.name("price"));
-
-                        if let Some(&last) = history.last() {
-                            let x = (history.len() - 1) as f64;
-                            let pulse = (self.animation_time * 4.0).sin().abs();
-                            let radius = 4.0 + pulse * 4.0;
-                            let alpha = (128.0 + pulse * 127.0) as u8;
-                            p.points(
-                                Points::new(vec![[x, last]])
-                                    .radius(radius as f32)
-                                    .color(Color32::from_rgba_unmultiplied(255, 215, 0, alpha)),
-                            );
-                        }
-                    });
             });
         });
-    });
-}
- 
+    }
 
     /* ---------------- status bar ---------------- */
     fn render_market_status(&self, ui: &mut egui::Ui, market: &Market) {
-        let Some(ob) = market.order_books().get(&self.selected_id) else { return; };
+        let Some(ob) = market.order_books().get(&self.selected_id) else {
+            return;
+        };
         let best_bid = ob.bids.keys().last().copied();
         let best_ask = ob.asks.keys().next().copied();
         let total_inv = market.total_inventory();
@@ -532,7 +539,7 @@ impl AgentVisualizer {
             );
 
             ui.separator();
-            
+
             // Bid metric - fixed width
             if let Some(bid) = best_bid {
                 metric_fixed_width(
@@ -543,15 +550,9 @@ impl AgentVisualizer {
                     80.0,
                 );
             } else {
-                metric_fixed_width(
-                    ui,
-                    "Bid",
-                    "N/A",
-                    Color32::GRAY,
-                    80.0,
-                );
+                metric_fixed_width(ui, "Bid", "N/A", Color32::GRAY, 80.0);
             }
-            
+
             // Ask metric - fixed width
             if let Some(ask) = best_ask {
                 metric_fixed_width(
@@ -562,13 +563,7 @@ impl AgentVisualizer {
                     80.0,
                 );
             } else {
-                metric_fixed_width(
-                    ui,
-                    "Ask",
-                    "N/A",
-                    Color32::GRAY,
-                    80.0,
-                );
+                metric_fixed_width(ui, "Ask", "N/A", Color32::GRAY, 80.0);
             }
 
             // Spread metric - fixed width
@@ -594,15 +589,9 @@ impl AgentVisualizer {
                     );
                 }
             } else {
-                metric_fixed_width(
-                    ui,
-                    "Spread",
-                    "N/A",
-                    Color32::GRAY,
-                    140.0,
-                );
+                metric_fixed_width(ui, "Spread", "N/A", Color32::GRAY, 140.0);
             }
-            
+
             // ATH/ATL - fixed width
             metric_fixed_width(
                 ui,
@@ -618,18 +607,16 @@ impl AgentVisualizer {
                 Color32::from_rgb(220, 53, 69),
                 80.0,
             );
-            
+
             // Volume - fixed width
             metric_fixed_width(
                 ui,
                 "Volume",
-                &format_number_u64(
-                    market.cumulative_volume(self.selected_id).unwrap_or(0),
-                ),
+                &format_number_u64(market.cumulative_volume(self.selected_id).unwrap_or(0)),
                 Color32::WHITE,
                 100.0,
             );
-            
+
             // Net inventory - fixed width
             let inv_col = if total_inv > 0 {
                 Color32::from_rgb(40, 167, 69)
@@ -661,7 +648,7 @@ impl AgentVisualizer {
                         ui.label(RichText::new(label).strong());
                         ui.label(RichText::new(val).color(col).monospace());
                     });
-                }
+                },
             );
         }
     }
@@ -685,8 +672,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::WhaleAgent,
     ];
 
-    let simulator: Box<dyn Marketable> =
-        Box::new(Market::new(&participants, StockMarket::new()));
+    let simulator: Box<dyn Marketable> = Box::new(Market::new(&participants, StockMarket::new()));
 
     let mkt = simulator
         .as_any()
