@@ -1,5 +1,0 @@
-benchmark_group,test_name,parameter,book_size,sweep_volume,price_levels,side,mean_time_ns,std_dev_ns,throughput_elements_per_sec,sample_count
-limit_order_insertion,batch_insert,book_size_10000,10000,,,Sell,333204.22,28103.45,30011624.70,50
-limit_order_insertion,batch_insert,book_size_50000,50000,,,Sell,385560.80,229651.05,129681233.15,50
-limit_order_insertion,batch_insert,book_size_100000,100000,,,Sell,829635.10,243337.15,120534919.51,50
-limit_order_insertion,batch_insert,book_size_500000,500000,,,Sell,4770847.44,447475.50,104803183.56,50

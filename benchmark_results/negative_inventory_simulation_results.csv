@@ -1,4 +1,0 @@
-benchmark_group,test_name,parameter,book_size,sweep_volume,price_levels,side,mean_time_ns,std_dev_ns,throughput_elements_per_sec,sample_count
-negative_inventory_simulation,inventory_pattern,frequent_small,50000,20000,,Buy,4664950.00,360145.59,10718228.49,50
-negative_inventory_simulation,inventory_pattern,infrequent_large,50000,50000,,Buy,4814683.36,532191.32,10384898.91,50
-negative_inventory_simulation,inventory_pattern,mixed_pattern,50000,45000,,Buy,5070511.68,853433.57,9860937.74,50

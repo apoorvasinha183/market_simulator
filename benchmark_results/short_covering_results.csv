@@ -1,4 +1,0 @@
-benchmark_group,test_name,parameter,book_size,sweep_volume,price_levels,side,mean_time_ns,std_dev_ns,throughput_elements_per_sec,sample_count
-short_covering,short_cover_scenario,light_covering,100000,10000,,Buy,4359.12,773.12,22940409991.01,50
-short_covering,short_cover_scenario,medium_covering,100000,50000,,Buy,15573.38,2904.73,6421213635.06,50
-short_covering,short_cover_scenario,heavy_covering,100000,200000,,Buy,52906.66,3127.64,1890121205.91,50
