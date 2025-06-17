@@ -1,10 +1,16 @@
 // src/agents/agent_trait.rs
 
-use crate::simulators::order_book::{OrderBook, Trade};
-use crate::types::order::{Order, OrderRequest};
+use crate::simulators::order_book::OrderBook;
+use crate::stocks::definitions::StockMarket;
+use crate::types::order::{Order, OrderRequest, Trade}; // replaces Symbol import
+//use std::collections::HashMap;
 /// A read-only snapshot of the market given to an agent for decision-making.
 pub struct MarketView<'a> {
-    pub order_book: &'a OrderBook,
+    /// One book per stock id.
+    /// Live order books keyed by stock-id.
+    pub order_books: &'a std::collections::HashMap<u64, OrderBook>,
+    /// Static instrument metadata if an agent wants names, floats, etc.
+    pub stocks: &'a StockMarket,
 }
 
 /// The core trait that all our participant types will implement.
@@ -15,9 +21,9 @@ pub trait Agent {
 
     // === High-Level API for RL / External Controllers ===
     /// Creates a request to buy a certain volume of the asset.
-    fn buy_stock(&mut self, volume: u64) -> Vec<OrderRequest>;
+    fn buy_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest>;
     /// Creates a request to sell a certain volume of the asset.
-    fn sell_stock(&mut self, volume: u64) -> Vec<OrderRequest>;
+    fn sell_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest>;
 
     // === Order & Position Management ===
     /// The "promise fulfillment" callback from the Market.
@@ -44,22 +50,13 @@ pub trait Agent {
 }
 /// The whale needs this
 impl<'a> MarketView<'a> {
-    /// Calculates the mid-price if a valid spread exists.
-    pub fn get_mid_price(&self) -> Option<u64> {
-        let best_bid = self.order_book.bids.keys().last();
-        let best_ask = self.order_book.asks.keys().next();
-
-        if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
-            if ask > bid {
-                // Return the average of the best bid and ask
-                Some((bid + ask) / 2)
-            } else {
-                // The book is crossed, so there's no valid mid-price
-                None
-            }
-        } else {
-            // One or both sides of the book are empty
-            None
-        }
+    pub fn book(&self, stock_id: u64) -> Option<&OrderBook> {
+        self.order_books.get(&stock_id)
+    }
+    pub fn get_mid_price(&self, stock_id: u64) -> Option<u64> {
+        let book = self.book(stock_id)?;
+        let best_bid = book.bids.keys().next_back()?;
+        let best_ask = book.asks.keys().next()?;
+        Some((best_bid + best_ask) / 2)
     }
 }

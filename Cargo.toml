@@ -10,6 +10,8 @@ eframe = "0.27.2"
 egui_plot = "0.27.2"
 statrs = "0.18.0"
 criterion = { version = "0.5", features = ["html_reports"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 [[bench]]
 name    = "order_book" 
 harness = false       

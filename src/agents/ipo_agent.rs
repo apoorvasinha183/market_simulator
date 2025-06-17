@@ -1,17 +1,14 @@
 // src/agents/ipo_agent.rs
-
-use super::agent_trait::{Agent, MarketView};
-use crate::simulators::order_book::Trade;
-use crate::types::order::{Order, OrderRequest, Side};
 use std::collections::HashMap;
 
-/// An agent that acts only once at the beginning of the simulation
-/// to place the entire initial float of the asset on the market.
+use super::agent_trait::{Agent, MarketView};
+use crate::types::order::{Order, OrderRequest, Side, Trade};
+
+/// IPO agent: posts one ladder of sell limits at boot and is done.
 pub struct IpoAgent {
-    pub id: usize,
+    id: usize,
     inventory: i64,
     has_acted: bool,
-    /// Agent now statefully tracks its open orders.
     open_orders: HashMap<u64, Order>,
 }
 
@@ -19,73 +16,69 @@ impl IpoAgent {
     pub fn new(id: usize) -> Self {
         Self {
             id,
-            // This agent is created holding the entire float of the company.
-            inventory: 1_000_000,
+            inventory: 1_000_000, // float to distribute
             has_acted: false,
             open_orders: HashMap::new(),
         }
     }
 }
 
+// -----------------------------------------------------------------------------
+//  Agent impl
+// -----------------------------------------------------------------------------
 impl Agent for IpoAgent {
-    fn decide_actions(&mut self, _market_view: &MarketView) -> Vec<OrderRequest> {
+    fn decide_actions(&mut self, view: &MarketView) -> Vec<OrderRequest> {
         if self.has_acted {
             return vec![];
         }
-
         self.has_acted = true;
-        println!("--- IPO AGENT IS ACTING ---");
 
-        let mut orders = Vec::new();
-        let num_price_levels = 20;
-        let volume_per_level = (self.inventory / num_price_levels as i64) as u64;
-        let start_price = 15000; // $150.00
-        let tick_size = 5; // $0.05 per tick
+        /* choose the first listed instrument */
+        let stock_id = match view.stocks.get_all_ids().first() {
+            Some(id) => *id,
+            None => return vec![], // no universe?
+        };
 
-        for i in 0..num_price_levels {
-            let price = start_price + i * tick_size;
-            orders.push(OrderRequest::LimitOrder {
+        let num_levels = 20;
+        let vol_per = (self.inventory / num_levels) as u64;
+        let start_px: u64 = 15_000; // $150.00
+        let tick: u64 = 5; // $0.05
+
+        (0..num_levels)
+            .map(|i| OrderRequest::LimitOrder {
                 agent_id: self.id,
+                stock_id,
                 side: Side::Sell,
-                price,
-                volume: volume_per_level,
-            });
-        }
-        orders
+                price: start_px + (i as u64) * tick,
+                volume: vol_per,
+            })
+            .collect()
     }
 
-    // --- Fulfillment of the Agent Trait Contract ---
-
-    fn buy_stock(&mut self, _volume: u64) -> Vec<OrderRequest> {
-        // The IPO agent's job is to sell, not buy.
+    /* IPO agent never submits market buys/sells after the ladder ----------- */
+    fn buy_stock(&mut self, _id: u64, _v: u64) -> Vec<OrderRequest> {
         vec![]
     }
-
-    fn sell_stock(&mut self, _volume: u64) -> Vec<OrderRequest> {
-        // The agent's initial selling is handled in decide_actions.
+    fn sell_stock(&mut self, _id: u64, _v: u64) -> Vec<OrderRequest> {
         vec![]
     }
 
     fn margin_call(&mut self) -> Vec<OrderRequest> {
-        // This agent only starts with a long position, so it can't be margin called.
         vec![]
     }
 
-    fn acknowledge_order(&mut self, order: Order) {
-        self.open_orders.insert(order.id, order);
+    /* bookkeeping ---------------------------------------------------------- */
+    fn acknowledge_order(&mut self, o: Order) {
+        self.open_orders.insert(o.id, o);
     }
 
-    /// This is the corrected implementation, following the blueprint exactly.
-    fn update_portfolio(&mut self, trade_volume: i64, trade: &Trade) {
-        // Update the total inventory with the explicit volume argument.
-        self.inventory += trade_volume;
-
-        // Reconcile the open orders map if this agent was the maker.
-        if trade.maker_agent_id == self.id {
-            if let Some(order) = self.open_orders.get_mut(&trade.maker_order_id) {
-                order.filled += trade.volume;
-                if order.filled >= order.volume {
-                    self.open_orders.remove(&trade.maker_order_id);
+    fn update_portfolio(&mut self, vol: i64, tr: &Trade) {
+        self.inventory += vol;
+        if tr.maker_agent_id == self.id {
+            if let Some(o) = self.open_orders.get_mut(&tr.maker_order_id) {
+                o.filled += tr.volume;
+                if o.filled >= o.volume {
+                    self.open_orders.remove(&tr.maker_order_id);
                 }
             }
         }
@@ -94,33 +87,27 @@ impl Agent for IpoAgent {
     fn get_pending_orders(&self) -> Vec<Order> {
         self.open_orders.values().cloned().collect()
     }
-
-    fn cancel_open_order(&mut self, order_id: u64) -> Vec<OrderRequest> {
-        if self.open_orders.remove(&order_id).is_some() {
-            // A full implementation would return a real Cancel request.
-        }
+    fn cancel_open_order(&mut self, id: u64) -> Vec<OrderRequest> {
+        self.open_orders.remove(&id);
         vec![]
     }
 
+    /* misc getters --------------------------------------------------------- */
     fn get_id(&self) -> usize {
         self.id
     }
-
     fn get_inventory(&self) -> i64 {
         self.inventory
     }
-
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(IpoAgent::new(self.id))
     }
-    fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
-        let price_cents = match market_view.get_mid_price() {
-            Some(p) => p,
-            None => return 0.0, // or whatever you deem appropriate
-        };
-        let value_cents = (self.inventory as i128)
-            .checked_mul(price_cents as i128)
-            .expect("portfolio value overflow");
-        (value_cents as f64) / 100.0
+
+    fn evaluate_port(&mut self, view: &MarketView) -> f64 {
+        let sid = *view.stocks.get_all_ids().first().unwrap_or(&0);
+        match view.get_mid_price(sid) {
+            Some(px) => self.inventory as f64 * (px as f64 / 100.0),
+            None => 0.0,
+        }
     }
 }

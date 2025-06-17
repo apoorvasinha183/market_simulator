@@ -1,17 +1,11 @@
 // src/simulators/order_book.rs
-
-use crate::types::order::{Order, Side};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
-pub struct Trade {
-    pub price: u64,
-    pub volume: u64,
-    pub taker_agent_id: usize,
-    pub maker_agent_id: usize,
-    pub taker_side: Side,
-    pub maker_order_id: u64,
-}
+use crate::types::{Order, Side, Trade};
 
+// -----------------------------------------------------------------------------
+//  Core data structures
+// -----------------------------------------------------------------------------
 #[derive(Debug, Default)]
 pub struct PriceLevel {
     pub total_volume: u64,
@@ -25,6 +19,9 @@ pub struct OrderBook {
 }
 
 impl OrderBook {
+    // ---------------------------------------------------------------------
+    //  Construction
+    // ---------------------------------------------------------------------
     pub fn new() -> Self {
         Self {
             bids: BTreeMap::new(),
@@ -33,6 +30,9 @@ impl OrderBook {
         }
     }
 
+    // ---------------------------------------------------------------------
+    //  Internal helpers
+    // ---------------------------------------------------------------------
     fn add_limit_order(&mut self, order: Order) {
         let book_side = match order.side {
             Side::Buy => &mut self.bids,
@@ -46,6 +46,9 @@ impl OrderBook {
             .insert(order.id, (order.side, order.price));
     }
 
+    // ---------------------------------------------------------------------
+    //  Public API
+    // ---------------------------------------------------------------------
     pub fn process_market_order(
         &mut self,
         taker_agent_id: usize,
@@ -81,14 +84,23 @@ impl OrderBook {
                         continue;
                     }
                     let trade_volume = volume_to_fill.min(remaining_volume);
+
+                    // ---------- build Trade ----------
+                    let (_buy_id, _sell_id) = match side {
+                        Side::Buy => (0, maker_order.id),
+                        Side::Sell => (maker_order.id, 0),
+                    };
                     trades.push(Trade {
+                        stock_id: maker_order.stock_id.clone(),
                         price,
                         volume: trade_volume,
-                        taker_agent_id,
+                        taker_agent_id: taker_agent_id,
                         maker_agent_id: maker_order.agent_id,
-                        maker_order_id: maker_order.id,
                         taker_side: side,
+                        maker_order_id: maker_order.id,
                     });
+                    // ----------------------------------
+
                     maker_order.filled += trade_volume;
                     level.total_volume -= trade_volume;
                     volume_to_fill -= trade_volume;
@@ -146,14 +158,22 @@ impl OrderBook {
                     let maker_remaining = maker_order.volume.saturating_sub(maker_order.filled);
                     let trade_volume = order_remaining.min(maker_remaining);
                     if trade_volume > 0 {
+                        // ---------- build Trade ----------
+                        let (_buy_id, _sell_id) = match order.side {
+                            Side::Buy => (order.id, maker_order.id),
+                            Side::Sell => (maker_order.id, order.id),
+                        };
                         trades.push(Trade {
+                            stock_id: maker_order.stock_id.clone(),
                             price,
                             volume: trade_volume,
                             taker_agent_id: order.agent_id,
                             maker_agent_id: maker_order.agent_id,
-                            maker_order_id: maker_order.id,
                             taker_side: order.side,
+                            maker_order_id: maker_order.id,
                         });
+                        // ----------------------------------
+
                         maker_order.filled += trade_volume;
                         order.filled += trade_volume;
                         level.total_volume -= trade_volume;
@@ -212,12 +232,20 @@ impl OrderBook {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::order::{Order, Side};
+    use crate::types::Side;
 
-    fn new_order(id: u64, agent_id: usize, side: Side, price: u64, volume: u64) -> Order {
+    fn new_order(
+        id: u64,
+        agent_id: usize,
+        stock_id: u64,
+        side: Side,
+        price: u64,
+        volume: u64,
+    ) -> Order {
         Order {
             id,
             agent_id,
+            stock_id: stock_id,
             side,
             price,
             volume,
@@ -228,12 +256,9 @@ mod tests {
     #[test]
     fn test_add_simple_limit_order() {
         let mut book = OrderBook::new();
-        let order = new_order(1, 1, Side::Buy, 100, 50);
+        let order = new_order(1, 1, 1, Side::Buy, 100, 50);
         book.add_limit_order(order);
-        assert!(
-            book.order_id_map.contains_key(&1),
-            "Order ID should be in the index map."
-        );
+        assert!(book.order_id_map.contains_key(&1));
         let level = book.bids.get(&100).unwrap();
         assert_eq!(level.total_volume, 50);
     }
@@ -241,7 +266,7 @@ mod tests {
     #[test]
     fn test_market_order_simple_fill() {
         let mut book = OrderBook::new();
-        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
+        book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 50));
         let trades = book.process_market_order(2, Side::Buy, 30);
         assert_eq!(trades.len(), 1);
         let ask_level = book.asks.get(&100).unwrap();
@@ -252,23 +277,17 @@ mod tests {
     #[test]
     fn test_market_order_full_fill_and_remove() {
         let mut book = OrderBook::new();
-        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
+        book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 50));
         book.process_market_order(2, Side::Buy, 50);
-        assert!(
-            book.asks.get(&100).is_none(),
-            "Price level should be removed after full fill."
-        );
-        assert!(
-            book.order_id_map.get(&1).is_none(),
-            "Order ID should be removed from the index map."
-        );
+        assert!(book.asks.get(&100).is_none());
+        assert!(book.order_id_map.get(&1).is_none());
     }
 
     #[test]
     fn test_marketable_limit_order() {
         let mut book = OrderBook::new();
-        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 50));
-        let mut aggressive_buy = new_order(2, 2, Side::Buy, 101, 30);
+        book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 50));
+        let mut aggressive_buy = new_order(2, 2, 1, Side::Buy, 101, 30);
         book.process_limit_order(&mut aggressive_buy);
         assert_eq!(book.asks.get(&100).unwrap().total_volume, 20);
         assert!(book.bids.is_empty());
@@ -277,8 +296,8 @@ mod tests {
     #[test]
     fn test_marketable_limit_order_partial_fill_and_rest() {
         let mut book = OrderBook::new();
-        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 30));
-        let mut aggressive_buy = new_order(2, 2, Side::Buy, 101, 50);
+        book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 30));
+        let mut aggressive_buy = new_order(2, 2, 1, Side::Buy, 101, 50);
         book.process_limit_order(&mut aggressive_buy);
         assert!(book.asks.get(&100).is_none());
         let bid_level = book.bids.get(&101).unwrap();
@@ -288,7 +307,7 @@ mod tests {
     #[test]
     fn test_cancel_order_simple() {
         let mut book = OrderBook::new();
-        book.add_limit_order(new_order(1, 1, Side::Buy, 100, 50));
+        book.add_limit_order(new_order(1, 1, 1, Side::Buy, 100, 50));
         let success = book.cancel_order(1, 1);
         assert!(success);
         assert!(book.bids.is_empty());
@@ -298,8 +317,8 @@ mod tests {
     #[test]
     fn test_cancel_order_fails_for_wrong_owner() {
         let mut book = OrderBook::new();
-        book.add_limit_order(new_order(1, 1, Side::Buy, 100, 50));
-        let success = book.cancel_order(1, 2); // Agent 2 tries to cancel agent 1's order
+        book.add_limit_order(new_order(1, 1, 1, Side::Buy, 100, 50));
+        let success = book.cancel_order(1, 2);
         assert!(!success);
         assert_eq!(book.bids.get(&100).unwrap().total_volume, 50);
     }
@@ -307,9 +326,9 @@ mod tests {
     #[test]
     fn test_market_order_blows_through_multiple_levels() {
         let mut book = OrderBook::new();
-        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 20));
-        book.add_limit_order(new_order(2, 1, Side::Sell, 101, 30));
-        book.add_limit_order(new_order(3, 1, Side::Sell, 102, 40));
+        book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 20));
+        book.add_limit_order(new_order(2, 1, 1, Side::Sell, 101, 30));
+        book.add_limit_order(new_order(3, 1, 1, Side::Sell, 102, 40));
 
         let trades = book.process_market_order(2, Side::Buy, 100);
 
@@ -325,20 +344,33 @@ mod tests {
     #[test]
     fn test_partial_cancel_after_partial_fill() {
         let mut book = OrderBook::new();
-        book.add_limit_order(new_order(1, 1, Side::Sell, 100, 100));
+        book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 100));
 
         book.process_market_order(2, Side::Buy, 40);
 
-        let level = book
-            .asks
-            .get(&100)
-            .expect("Price level should still exist.");
+        let level = book.asks.get(&100).unwrap();
         assert_eq!(level.total_volume, 60);
         assert_eq!(level.orders[0].filled, 40);
 
         let success = book.cancel_order(1, 1);
-
         assert!(success);
         assert!(book.asks.get(&100).is_none());
+    }
+    #[test]
+    fn test_exact_cross_limit_executes_immediately() {
+        let mut book = OrderBook::new();
+
+        // Maker posts a SELL limit at 100 (best ask)
+        book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 40));
+
+        // Aggressive BUY limit at the *same* price 100
+        let mut aggressive_buy = new_order(2, 2, 1, Side::Buy, 100, 40);
+        let trades = book.process_limit_order(&mut aggressive_buy);
+
+        // Should trade fully and remove that ask level
+        assert_eq!(trades.len(), 1, "one trade produced");
+        assert!(book.asks.get(&100).is_none(), "ask level consumed");
+        assert_eq!(aggressive_buy.filled, 40, "incoming order fully filled");
+        assert!(book.bids.is_empty(), "no residual resting on bid side");
     }
 }
