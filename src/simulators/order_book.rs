@@ -6,12 +6,12 @@ use crate::types::{Order, Side, Trade};
 // -----------------------------------------------------------------------------
 //  Core data structures
 // -----------------------------------------------------------------------------
-#[derive(Debug, Default,Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct PriceLevel {
     pub total_volume: u64,
     pub orders: VecDeque<Order>,
 }
-#[derive(Debug, Default,Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct OrderBook {
     pub bids: BTreeMap<u64, PriceLevel>,
     pub asks: BTreeMap<u64, PriceLevel>,

@@ -10,12 +10,12 @@ use market_simulator::{
 };
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
+use std::fs::{File, create_dir_all};
 use std::hint::black_box;
-use std::fs::{create_dir_all, File};
-use std::io::{Write, BufWriter};
+use std::io::{BufWriter, Write};
 use std::path::Path;
-use std::time::Instant;
 use std::sync::Mutex;
+use std::time::Instant;
 
 // ──────────────────────────────────────────────────────────────────────────────
 //  CSV Export Utilities
@@ -49,7 +49,8 @@ impl BenchmarkResult {
             self.side.as_ref().map_or("", |s| s),
             self.mean_time_ns,
             self.std_dev_ns,
-            self.throughput_elements_per_sec.map_or("".to_string(), |v| format!("{:.2}", v)),
+            self.throughput_elements_per_sec
+                .map_or("".to_string(), |v| format!("{:.2}", v)),
             self.sample_count
         )
     }
@@ -75,15 +76,18 @@ impl CsvExporter {
         let path = Path::new("benchmark_results").join(filename);
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
-        
+
         // Write header
-        writeln!(writer, "benchmark_group,test_name,parameter,book_size,sweep_volume,price_levels,side,mean_time_ns,std_dev_ns,throughput_elements_per_sec,sample_count")?;
-        
+        writeln!(
+            writer,
+            "benchmark_group,test_name,parameter,book_size,sweep_volume,price_levels,side,mean_time_ns,std_dev_ns,throughput_elements_per_sec,sample_count"
+        )?;
+
         // Write data
         for result in &self.results {
             write!(writer, "{}", result.to_csv_row())?;
         }
-        
+
         writer.flush()?;
         Ok(())
     }
@@ -106,36 +110,51 @@ fn export_all_results() {
         if let Err(e) = exporter.export_to_file("comprehensive_benchmark_results.csv") {
             eprintln!("Failed to export comprehensive results: {}", e);
         } else {
-            println!("✓ Exported comprehensive results to benchmark_results/comprehensive_benchmark_results.csv");
+            println!(
+                "✓ Exported comprehensive results to benchmark_results/comprehensive_benchmark_results.csv"
+            );
         }
-        
+
         // Export grouped results for easier analysis
-        let groups = ["market_order_scaling", "limit_order_insertion", "mixed_book_operations", 
-                     "price_level_scaling", "order_cancellation", "short_covering", 
-                     "negative_inventory_simulation"];
-        
+        let groups = [
+            "market_order_scaling",
+            "limit_order_insertion",
+            "mixed_book_operations",
+            "price_level_scaling",
+            "order_cancellation",
+            "short_covering",
+            "negative_inventory_simulation",
+        ];
+
         for group in &groups {
-            let group_results: Vec<_> = exporter.results.iter()
+            let group_results: Vec<_> = exporter
+                .results
+                .iter()
                 .filter(|r| r.benchmark_group == *group)
                 .cloned()
                 .collect();
-            
+
             if !group_results.is_empty() {
                 let filename = format!("{}_results.csv", group);
                 let mut group_exporter = CsvExporter::new();
                 for result in group_results {
                     group_exporter.add_result(result);
                 }
-                
+
                 if let Err(e) = group_exporter.export_to_file(&filename) {
                     eprintln!("Failed to export {} results: {}", group, e);
                 } else {
-                    println!("✓ Exported {} results to benchmark_results/{}", group, filename);
+                    println!(
+                        "✓ Exported {} results to benchmark_results/{}",
+                        group, filename
+                    );
                 }
             }
         }
-        
-        println!("\n📊 All benchmark results exported to CSV files in benchmark_results/ directory");
+
+        println!(
+            "\n📊 All benchmark results exported to CSV files in benchmark_results/ directory"
+        );
         println!("   Ready for analysis in Jupyter notebook!");
     }
 }
@@ -155,7 +174,7 @@ fn measure_and_record<F>(
     F: Fn() -> Box<dyn FnMut()>,
 {
     let mut times = Vec::new();
-    
+
     for _ in 0..iterations {
         let mut bench_fn = setup_fn();
         let start = Instant::now();
@@ -163,15 +182,13 @@ fn measure_and_record<F>(
         let duration = start.elapsed();
         times.push(duration.as_nanos() as f64);
     }
-    
+
     let mean_time = times.iter().sum::<f64>() / times.len() as f64;
-    let variance = times.iter()
-        .map(|&t| (t - mean_time).powi(2))
-        .sum::<f64>() / times.len() as f64;
+    let variance = times.iter().map(|&t| (t - mean_time).powi(2)).sum::<f64>() / times.len() as f64;
     let std_dev = variance.sqrt();
-    
+
     let throughput = book_size.map(|size| size as f64 / (mean_time / 1_000_000_000.0));
-    
+
     let result = BenchmarkResult {
         benchmark_group: benchmark_group.to_string(),
         test_name: test_name.to_string(),
@@ -185,7 +202,7 @@ fn measure_and_record<F>(
         throughput_elements_per_sec: throughput,
         sample_count: times.len(),
     };
-    
+
     add_result_to_exporter(result);
 }
 
@@ -295,7 +312,7 @@ pub fn bench_market_order_scaling(c: &mut Criterion) {
 
             let id = BenchmarkId::from_parameter(format!("sell_book_{}_sweep_{}", n, sweep));
             let param_str = format!("sell_book_{}_sweep_{}", n, sweep);
-            
+
             group.bench_function(id, |b| {
                 b.iter_batched(
                     || setup_sell_book(n),
@@ -323,7 +340,7 @@ pub fn bench_market_order_scaling(c: &mut Criterion) {
                         black_box(trades);
                     })
                 },
-                100,  // Number of iterations for CSV measurement
+                100, // Number of iterations for CSV measurement
             );
         }
     }
@@ -339,7 +356,7 @@ pub fn bench_limit_order_insertion(c: &mut Criterion) {
 
         let id = BenchmarkId::from_parameter(format!("book_size_{}", n));
         let param_str = format!("book_size_{}", n);
-        
+
         group.bench_function(id, |b| {
             b.iter_batched(
                 || {
@@ -383,19 +400,17 @@ pub fn bench_limit_order_insertion(c: &mut Criterion) {
                 let book = setup_sell_book(n);
                 let mut rng = StdRng::seed_from_u64(123);
                 let orders: Vec<Order> = (0..1000)
-                    .map(|i| {
-                        Order {
-                            id: (n as u64) + i,
-                            agent_id: (i % 10) as usize,
-                            stock_id: 0,
-                            side: Side::Sell,
-                            price: 110 + (i % 20) as u64,
-                            volume: rng.gen_range(1..=100),
-                            filled: 0,
-                        }
+                    .map(|i| Order {
+                        id: (n as u64) + i,
+                        agent_id: (i % 10) as usize,
+                        stock_id: 0,
+                        side: Side::Sell,
+                        price: 110 + (i % 20) as u64,
+                        volume: rng.gen_range(1..=100),
+                        filled: 0,
                     })
                     .collect();
-                
+
                 Box::new(move || {
                     let mut book_copy = book.clone();
                     let mut orders_copy = orders.clone();
@@ -428,7 +443,8 @@ pub fn bench_mixed_book_operations(c: &mut Criterion) {
                     Side::Buy => "buy",
                     Side::Sell => "sell",
                 };
-                let id = BenchmarkId::from_parameter(format!("mixed_book_{}_{}_{}", n, side_str, sweep));
+                let id =
+                    BenchmarkId::from_parameter(format!("mixed_book_{}_{}_{}", n, side_str, sweep));
                 let param_str = format!("mixed_book_{}_{}_{}", n, side_str, sweep);
 
                 group.bench_function(id, |b| {
@@ -478,7 +494,7 @@ pub fn bench_price_level_impact(c: &mut Criterion) {
 
         let id = BenchmarkId::from_parameter(format!("levels_{}", levels));
         let param_str = format!("levels_{}", levels);
-        
+
         group.bench_function(id, |b| {
             b.iter_batched(
                 || setup_book_with_params(FIXED_ORDERS, levels, Side::Sell, 100, 42),
@@ -521,14 +537,13 @@ pub fn bench_order_cancellation(c: &mut Criterion) {
 
         let id = BenchmarkId::from_parameter(format!("book_size_{}", n));
         let param_str = format!("book_size_{}", n);
-        
+
         group.bench_function(id, |b| {
             b.iter_batched(
                 || {
                     let book = setup_sell_book(n);
-                    let cancel_requests: Vec<(u64, usize)> = (0..1000)
-                        .map(|i| (i as u64, (i % 10) as usize))
-                        .collect();
+                    let cancel_requests: Vec<(u64, usize)> =
+                        (0..1000).map(|i| (i as u64, (i % 10) as usize)).collect();
                     (book, cancel_requests)
                 },
                 |(mut book, cancel_requests)| {
@@ -552,10 +567,9 @@ pub fn bench_order_cancellation(c: &mut Criterion) {
             None,
             || {
                 let book = setup_sell_book(n);
-                let cancel_requests: Vec<(u64, usize)> = (0..1000)
-                    .map(|i| (i as u64, (i % 10) as usize))
-                    .collect();
-                
+                let cancel_requests: Vec<(u64, usize)> =
+                    (0..1000).map(|i| (i as u64, (i % 10) as usize)).collect();
+
                 Box::new(move || {
                     let mut book_copy = book.clone();
                     for &(order_id, agent_id) in &cancel_requests {
@@ -584,16 +598,12 @@ pub fn bench_short_covering_scenarios(c: &mut Criterion) {
 
     for (scenario_name, cover_volume) in scenarios {
         let id = BenchmarkId::from_parameter(scenario_name);
-        
+
         group.bench_function(id, |b| {
             b.iter_batched(
                 || setup_sell_book(BOOK_SIZE),
                 |mut book| {
-                    let trades = book.process_market_order(
-                        black_box(888),
-                        Side::Buy,
-                        cover_volume,
-                    );
+                    let trades = book.process_market_order(black_box(888), Side::Buy, cover_volume);
                     black_box(trades);
                 },
                 BatchSize::LargeInput,
@@ -636,17 +646,14 @@ pub fn bench_negative_inventory_patterns(c: &mut Criterion) {
 
     for (pattern_name, cover_sequence) in patterns {
         let id = BenchmarkId::from_parameter(pattern_name);
-        
+
         group.bench_function(id, |b| {
             b.iter_batched(
                 || setup_sell_book(BOOK_SIZE),
                 |mut book| {
                     for (i, &volume) in cover_sequence.iter().enumerate() {
-                        let trades = book.process_market_order(
-                            black_box(800 + i),
-                            Side::Buy,
-                            volume,
-                        );
+                        let trades =
+                            book.process_market_order(black_box(800 + i), Side::Buy, volume);
                         black_box(trades);
                     }
                 },
@@ -688,7 +695,7 @@ pub fn bench_negative_inventory_patterns(c: &mut Criterion) {
 #[allow(dead_code)]
 fn run_benchmarks() {
     let mut criterion = Criterion::default();
-    
+
     // Run all benchmarks
     bench_market_order_scaling(&mut criterion);
     bench_limit_order_insertion(&mut criterion);
@@ -697,7 +704,7 @@ fn run_benchmarks() {
     bench_order_cancellation(&mut criterion);
     bench_short_covering_scenarios(&mut criterion);
     bench_negative_inventory_patterns(&mut criterion);
-    
+
     // Export all CSV results at the end
     export_all_results();
 }
