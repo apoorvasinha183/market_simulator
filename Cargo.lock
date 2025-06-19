@@ -2037,6 +2037,8 @@ dependencies = [
  "eframe",
  "egui_plot",
  "lazy_static",
+ "once_cell",
+ "parking_lot",
  "rand",
  "rand_distr",
  "serde",
