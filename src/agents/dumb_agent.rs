@@ -14,7 +14,8 @@ use crate::{
     agents::latency::DUMB_AGENT_TICKS_UNTIL_ACTIVE,
     types::order::{Order, OrderRequest, Side, Trade},
 };
-
+//allow cloning
+#[derive(Debug, Clone)]
 pub struct DumbAgent {
     id: usize,
     // update inventory as a hashmap linking the stock id to the number of shares held .(Signed so I can short)
@@ -181,7 +182,7 @@ impl Agent for DumbAgent {
         //self.inventory
     }
     fn clone_agent(&self) -> Box<dyn Agent> {
-        Box::new(DumbAgent::new(self.id))
+        Box::new(self.clone()) // clone the agent while preserving the inventory and stuff.
     }
 
     fn evaluate_port(&mut self, view: &MarketView) -> f64 {
