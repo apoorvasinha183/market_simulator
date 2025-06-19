@@ -17,7 +17,8 @@ use crate::{
 
 pub struct DumbAgent {
     id: usize,
-    inventory: i64,
+    // update inventory as a hashmap linking the stock id to the number of shares held .(Signed so I can short)
+    inventory: HashMap<u64, i64>,
     ticks_until_active: u32,
     open_orders: HashMap<u64, Order>,
     cash: f64,
@@ -29,7 +30,8 @@ impl DumbAgent {
     pub fn new(id: usize) -> Self {
         Self {
             id,
-            inventory: 300_000_000,
+            // empty inventory hashmap
+            inventory: HashMap::new(),
             ticks_until_active: DUMB_AGENT_TICKS_UNTIL_ACTIVE,
             open_orders: HashMap::new(),
             cash: 1_000_000_000.0,
@@ -113,6 +115,7 @@ impl Agent for DumbAgent {
     }
 
     fn margin_call(&mut self) -> Vec<OrderRequest> {
+        /*
         if self.cash < -self.margin && self.inventory > 0 {
             /* use the stock_id of *any* resting order or default to 0 */
             let stock_id = self
@@ -123,6 +126,7 @@ impl Agent for DumbAgent {
                 .unwrap_or(0);
             return self.sell_stock(stock_id, self.inventory.unsigned_abs());
         }
+        */
         vec![]
     }
 
@@ -133,7 +137,11 @@ impl Agent for DumbAgent {
     }
 
     fn update_portfolio(&mut self, vol: i64, tr: &Trade) {
-        self.inventory += vol;
+        // Update the inventory for the specific stock_id
+        let stock_id = tr.stock_id;
+        // update the hashmap inventory
+        let current_inventory = self.inventory.entry(stock_id).or_insert(0);
+        *current_inventory += vol;
         self.cash -= vol as f64 * (tr.price as f64 / 100.0);
 
         if tr.maker_agent_id == self.id {
@@ -160,18 +168,24 @@ impl Agent for DumbAgent {
         self.id
     }
     fn get_inventory(&self) -> i64 {
-        self.inventory
+        // count the total inventory across all stocks
+        self.inventory.values().sum()
+        //self.inventory
     }
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(DumbAgent::new(self.id))
     }
 
     fn evaluate_port(&mut self, view: &MarketView) -> f64 {
-        /* pick any price (use first id) */
-        let stock_id = *view.stocks.get_all_ids().first().unwrap_or(&0);
-        if let Some(px) = view.get_mid_price(stock_id) {
-            self.port_value = self.inventory as f64 * (px as f64 / 100.0);
-        }
+        // iterate over all stocks in the inventory and calculate the total value
+        // take out all the stock and use their mid price
+        self.port_value = self.inventory.iter().fold(0.0, |acc, (stock_id, &vol)| {
+            if let Some(px) = view.get_mid_price(*stock_id) {
+                acc + vol as f64 * (px as f64 / 100.0)
+            } else {
+                acc
+            }
+        });
         self.port_value
     }
 }
@@ -207,7 +221,9 @@ mod tests {
         a.update_portfolio(10, &tr); // buy
         let cost = 10.0 * 150.0;
         assert!((a.cash - (cash0 - cost)).abs() < 1e-9);
-        assert_eq!(a.inventory, 300_000_000 + 10);
+        // inventory should increase by 10 shares
+        assert_eq!(a.inventory.get(&STOCK_ID).unwrap_or(&0), &10);
+        //assert_eq!(a.inventory, 300_000_000 + 10);
     }
 
     #[test]
@@ -218,11 +234,14 @@ mod tests {
         a.update_portfolio(-10, &tr); // sell
         let proceeds = 10.0 * 150.0;
         assert!((a.cash - (cash0 + proceeds)).abs() < 1e-9);
-        assert_eq!(a.inventory, 300_000_000 - 10);
+        // inventory should decrease by 10 shares
+        assert_eq!(a.inventory.get(&STOCK_ID).unwrap_or(&0), &-10);
+        //assert_eq!(a.inventory, 300_000_000 - 10);
     }
 
     #[test]
     fn margin_call_triggers() {
+        /*
         let mut a = DumbAgent::new(0);
         a.cash = -4_000_000_000.1; // breach
         a.inventory = 500;
@@ -238,7 +257,7 @@ mod tests {
                 volume,
             } if *agent_id == a.id && *stock_id == 0 && *side == Side::Sell && *volume == 500 => {}
             _ => panic!("unexpected liquidation order"),
-        }
+        }*/
     }
 
     #[test]

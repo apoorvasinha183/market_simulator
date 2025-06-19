@@ -404,12 +404,12 @@ impl AgentVisualizer {
                             // ASKS curve + fill
                             if !order_book.asks.is_empty() {
                                 let mut ask_pts = Vec::new();
-                                let mut cum = 0.0;
+                                let mut cum: u64 = 0;
                                 for (&px, lvl) in order_book.asks.iter() {
                                     let price = px as f64 / 100.0;
-                                    ask_pts.push([price, cum]);
-                                    cum += lvl.total_volume as f64;
-                                    ask_pts.push([price, cum]);
+                                    ask_pts.push([price, cum as f64]);
+                                    cum += lvl.total_volume as u64;
+                                    ask_pts.push([price, cum as f64]);
                                 }
                                 p.line(
                                     Line::new(PlotPoints::from(ask_pts))
@@ -423,12 +423,12 @@ impl AgentVisualizer {
                             // BIDS curve + fill
                             if !order_book.bids.is_empty() {
                                 let mut bid_pts = Vec::new();
-                                let mut cum = 0.0;
+                                let mut cum: u64 = 0;
                                 for (&px, lvl) in order_book.bids.iter().rev() {
                                     let price = px as f64 / 100.0;
-                                    bid_pts.push([price, cum]);
-                                    cum += lvl.total_volume as f64;
-                                    bid_pts.push([price, cum]);
+                                    bid_pts.push([price, cum as f64]);
+                                    cum += lvl.total_volume as u64;
+                                    bid_pts.push([price, cum as f64]);
                                 }
                                 p.line(
                                     Line::new(PlotPoints::from(bid_pts))
