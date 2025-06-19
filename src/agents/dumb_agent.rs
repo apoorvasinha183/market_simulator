@@ -115,18 +115,26 @@ impl Agent for DumbAgent {
     }
 
     fn margin_call(&mut self) -> Vec<OrderRequest> {
-        /*
-        if self.cash < -self.margin && self.inventory > 0 {
-            /* use the stock_id of *any* resting order or default to 0 */
-            let stock_id = self
-                .open_orders
-                .values()
-                .next()
-                .map(|o| o.stock_id)
-                .unwrap_or(0);
-            return self.sell_stock(stock_id, self.inventory.unsigned_abs());
+        if self.cash < -self.margin {
+            // CREATE AN empty vector to hold the liquidation orders
+            let mut liquidation_orders = Vec::new();
+            // sweep the inventory hashmap and burn all shares into the lqiuidation orders
+            for (&stock_id, &vol) in &self.inventory {
+                if vol != 0 {
+                    liquidation_orders.push(OrderRequest::MarketOrder {
+                        agent_id: self.id,
+                        stock_id,
+                        side: Side::Sell,
+                        volume: vol.unsigned_abs() as u64, // convert to unsigned for market order
+                    });
+                }
+            }
+            // clear the inventory
+            self.inventory.clear();
+            // return the liquidation orders
+            return liquidation_orders;
         }
-        */
+
         vec![]
     }
 
@@ -241,14 +249,18 @@ mod tests {
 
     #[test]
     fn margin_call_triggers() {
-        /*
         let mut a = DumbAgent::new(0);
         a.cash = -4_000_000_000.1; // breach
-        a.inventory = 500;
+        // make a fake inventory
+        a.inventory.insert(0, 500); // stock_id 0 with 500 shares
+        a.inventory.insert(1, 100); // stock_id 1 with 100 shares
 
         let reqs = a.margin_call();
-        assert_eq!(reqs.len(), 1, "should liquidate inventory");
+        // should liquidate all inventory
+        assert_eq!(reqs.len(), 2, "should liquidate inventory");
+        // check the liquidation orders
 
+        // check the first one
         match &reqs[0] {
             OrderRequest::MarketOrder {
                 agent_id,
@@ -257,7 +269,17 @@ mod tests {
                 volume,
             } if *agent_id == a.id && *stock_id == 0 && *side == Side::Sell && *volume == 500 => {}
             _ => panic!("unexpected liquidation order"),
-        }*/
+        }
+        //check the second one
+        match &reqs[1] {
+            OrderRequest::MarketOrder {
+                agent_id,
+                stock_id,
+                side,
+                volume,
+            } if *agent_id == a.id && *stock_id == 1 && *side == Side::Sell && *volume == 100 => {}
+            _ => panic!("unexpected liquidation order"),
+        }
     }
 
     #[test]
