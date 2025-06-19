@@ -197,7 +197,7 @@ impl Agent for DumbAgent {
 mod tests {
     use super::*;
     //use crate::types::order::{OrderRequest, Side};
-    use crate::types::order::{Side};
+    use crate::types::order::Side;
     const STOCK_ID: u64 = 1; // arbitrary id for all mock trades
 
     /* helper: create a Trade */
