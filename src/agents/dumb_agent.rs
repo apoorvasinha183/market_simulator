@@ -248,39 +248,33 @@ mod tests {
     }
 
     #[test]
-    fn margin_call_triggers() {
-        let mut a = DumbAgent::new(0);
-        a.cash = -4_000_000_000.1; // breach
-        // make a fake inventory
-        a.inventory.insert(0, 500); // stock_id 0 with 500 shares
-        a.inventory.insert(1, 100); // stock_id 1 with 100 shares
+fn margin_call_triggers() {
+    let mut a = DumbAgent::new(0);
+    a.cash = -4_000_000_000.1; // breach
+    a.inventory.insert(0, 500);
+    a.inventory.insert(1, 100);
 
-        let reqs = a.margin_call();
-        // should liquidate all inventory
-        assert_eq!(reqs.len(), 2, "should liquidate inventory");
-        // check the liquidation orders
-
-        // check the first one
-        match &reqs[0] {
-            OrderRequest::MarketOrder {
-                agent_id,
-                stock_id,
-                side,
-                volume,
-            } if *agent_id == a.id && *stock_id == 0 && *side == Side::Sell && *volume == 500 => {}
-            _ => panic!("unexpected liquidation order"),
-        }
-        //check the second one
-        match &reqs[1] {
-            OrderRequest::MarketOrder {
-                agent_id,
-                stock_id,
-                side,
-                volume,
-            } if *agent_id == a.id && *stock_id == 1 && *side == Side::Sell && *volume == 100 => {}
-            _ => panic!("unexpected liquidation order"),
+    let reqs = a.margin_call();
+    assert_eq!(reqs.len(), 2, "should liquidate all inventory");
+    
+    // Collect the liquidation orders into a more testable format
+    let mut liquidations = HashMap::new();
+    for req in &reqs {
+        match req {
+            OrderRequest::MarketOrder { agent_id, stock_id, side, volume } => {
+                assert_eq!(*agent_id, a.id);
+                assert_eq!(*side, Side::Sell);
+                liquidations.insert(*stock_id, *volume);
+            }
+            _ => panic!("Expected MarketOrder"),
         }
     }
+    
+    // Verify we got the right liquidations
+    assert_eq!(liquidations.get(&0), Some(&500));
+    assert_eq!(liquidations.get(&1), Some(&100));
+    assert!(a.inventory.is_empty(), "inventory should be cleared");
+}
 
     #[test]
     fn margin_call_not_triggered_when_safe() {
