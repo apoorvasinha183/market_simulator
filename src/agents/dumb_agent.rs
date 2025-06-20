@@ -96,9 +96,7 @@ impl Agent for DumbAgent {
         }
         out
     }
-    fn run(&mut self) {
-        
-    }
+    fn run(&mut self) {}
     fn buy_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest> {
         vec![OrderRequest::MarketOrder {
             agent_id: self.id,

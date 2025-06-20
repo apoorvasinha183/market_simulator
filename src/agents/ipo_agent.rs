@@ -54,7 +54,7 @@ impl Agent for IpoAgent {
             })
             .collect()
     }
-    fn run(&mut self){
+    fn run(&mut self) {
         //TODO: We need an absolute access to Marketview , maybe can get it from the market
     }
     /* IPO agent never submits market buys/sells after the ladder ----------- */

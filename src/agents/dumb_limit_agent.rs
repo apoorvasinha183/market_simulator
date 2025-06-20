@@ -100,9 +100,7 @@ impl Agent for DumbLimitAgent {
         }
         out
     }
-    fn run(&mut self) {
-        
-    }
+    fn run(&mut self) {}
     /* market-order helpers -------------------------------------------------- */
     fn buy_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest> {
         vec![OrderRequest::MarketOrder {

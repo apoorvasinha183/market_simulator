@@ -187,9 +187,7 @@ impl Agent for MarketMakerAgent {
             },
         ]
     }
-    fn run(&mut self) {
-        
-    }
+    fn run(&mut self) {}
     /* market-order helpers: use inside liquidation paths */
     fn buy_stock(&mut self, stock_id: u64, vol: u64) -> Vec<OrderRequest> {
         vec![OrderRequest::MarketOrder {

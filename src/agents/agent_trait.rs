@@ -42,7 +42,7 @@ pub trait Agent {
 
     /// Creates a request to cancel an open order.
     fn cancel_open_order(&mut self, order_id: u64) -> Vec<OrderRequest>;
-    /// To have the agents run perpetually 
+    /// To have the agents run perpetually
     // TODO: decide_actions return type should be void since we will be adding a mpsc channel to send actions to the market.
     // Right now this will be a stub
     fn run(&mut self);
