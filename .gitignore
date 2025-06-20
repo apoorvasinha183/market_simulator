@@ -2,3 +2,4 @@
 *.zip
 /benchmark_results
 analysis.ipynb
+/.idea

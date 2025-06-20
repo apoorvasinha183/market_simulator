@@ -54,7 +54,9 @@ impl Agent for IpoAgent {
             })
             .collect()
     }
-
+    fn run(&mut self){
+        //TODO: We need an absolute access to Marketview , maybe can get it from the market
+    }
     /* IPO agent never submits market buys/sells after the ladder ----------- */
     fn buy_stock(&mut self, _id: u64, _v: u64) -> Vec<OrderRequest> {
         vec![]

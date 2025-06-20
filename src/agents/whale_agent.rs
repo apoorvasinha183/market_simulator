@@ -114,7 +114,9 @@ impl Agent for WhaleAgent {
         }
         cancel_reqs.into_iter().chain(new_reqs).collect()
     }
-
+    fn run(&mut self) {
+        // No-op for whales; they act only on market view
+    }
     /* market helpers (rarely used for whales) */
     fn buy_stock(&mut self, stock_id: u64, vol: u64) -> Vec<OrderRequest> {
         vec![OrderRequest::MarketOrder {

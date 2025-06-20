@@ -299,4 +299,7 @@ impl Marketable for Market {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn run(&mut self) {
+        self.step();
+    }
 }

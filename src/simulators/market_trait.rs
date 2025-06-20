@@ -18,4 +18,7 @@ pub trait Marketable {
     fn get_order_book(&self) -> Option<&OrderBook>;
 
     fn as_any(&self) -> &dyn Any;
+
+    /// for running perpetually
+    fn run(&mut self);
 }

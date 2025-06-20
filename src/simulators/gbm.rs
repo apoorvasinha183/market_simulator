@@ -60,4 +60,9 @@ impl Marketable for GBMSimulator {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn run(&mut self) {
+        loop {
+            self.step();
+        }
+    }
 }
