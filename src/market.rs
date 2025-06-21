@@ -300,6 +300,8 @@ impl Marketable for Market {
         self
     }
     fn run(&mut self) {
-        self.step();
+        loop {
+            self.step();
+        }
     }
 }

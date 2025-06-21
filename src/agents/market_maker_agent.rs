@@ -1,7 +1,4 @@
 // src/agents/market_maker_agent.rs
-use rand::{Rng, seq::SliceRandom};
-use std::collections::HashMap;
-
 use super::{
     agent_trait::{Agent, MarketView},
     config::{
@@ -14,6 +11,10 @@ use crate::{
     agents::latency::MM_TICKS_UNTIL_ACTIVE,
     types::order::{Order, OrderRequest, Side, Trade},
 };
+use rand::Rng;
+use std::collections::HashMap;
+//use std::sync::{Arc, Mutex};
+//use std::thread;
 
 /* guard-rails */
 const MIN_PRICE: u64 = 1_00; // $1.00
@@ -48,8 +49,8 @@ impl MarketMakerAgent {
         }
     }
 
-    /* seed one instrument’s book with geometric depth */
-    // Adding one more argument that is the opening stock price.
+    /* seed one instrument's book with geometric depth */
+    #[allow(dead_code)]
     fn seed_liquidity(&self, stock_id: u64, starting_price: u64) -> Vec<OrderRequest> {
         let side_budget = (self.inventory.abs() as f64 * MM_SEED_DEPTH_PCT) as u64;
         let mut vol_at_lvl = (side_budget as f64 * (1.0 - MM_SEED_DECAY)
@@ -99,95 +100,178 @@ impl Agent for MarketMakerAgent {
             return vec![];
         }
 
-        /* pick a random instrument each tick */
+        /* get all stock IDs */
         let ids: Vec<u64> = view.stocks.get_all_ids();
         if ids.is_empty() {
             return vec![];
         }
-        let stock_id = *ids.choose(&mut rand::thread_rng()).unwrap();
-        // extract stock initial price by first fetching the stock by id and extracting rpcie from there
-        let initial_price = view
-            .stocks
-            .get_stock_by_id(stock_id)
-            .map(|s| (s.initial_price * 100.0) as u64)
-            .unwrap_or(MM_INITIAL_CENTER_PRICE);
-        let book = match view.book(stock_id) {
-            Some(b) => b,
-            None => return vec![],
-        };
 
-        /* one-time seeding per instrument */
-        if !*self.bootstrapped.entry(stock_id).or_insert(false) {
-            self.bootstrapped.insert(stock_id, true);
-            return self.seed_liquidity(stock_id, initial_price);
+        /* Collect data needed for each stock */
+        let mut stock_data = Vec::new();
+        for &stock_id in &ids {
+            let initial_price = view
+                .stocks
+                .get_stock_by_id(stock_id)
+                .map(|s| (s.initial_price * 100.0) as u64)
+                .unwrap_or(MM_INITIAL_CENTER_PRICE);
+
+            let book = match view.book(stock_id) {
+                Some(b) => b.clone(), // Clone the book data
+                None => continue,
+            };
+
+            let is_bootstrapped = *self.bootstrapped.get(&stock_id).unwrap_or(&false);
+
+            stock_data.push((stock_id, initial_price, book, is_bootstrapped));
         }
 
-        let best_bid = book.bids.keys().next_back().copied();
-        let best_ask = book.asks.keys().next().copied();
+        /* Process stocks in parallel */
+        use std::sync::{Arc, Mutex};
+        use std::thread;
 
-        /* --- emergency unstick --- */
-        if let (Some(bid), None) = (best_bid, best_ask) {
-            let ask_px = clamp(bid as i128 + 1);
-            let vol = rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
-            return vec![OrderRequest::LimitOrder {
-                agent_id: self.id,
-                stock_id,
-                side: Side::Sell,
-                price: ask_px,
-                volume: vol,
-            }];
+        let agent_id = self.id;
+        let inventory = self.inventory;
+        let results = Arc::new(Mutex::new(Vec::new()));
+        let mut handles = Vec::new();
+
+        for (stock_id, initial_price, book, is_bootstrapped) in stock_data {
+            let results_clone = Arc::clone(&results);
+
+            let handle = thread::spawn(move || {
+                let mut orders = Vec::new();
+
+                /* one-time seeding per instrument */
+                if !is_bootstrapped {
+                    // Seed liquidity logic
+                    let side_budget = (inventory.abs() as f64 * MM_SEED_DEPTH_PCT) as u64;
+                    let mut vol_at_lvl = (side_budget as f64 * (1.0 - MM_SEED_DECAY)
+                        / (1.0 - MM_SEED_DECAY.powi(MM_SEED_LEVELS as i32)))
+                        as u64;
+
+                    for lvl in 0..MM_SEED_LEVELS {
+                        let vol = vol_at_lvl;
+                        vol_at_lvl = (vol_at_lvl as f64 * MM_SEED_DECAY) as u64;
+
+                        let bid_px = clamp(
+                            initial_price as i128
+                                - (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING)
+                                    as i128,
+                        );
+                        let ask_px = clamp(
+                            initial_price as i128
+                                + (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING)
+                                    as i128,
+                        );
+
+                        orders.push(OrderRequest::LimitOrder {
+                            agent_id,
+                            stock_id,
+                            side: Side::Buy,
+                            price: bid_px,
+                            volume: vol,
+                        });
+                        orders.push(OrderRequest::LimitOrder {
+                            agent_id,
+                            stock_id,
+                            side: Side::Sell,
+                            price: ask_px,
+                            volume: vol,
+                        });
+                    }
+                } else {
+                    // Regular market making logic
+                    let best_bid = book.bids.keys().next_back().copied();
+                    let best_ask = book.asks.keys().next().copied();
+
+                    /* --- emergency unstick --- */
+                    if let (Some(bid), None) = (best_bid, best_ask) {
+                        let ask_px = clamp(bid as i128 + 1);
+                        let vol =
+                            rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
+                        orders.push(OrderRequest::LimitOrder {
+                            agent_id,
+                            stock_id,
+                            side: Side::Sell,
+                            price: ask_px,
+                            volume: vol,
+                        });
+                    } else if let (None, Some(ask)) = (best_bid, best_ask) {
+                        let bid_px = clamp(ask as i128 - 1);
+                        let vol =
+                            rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
+                        orders.push(OrderRequest::LimitOrder {
+                            agent_id,
+                            stock_id,
+                            side: Side::Buy,
+                            price: bid_px,
+                            volume: vol,
+                        });
+                    } else {
+                        /* --- regular two-sided quote --- */
+                        let center = match (best_bid, best_ask) {
+                            (Some(b), Some(a)) if a > b => ((b as u128 + a as u128) / 2) as u64,
+                            (None, None) => MM_INITIAL_CENTER_PRICE,
+                            _ => return,
+                        };
+
+                        let inventory_skew = (inventory as f64 * MM_SKEW_FACTOR) as i64;
+                        let our_center = clamp(center as i128 - inventory_skew as i128);
+
+                        let bid_px = clamp(our_center as i128 - (MM_DESIRED_SPREAD / 2) as i128);
+                        let ask_px = clamp(our_center as i128 + (MM_DESIRED_SPREAD / 2) as i128);
+
+                        if ask_px > bid_px
+                            && !best_ask.map_or(false, |a| bid_px >= a)
+                            && !best_bid.map_or(false, |b| ask_px <= b)
+                        {
+                            let vol =
+                                rand::thread_rng().gen_range(MM_QUOTE_VOL_MIN..=MM_QUOTE_VOL_MAX);
+                            orders.push(OrderRequest::LimitOrder {
+                                agent_id,
+                                stock_id,
+                                side: Side::Buy,
+                                price: bid_px,
+                                volume: vol,
+                            });
+                            orders.push(OrderRequest::LimitOrder {
+                                agent_id,
+                                stock_id,
+                                side: Side::Sell,
+                                price: ask_px,
+                                volume: vol,
+                            });
+                        }
+                    }
+                }
+
+                let mut results_guard = results_clone.lock().unwrap();
+                results_guard.push((stock_id, orders, !is_bootstrapped));
+            });
+
+            handles.push(handle);
         }
-        if let (None, Some(ask)) = (best_bid, best_ask) {
-            let bid_px = clamp(ask as i128 - 1);
-            let vol = rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
-            return vec![OrderRequest::LimitOrder {
-                agent_id: self.id,
-                stock_id,
-                side: Side::Buy,
-                price: bid_px,
-                volume: vol,
-            }];
+
+        /* Wait for all threads to complete */
+        for handle in handles {
+            handle.join().unwrap();
         }
 
-        /* --- regular two-sided quote --- */
-        let center = match (best_bid, best_ask) {
-            (Some(b), Some(a)) if a > b => ((b as u128 + a as u128) / 2) as u64,
-            (None, None) => MM_INITIAL_CENTER_PRICE,
-            _ => return vec![],
-        };
+        /* Collect results and update state */
+        let mut results_guard = results.lock().unwrap();
+        let mut all_orders = Vec::new();
 
-        let inventory_skew = (self.inventory as f64 * MM_SKEW_FACTOR) as i64;
-        let our_center = clamp(center as i128 - inventory_skew as i128);
-
-        let bid_px = clamp(our_center as i128 - (MM_DESIRED_SPREAD / 2) as i128);
-        let ask_px = clamp(our_center as i128 + (MM_DESIRED_SPREAD / 2) as i128);
-
-        if ask_px <= bid_px {
-            return vec![];
-        }
-        if best_ask.map_or(false, |a| bid_px >= a) || best_bid.map_or(false, |b| ask_px <= b) {
-            return vec![];
+        for (stock_id, orders, needs_bootstrap_update) in results_guard.drain(..) {
+            if needs_bootstrap_update {
+                self.bootstrapped.insert(stock_id, true);
+            }
+            all_orders.extend(orders);
         }
 
-        let vol = rand::thread_rng().gen_range(MM_QUOTE_VOL_MIN..=MM_QUOTE_VOL_MAX);
-        vec![
-            OrderRequest::LimitOrder {
-                agent_id: self.id,
-                stock_id,
-                side: Side::Buy,
-                price: bid_px,
-                volume: vol,
-            },
-            OrderRequest::LimitOrder {
-                agent_id: self.id,
-                stock_id,
-                side: Side::Sell,
-                price: ask_px,
-                volume: vol,
-            },
-        ]
+        all_orders
     }
+
     fn run(&mut self) {}
+
     /* market-order helpers: use inside liquidation paths */
     fn buy_stock(&mut self, stock_id: u64, vol: u64) -> Vec<OrderRequest> {
         vec![OrderRequest::MarketOrder {
@@ -197,6 +281,7 @@ impl Agent for MarketMakerAgent {
             volume: vol,
         }]
     }
+
     fn sell_stock(&mut self, stock_id: u64, vol: u64) -> Vec<OrderRequest> {
         vec![OrderRequest::MarketOrder {
             agent_id: self.id,
@@ -242,6 +327,7 @@ impl Agent for MarketMakerAgent {
     fn get_pending_orders(&self) -> Vec<Order> {
         self.open_orders.values().cloned().collect()
     }
+
     fn cancel_open_order(&mut self, id: u64) -> Vec<OrderRequest> {
         self.open_orders.remove(&id);
         vec![]
@@ -251,9 +337,11 @@ impl Agent for MarketMakerAgent {
     fn get_id(&self) -> usize {
         self.id
     }
+
     fn get_inventory(&self) -> i64 {
         self.inventory
     }
+
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(MarketMakerAgent::new(self.id))
     }
@@ -266,15 +354,16 @@ impl Agent for MarketMakerAgent {
         self.port_value
     }
 }
+
 // -----------------------------------------------------------------------------
 //  Unit Tests
 // -----------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
-    use super::*; // test the agent in this file
+    use super::*;
     use crate::types::order::Side;
 
-    const STOCK_ID: u64 = 1; // arbitrary instrument key
+    const STOCK_ID: u64 = 1;
 
     /* helper: make an Order */
     fn new_order(id: u64, agent: usize, side: Side, price: u64, vol: u64) -> Order {
@@ -315,7 +404,7 @@ mod tests {
         mm.acknowledge_order(new_order(101, 1, Side::Sell, 15_000, 100));
 
         let tr = new_trade(2, 1, 101, Side::Buy, 15_000, 40);
-        mm.update_portfolio(-40, &tr); // maker sold 40
+        mm.update_portfolio(-40, &tr);
 
         let ord = mm.open_orders.get(&101).expect("order still open");
         assert_eq!(ord.filled, 40);
@@ -339,7 +428,7 @@ mod tests {
     fn taker_trade_leaves_open_orders_untouched() {
         let mut mm = MarketMakerAgent::new(1);
 
-        let tr = new_trade(1, 2, 202, Side::Buy, 15_000, 75); // mm is taker
+        let tr = new_trade(1, 2, 202, Side::Buy, 15_000, 75);
         mm.update_portfolio(75, &tr);
 
         assert_eq!(mm.inventory, MM_INITIAL_INVENTORY + 75);
