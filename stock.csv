@@ -1,0 +1,4 @@
+﻿ticker,id,company_name,total_float,initial_price,sentiment_port
+APPL,1,Apple,15982000000,195.37,3001
+GOOGL,2,Google Class A,15982000000,195.37,4001
+PLTR,3,Palantir Technologies,15982000000,195.37,5001

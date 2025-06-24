@@ -1,5 +1,6 @@
-// src/sentiment.rs
 
+// src/sentiment.rs
+// CHANGE : Now this is a client that connects
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use rand::Rng;

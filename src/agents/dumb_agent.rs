@@ -1,7 +1,7 @@
 // src/agents/dumb_agent.rs
 use rand::{Rng, seq::SliceRandom};
 use std::collections::HashMap;
-
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use super::{
     agent_trait::{Agent, MarketView},
     config::{
@@ -12,12 +12,18 @@ use super::{
 };
 use crate::{
     agents::latency::DUMB_AGENT_TICKS_UNTIL_ACTIVE,
-    types::order::{Order, OrderRequest, Side, Trade},
+    types::order::{self, Order, OrderRequest, Side, Trade},
 };
 //allow cloning
 #[derive(Debug, Clone)]
 pub struct DumbAgent {
     id: usize,
+    // tx channel to send order to the market
+    order_channel : Sender<OrderRequest>,
+    //rx channels to recieve acknowledgements and trade updates
+    ack_channel: Receiver<Order>,
+    // channel to update the agent's inventory
+    port_channel: Receiver<Trade>,// This is redundant but I will get rid of it later. Ack channel will serve this purpose
     // update inventory as a hashmap linking the stock id to the number of shares held .(Signed so I can short)
     inventory: HashMap<u64, i64>,
     ticks_until_active: u32,
@@ -28,9 +34,12 @@ pub struct DumbAgent {
 }
 
 impl DumbAgent {
-    pub fn new(id: usize) -> Self {
+    pub fn new(id: usize,tx_order:Sender<OrderRequest>,rx_order:Receiver<Order>,pt_order:Receiver<Trade>) -> Self {
         Self {
             id,
+            order_channel: tx_order,
+            ack_channel: rx_order,
+            port_channel: pt_order,
             // empty inventory hashmap
             inventory: HashMap::new(),
             ticks_until_active: DUMB_AGENT_TICKS_UNTIL_ACTIVE,
@@ -46,19 +55,19 @@ impl DumbAgent {
 //  Agent impl
 // -----------------------------------------------------------------------------
 impl Agent for DumbAgent {
-    fn decide_actions(&mut self, view: &MarketView) -> Vec<OrderRequest> {
+    fn decide_actions(&mut self, view: &MarketView)  {
         if self.ticks_until_active > 0 {
             self.ticks_until_active -= 1;
-            return vec![];
+            return ;
         }
 
         let mut rng = rand::thread_rng();
-        let mut out = Vec::new();
+        //let mut out = Vec::new();
 
         /* --- choose a random instrument for this tick --- */
         let universe: Vec<u64> = view.stocks.get_all_ids();
         if universe.is_empty() {
-            return out;
+            return ;
         }
         let stock_id = *universe.choose(&mut rng).unwrap();
 
@@ -85,91 +94,122 @@ impl Agent for DumbAgent {
                         }
                     }
                 }
-
+                // this is from a prehistoric commit , do not laugh
                 let reqs = if side == Side::Buy {
-                    self.buy_stock(stock_id, volume)
+                    let order_req = OrderRequest::MarketOrder {
+                        agent_id: self.id,
+                        stock_id,
+                        side,
+                        volume,
+                    };
+                    self.order_channel.send(order_req).expect("Failed to send order request");
                 } else {
-                    self.sell_stock(stock_id, volume)
+                    let order_req = OrderRequest::MarketOrder {
+                        agent_id: self.id,
+                        stock_id,
+                        side,
+                        volume,
+                    };
+                    self.order_channel.send(order_req).expect("Failed to send order request");
                 };
-                out.extend(reqs);
+                //out.extend(reqs);
             }
         }
-        out
+        //out
     }
     fn run(&mut self) { // loop decide actions here 
+        //run in a loop
+        loop{
+            //spwan three threads 1. to decide actions 2. to listen to order acknowledgements 3. to listen to trade updates
+            
+        }
     }
-    fn buy_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest> {
-        vec![OrderRequest::MarketOrder {
+    fn buy_stock(&mut self, stock_id: u64, volume: u64)  {
+        // create a market order request
+        let order_req = OrderRequest::MarketOrder {
             agent_id: self.id,
             stock_id,
             side: Side::Buy,
             volume,
-        }]
+        };
+        //send the order request to the market
+        self.order_channel.send(order_req).expect("Failed to send order request");
     }
 
-    fn sell_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest> {
-        vec![OrderRequest::MarketOrder {
+    fn sell_stock(&mut self, stock_id: u64, volume: u64) {
+        let order_req = OrderRequest::MarketOrder {
             agent_id: self.id,
             stock_id,
             side: Side::Sell,
             volume,
-        }]
+        };
+        self.order_channel.send(order_req).expect("Failed to send order request");
     }
 
-    fn margin_call(&mut self) -> Vec<OrderRequest> {
+    fn margin_call(&mut self)  {
         if self.cash < -self.margin {
             // CREATE AN empty vector to hold the liquidation orders
-            let mut liquidation_orders = Vec::new();
+            //let mut liquidation_orders = Vec::new();
             // sweep the inventory hashmap and burn all shares into the lqiuidation orders
             for (&stock_id, &vol) in &self.inventory {
-                if vol != 0 {
-                    liquidation_orders.push(OrderRequest::MarketOrder {
+                if vol > 0 {
+                    let order_req = OrderRequest::MarketOrder {
                         agent_id: self.id,
                         stock_id,
                         side: Side::Sell,
-                        volume: vol.unsigned_abs() as u64, // convert to unsigned for market order
-                    });
+                        volume: vol.unsigned_abs() as u64, // sell all shares
+                    };
+                    self.order_channel.send(order_req).expect("Failed to send liquidation order");
                 }
             }
-            // clear the inventory
-            self.inventory.clear();
+            // if the cash still doesn't cover the margin, then declare Chapter 11 bankruptcy  :)
+            // clear the inventory -- Nah wait for acks to do this .
+            //self.inventory.clear();
             // return the liquidation orders
-            return liquidation_orders;
+            
         }
 
-        vec![]
+        //vec![]
     }
 
     /* ---------- bookkeeping ---------- */
 
-    fn acknowledge_order(&mut self, order: Order) {
-        self.open_orders.insert(order.id, order);
-    }
-
-    fn update_portfolio(&mut self, vol: i64, tr: &Trade) {
-        // Update the inventory for the specific stock_id
-        let stock_id = tr.stock_id;
-        // update the hashmap inventory
-        let current_inventory = self.inventory.entry(stock_id).or_insert(0);
-        *current_inventory += vol;
-        self.cash -= vol as f64 * (tr.price as f64 / 100.0);
-
-        if tr.maker_agent_id == self.id {
-            if let Some(o) = self.open_orders.get_mut(&tr.maker_order_id) {
-                o.filled += tr.volume;
-                if o.filled >= o.volume {
-                    self.open_orders.remove(&tr.maker_order_id);
-                }
-            }
+    fn acknowledge_order(&mut self) {
+        // listen to the order acknowledgements and update the open orders hashmap
+        while let Ok(order) = self.ack_channel.try_recv() {
+            self.open_orders.insert(order.id, order);
         }
     }
+
+    fn update_portfolio(&mut self) {
+        //extract the stock_id from the trade channel
+        while let Ok(tr) = self.port_channel.try_recv() {
+            // update the inventory for the specific stock_id
+            let stock_id = tr.stock_id;
+            let vol = tr.volume as i64 * if tr.taker_side == Side::Buy { 1 } else { -1 };
+            *self.inventory.entry(stock_id).or_insert(0) += vol;
+
+            // update cash based on the trade price and volume
+            self.cash -= (tr.price as f64 / 100.0) * tr.volume as f64;
+            // update the open orders since the architecture enforces that the agent making the order is this one
+            if tr.maker_agent_id == self.id {
+                if let Some(o) = self.open_orders.get_mut(&tr.maker_order_id) {
+                    o.filled += tr.volume;
+                    if o.filled >= o.volume {
+                        self.open_orders.remove(&tr.maker_order_id);    }
+            
+        }} 
+        //let trade = self.port_channel.try_recv();
+        // Update the inventory for the specific stock_id
+        
+    }}
 
     fn get_pending_orders(&self) -> Vec<Order> {
         self.open_orders.values().cloned().collect()
     }
 
-    fn cancel_open_order(&mut self, _id: u64) -> Vec<OrderRequest> {
-        vec![] // not implemented
+    fn cancel_open_order(&mut self, _id: u64)  {
+        //vec![] // not implemented
     }
 
     /* ---------- misc ---------- */
@@ -197,105 +237,5 @@ impl Agent for DumbAgent {
             }
         });
         self.port_value
-    }
-}
-
-// -----------------------------------------------------------------------------
-//  Unit Tests
-// -----------------------------------------------------------------------------
-#[cfg(test)]
-mod tests {
-    use super::*;
-    //use crate::types::order::{OrderRequest, Side};
-    use crate::types::order::Side;
-    const STOCK_ID: u64 = 1; // arbitrary id for all mock trades
-
-    /* helper: create a Trade */
-    fn mock_trade(price: u64, vol: u64) -> Trade {
-        Trade {
-            price,
-            stock_id: STOCK_ID,
-            volume: vol,
-            taker_agent_id: 1,
-            maker_agent_id: 2,
-            maker_order_id: 101,
-            taker_side: Side::Buy,
-        }
-    }
-
-    #[test]
-    fn cash_updates_on_buy() {
-        let mut a = DumbAgent::new(0);
-        let cash0 = a.cash;
-        let tr = mock_trade(15_000, 10); // $150 × 10
-        a.update_portfolio(10, &tr); // buy
-        let cost = 10.0 * 150.0;
-        assert!((a.cash - (cash0 - cost)).abs() < 1e-9);
-        // inventory should increase by 10 shares
-        assert_eq!(a.inventory.get(&STOCK_ID).unwrap_or(&0), &10);
-        //assert_eq!(a.inventory, 300_000_000 + 10);
-    }
-
-    #[test]
-    fn cash_updates_on_sell() {
-        let mut a = DumbAgent::new(0);
-        let cash0 = a.cash;
-        let tr = mock_trade(15_000, 10);
-        a.update_portfolio(-10, &tr); // sell
-        let proceeds = 10.0 * 150.0;
-        assert!((a.cash - (cash0 + proceeds)).abs() < 1e-9);
-        // inventory should decrease by 10 shares
-        assert_eq!(a.inventory.get(&STOCK_ID).unwrap_or(&0), &-10);
-        //assert_eq!(a.inventory, 300_000_000 - 10);
-    }
-
-    #[test]
-    fn margin_call_triggers() {
-        let mut a = DumbAgent::new(0);
-        a.cash = -4_000_000_000.1; // breach
-        a.inventory.insert(0, 500);
-        a.inventory.insert(1, 100);
-
-        let reqs = a.margin_call();
-        assert_eq!(reqs.len(), 2, "should liquidate all inventory");
-
-        // Collect the liquidation orders into a more testable format
-        let mut liquidations = HashMap::new();
-        for req in &reqs {
-            match req {
-                OrderRequest::MarketOrder {
-                    agent_id,
-                    stock_id,
-                    side,
-                    volume,
-                } => {
-                    assert_eq!(*agent_id, a.id);
-                    assert_eq!(*side, Side::Sell);
-                    liquidations.insert(*stock_id, *volume);
-                }
-                _ => panic!("Expected MarketOrder"),
-            }
-        }
-
-        // Verify we got the right liquidations
-        assert_eq!(liquidations.get(&0), Some(&500));
-        assert_eq!(liquidations.get(&1), Some(&100));
-        assert!(a.inventory.is_empty(), "inventory should be cleared");
-    }
-
-    #[test]
-    fn margin_call_not_triggered_when_safe() {
-        let mut good = DumbAgent::new(0);
-        good.cash = 1_000.0;
-
-        let mut within = DumbAgent::new(1);
-        within.cash = -3_999_999_999.9;
-
-        let mut at_limit = DumbAgent::new(2);
-        at_limit.cash = -4_000_000_000.0;
-
-        assert!(good.margin_call().is_empty());
-        assert!(within.margin_call().is_empty());
-        assert!(at_limit.margin_call().is_empty());
     }
 }

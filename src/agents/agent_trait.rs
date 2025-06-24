@@ -3,6 +3,11 @@
 use crate::simulators::order_book::OrderBook;
 use crate::stocks::definitions::StockMarket;
 use crate::types::order::{Order, OrderRequest, Trade}; // replaces Symbol import
+use crossbeam_channel::{
+    unbounded, Receiver, Sender,
+};
+use std::sync::Arc;
+
 //use std::collections::HashMap;
 /// A read-only snapshot of the market given to an agent for decision-making.
 pub struct MarketView<'a> {
@@ -17,31 +22,31 @@ pub struct MarketView<'a> {
 /// TODO: Later add a SYMBOL ticker argument when we are managing lots of stocks to handle
 pub trait Agent {
     // === Core Decision-Making ===
-    fn decide_actions(&mut self, market_view: &MarketView) -> Vec<OrderRequest>;
+    fn decide_actions(&mut self, market_view: &MarketView) ;
 
     // === High-Level API for RL / External Controllers ===
     /// Creates a request to buy a certain volume of the asset.
-    fn buy_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest>;
+    fn buy_stock(&mut self, stock_id: u64, volume: u64) ;
     /// Creates a request to sell a certain volume of the asset.
-    fn sell_stock(&mut self, stock_id: u64, volume: u64) -> Vec<OrderRequest>;
+    fn sell_stock(&mut self, stock_id: u64, volume: u64) ;
 
     // === Order & Position Management ===
     /// The "promise fulfillment" callback from the Market.
     /// The Market calls this to give the agent the official Order object with its ID.
-    fn acknowledge_order(&mut self, order: Order);
+    fn acknowledge_order(&mut self);
 
     /// The Market can call this to force an agent to cover a short position.
-    fn margin_call(&mut self) -> Vec<OrderRequest>;
+    fn margin_call(&mut self) ;
 
     /// A way for the simulation engine to update the agent's internal state after a trade.
-    fn update_portfolio(&mut self, trade_volume: i64, trade: &Trade);
+    fn update_portfolio(&mut self);
     /// A way for the agent to look at the net worth of their portfolio
     fn evaluate_port(&mut self, market_view: &MarketView) -> f64;
     /// Get a list of all currently open orders for this agent.
     fn get_pending_orders(&self) -> Vec<Order>;
 
     /// Creates a request to cancel an open order.
-    fn cancel_open_order(&mut self, order_id: u64) -> Vec<OrderRequest>;
+    fn cancel_open_order(&mut self, order_id: u64) ;
     /// To have the agents run perpetually
     // TODO: decide_actions return type should be void since we will be adding a mpsc channel to send actions to the market.
     // Right now this will be a stub

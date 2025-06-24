@@ -26,7 +26,7 @@ pub struct Market {
 
     /* participants */
     agents: HashMap<usize, Box<dyn Agent>>,
-    initial_agent_types: Vec<AgentType>,
+    initial_agent_types: Vec<AgentType>, // TODO: Get rid of this ,we are gonna migrate 
 
     /* counters */
     order_id_counter: u64,
@@ -123,6 +123,7 @@ impl Market {
 // -----------------------------------------------------------------------------
 impl Marketable for Market {
     fn step(&mut self) -> f64 {
+        // TODO: Market should not manage agaents! Refactor this. Make this a dumb manager of orderbooks.
         /* -------- Phase 1: agent decisions -------- */
         let view = MarketView {
             order_books: &self.order_books,

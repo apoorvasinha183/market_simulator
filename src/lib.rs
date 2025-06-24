@@ -9,6 +9,8 @@ pub mod shared_types;
 pub mod simulators;
 pub mod stocks;
 pub mod types;
+pub mod simulation;
+pub mod sentiment_engine;
 // === 2. Re-export the public-facing components to create a clean API ===
 
 // --- From `agents` ---
@@ -41,4 +43,6 @@ pub use shared_types::OptionType;
 pub use stocks::{Stock, StockMarket, Symbol, default_stock_universe};
 
 // --- From 'sentiment' ---
-pub use sentiment::{SentimentConfig, get as get_sentiment, init as init_sentiment};
+//pub use sentiment::{SentimentConfig, get as get_sentiment, init as init_sentiment};
+pub use sentiment_engine::{SentimentEngine};
+// -- From the orchestra agent ---
