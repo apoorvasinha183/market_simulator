@@ -20,7 +20,8 @@ use crate::simulators::market_trait::Marketable;
 pub struct MarketState {
     pub order_books: HashMap<u64, OrderBook>,
     pub stocks: StockMarket,
-    // Other snapshot data can be added here.
+    pub last_traded_price: HashMap<u64, f64>,
+    pub cumulative_volume: HashMap<u64, u64>,
 }
 
 // This is the "pointer" to the shadow book that agents will hold.
@@ -49,6 +50,7 @@ pub struct Orchestra {
     // They are boxed to allow for different agent types (trait objects).
     agents: Vec<Box<dyn Agent>>,
     market: Market,
+    shadow_handle: ShadowBookHandle,
 }
 
 impl Orchestra {
@@ -62,11 +64,15 @@ impl Orchestra {
             Arc::new(RwLock::new(MarketState {
                 order_books: HashMap::new(),
                 stocks: stock_market.clone(), // Initial clone, market will overwrite
+                last_traded_price: HashMap::new(),
+                cumulative_volume: HashMap::new(),
             }));
         // For now, premium is just a clone of the normal setup handle.
         let premium_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
                 order_books: HashMap::new(),
                 stocks: stock_market.clone(), // Initial clone, market will overwrite
+                last_traded_price: HashMap::new(),
+                cumulative_volume: HashMap::new(),
             }));
         println!("[Orchestra] Shared shadow books created.");
 
@@ -123,7 +129,11 @@ impl Orchestra {
         println!("[Orchestra] Market instantiated and initialized.");
 
         // === 4. Return the fully prepared, but not yet running, Orchestra ===
-        Orchestra { agents, market }
+        Orchestra { agents, market, shadow_handle: normal_shadow_book.clone() }
+    }
+
+    pub fn get_shadow_handle(&self) -> ShadowBookHandle {
+        self.shadow_handle.clone()
     }
 
     /// This method consumes the Orchestra and launches all actors in their own threads.

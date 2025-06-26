@@ -22,6 +22,7 @@ enum ShadowEvent {
     LimitOrder(Order),
     MarketOrder(Order),
     CancelOrder { order_id: u64, agent_id: usize },
+    Trade(Trade),
 }
 
 // -----------------------------------------------------------------------------
@@ -74,6 +75,8 @@ impl Market {
             let mut state_lock = shadow_book_handle.write().unwrap();
             state_lock.stocks = stocks.clone();
             state_lock.order_books = order_books.clone();
+            state_lock.last_traded_price = last_traded_price.clone();
+            state_lock.cumulative_volume = cumulative_volume.clone();
         } // Write lock is released here.
         println!("[Market] Shadow book synchronized.");
         println!("[Market] Synchronizing initial state to the rich people's book...");
@@ -81,6 +84,8 @@ impl Market {
             let mut state_lock = vip_book_handle.write().unwrap();
             state_lock.stocks = stocks.clone();
             state_lock.order_books = order_books.clone();
+            state_lock.last_traded_price = last_traded_price.clone();
+            state_lock.cumulative_volume = cumulative_volume.clone();
         } // Write lock is released here.
         println!("[Market] Vip book synchronized(meh).");
 
@@ -118,7 +123,7 @@ impl Market {
             // --- Worker-Private State ---
             // 1. The BACK BUFFER: a private copy of the order books for processing.
             //    Initialized by cloning the already-synced front buffer.
-            let mut back_buffer = shadow_book_handle.read().unwrap().order_books.clone();
+            let mut back_buffer: MarketState = shadow_book_handle.read().unwrap().clone();
             
             // 2. A temporary log to hold events during the catch-up phase after a swap.
             let mut event_log: Vec<ShadowEvent> = Vec::with_capacity(update_threshold);
@@ -135,20 +140,28 @@ impl Market {
                 // --- Apply event to the private BACK BUFFER (no locking required) ---
                 match event {
                     ShadowEvent::LimitOrder(mut order) => {
-                        if let Some(book) = back_buffer.get_mut(&order.stock_id) {
+                        if let Some(book) = back_buffer.order_books.get_mut(&order.stock_id) {
                             book.process_limit_order(&mut order);
                         }
                     }
                     ShadowEvent::MarketOrder(order) => {
-                        if let Some(book) = back_buffer.get_mut(&order.stock_id) {
+                        if let Some(book) = back_buffer.order_books.get_mut(&order.stock_id) {
                             book.process_market_order(order.agent_id, order.side, order.volume);
                         }
                     }
                     ShadowEvent::CancelOrder { order_id, agent_id } => {
-                        for book in back_buffer.values_mut() {
+                        for book in back_buffer.order_books.values_mut() {
                             if book.cancel_order(order_id, agent_id ) {
                                 break;
                             }
+                        }
+                    }
+                    ShadowEvent::Trade(trade) => {
+                        if let Some(price_mut) = back_buffer.last_traded_price.get_mut(&trade.stock_id) {
+                            *price_mut = trade.price as f64 / 100.0;
+                        }
+                        if let Some(vol_mut) = back_buffer.cumulative_volume.get_mut(&trade.stock_id) {
+                            *vol_mut += trade.volume;
                         }
                     }
                 }
@@ -165,7 +178,7 @@ impl Market {
                         let mut state_lock = shadow_book_handle.write().unwrap();
                         // Instantly swap our up-to-date back_buffer with the stale front_buffer.
                         // Agents now see the new state. We now hold the old, stale state.
-                        std::mem::swap(&mut back_buffer, &mut state_lock.order_books);
+                        std::mem::swap(&mut back_buffer, &mut *state_lock);
                     } // Lock is released here.
 
                     // --- Step B: Catch up the new back_buffer (the old front_buffer) ---
@@ -175,22 +188,30 @@ impl Market {
                     for logged_event in &event_log {
                         match logged_event {
                             ShadowEvent::LimitOrder(order) => {
-                                if let Some(book) = back_buffer.get_mut(&order.stock_id) {
+                                if let Some(book) = back_buffer.order_books.get_mut(&order.stock_id) {
                                     // Need a mutable clone to pass to process_limit_order
                                     let mut o = order.clone();
                                     book.process_limit_order(&mut o);
                                 }
                             }
                             ShadowEvent::MarketOrder(order) => {
-                                if let Some(book) = back_buffer.get_mut(&order.stock_id) {
+                                if let Some(book) = back_buffer.order_books.get_mut(&order.stock_id) {
                                     book.process_market_order(order.agent_id, order.side, order.volume);
                                 }
                             }
                             ShadowEvent::CancelOrder { order_id, agent_id } => {
-                                for book in back_buffer.values_mut() {
+                                for book in back_buffer.order_books.values_mut() {
                                     if book.cancel_order(*order_id, *agent_id ) {
                                         break;
                                     }
+                                }
+                            }
+                            ShadowEvent::Trade(trade) => {
+                                if let Some(price_mut) = back_buffer.last_traded_price.get_mut(&trade.stock_id) {
+                                    *price_mut = trade.price as f64 / 100.0;
+                                }
+                                if let Some(vol_mut) = back_buffer.cumulative_volume.get_mut(&trade.stock_id) {
+                                    *vol_mut += trade.volume;
                                 }
                             }
                         }
@@ -268,6 +289,8 @@ impl Market {
             if let Some(maker_ch) = self.agent_channels.get(&tr.maker_agent_id) {
                 maker_ch.trade_tx.send(tr.clone()).unwrap();
             }
+            self.shadow_update_tx.send(ShadowEvent::Trade(tr.clone())).unwrap();
+            self.vip_shadow_update_tx.send(ShadowEvent::Trade(tr.clone())).unwrap();
         }
 
         // Update internal market statistics
