@@ -5,12 +5,11 @@
 // It receives orders via a channel and publishes updates to agents and a shadow book reconciler.
 // If this file doesn't work , they will show this as an example of how to generate combinatorial deadlocks .
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 use std::thread;
 
 use crate::{
     stocks::definitions::StockMarket,
-    types::{Order, OrderRequest, Side, Trade},
+    types::{Order, OrderRequest, Trade},
      Marketable, OrderBook,
 };
 use crate::simulation::orchestra::{AgentResponseChannels, ShadowBookHandle, MarketState};

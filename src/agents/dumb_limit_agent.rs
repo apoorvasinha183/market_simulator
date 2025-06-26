@@ -19,6 +19,7 @@ use crate::{
     types::order::{Order, OrderRequest, Side, Trade},
 };
 
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct DumbLimitAgent {
     id: usize,

@@ -20,6 +20,7 @@ use crate::{
 
 /// A patient, high-capital agent that periodically cancels and replaces
 /// large limit orders far from mid-price.
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct WhaleAgent {
     id: usize,

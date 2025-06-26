@@ -635,9 +635,9 @@ fn main() -> Result<(), eframe::Error> {
 
     let participants = vec![
         AgentType::DumbMarket,
-        // AgentType::DumbLimit,
-        // AgentType::MarketMaker,
-        // AgentType::WhaleAgent,
+        AgentType::DumbLimit,
+        AgentType::MarketMaker,
+        AgentType::WhaleAgent,
     ];
 
     let orchestra = Orchestra::new(participants, 100, 100);

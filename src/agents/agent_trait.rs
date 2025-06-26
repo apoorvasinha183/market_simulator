@@ -2,11 +2,7 @@
 
 use crate::simulators::order_book::OrderBook;
 use crate::stocks::definitions::StockMarket;
-use crate::types::order::{Order, OrderRequest, Trade}; // replaces Symbol import
-use crossbeam_channel::{
-    unbounded, Receiver, Sender,
-};
-use std::sync::Arc;
+use crate::types::order::Order; // replaces Symbol import
 
 //use std::collections::HashMap;
 /// A read-only snapshot of the market given to an agent for decision-making.

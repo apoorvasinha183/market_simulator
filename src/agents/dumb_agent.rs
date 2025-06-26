@@ -14,7 +14,7 @@ use super::{
 };
 use crate::{
     agents::latency::DUMB_AGENT_TICKS_UNTIL_ACTIVE,
-    types::order::{self, Order, OrderRequest, Side, Trade},
+    types::order::{Order, OrderRequest, Side, Trade},
     simulation::orchestra::ShadowBookHandle,
 };
 

@@ -8,11 +8,15 @@ use std::thread::{self, JoinHandle};
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
 use crate::agents::dumb_agent::DumbAgent;
+use crate::agents::dumb_limit_agent::DumbLimitAgent;
+use crate::agents::ipo_agent::IpoAgent;
+use crate::agents::market_maker_agent::MarketMakerAgent;
+use crate::agents::whale_agent::WhaleAgent;
 use crate::market::Market; 
 use crate::stocks::StockMarket;
 use crate::types::order::{Order, OrderRequest, Trade};
 use crate::OrderBook; // Assuming order_book.rs is in simulators
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{unbounded, Sender};
 use crate::simulators::market_trait::Marketable;
 
 // --- This is the shared state agents will read from. ---
@@ -107,8 +111,34 @@ impl Orchestra {
                     rx_trade,
                     view_handle,
                 )),
-                // When you add other agents, they will be constructed here.
-                _ => unimplemented!("Agent type not yet supported in this refactor"),
+                AgentType::DumbLimit => Box::new(DumbLimitAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                AgentType::MarketMaker => Box::new(MarketMakerAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                AgentType::IPO => Box::new(IpoAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                AgentType::WhaleAgent => Box::new(WhaleAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
             };
             agents.push(new_agent);
         }
