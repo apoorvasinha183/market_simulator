@@ -94,4 +94,4 @@ The project leverages several high-quality Rust crates:
 
 ## License
 
-This project is licensed under the Apache License 2.0. A copy of the license can be found in the `LICENSE` file.
+This project is licensed under the MIT License. A copy of the license can be found in the `LICENSE` file.
