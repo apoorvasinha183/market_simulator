@@ -50,7 +50,7 @@ impl Stock {
 }
 /// Maybe later we can have a Stock Mareket struct that holds a collection of stocks and their metadata.
 /// We can then have a facility to add stocks to the market, remove them, and query for them.
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct StockMarket {
     /// Collection of stocks available in the market.
     pub stocks: Vec<Stock>,

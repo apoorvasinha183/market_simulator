@@ -1,61 +1,161 @@
-/*
-This should be the first file for you to refer to when you want to understand how the market simulation works.
-This file is the central place where all the moving parts of the market i.e.
-agents, stocks and market are initialized and run.
-Right now it simply runs the market simulations by invoking the initis ,
-and then the .run methods in every object.
-Let me break it down :
-1. All stock instruments in the instrument universe are initialized. They are derived from a common csv file .
-There is a parallel process that will generate stock sentiment . Every ticker will pub;ish their sentiment on a port.
-2. Creates as many crossbeam channels to enable message passing between threads . There is a single mpsc channel 
-where each agent submits their actions to the market and the market recieves them. The market also establishes 
-a private channel with each agent where it sends them the acknowledgements or force a protfolio update. 
-3. In the run routine all the pertual functions in agents and markets are invoked. This is achieved by thread splitting.
+// src/orchestra.rs
 
-4. TODO : Expose a method for an external python based agent to connect to the market . I will create a new kind of agent
-that specializes in this bullshit.
-5. TODO: hANDLER managementfor the threads .
-*/
-/* 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::thread;    
+use std::sync::{Arc, RwLock};
+use std::thread::{self, JoinHandle};
 
-use crate::agents::agent_trait::{Agent, MarketView};
+// --- Crate-level imports ---
+use crate::agents::agent_trait::Agent;
+use crate::agents::agent_type::AgentType;
 use crate::agents::dumb_agent::DumbAgent;
-use crate::agents::ipo_agent::IpoAgent;
-use crate::agents::market_maker_agent::MarketMakerAgent;
-use crate::agents::whale_agent::WhaleAgent;
-use crate::market::Market;
-use crate::stocks::{default_stock_universe, StockMarket};   
-use crate::types::order::{Order, OrderRequest};
-use crate::types::order::Side;
-use crate::types::order::Trade;
-use crate::types::order_book::OrderBook;
+use crate::market::Market; 
+use crate::stocks::StockMarket;
+use crate::types::order::{Order, OrderRequest, Trade};
+use crate::OrderBook; // Assuming order_book.rs is in simulators
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use crate::simulators::market_trait::Marketable;
-use crate::simulators::order_book::OrderBook as OrderBookSimulator;
-use crate::simulators::gbm::GBMSimulator;
-use crate::pricing::{Greeks, OptionPricer};
-*/
-use crossbeam_channel::{unbounded, Sender};
-pub struct Orchestra {
-    //market: Market,
-    //agents: Vec<Box<dyn Agent>>,
-    //order_books: HashMap<u64, OrderBook>,
-}
-impl Orchestra {
-    // Initiate the orchetra with predefined agents and the market ,
-    // We also create the common channel for agents to submit their acctions to the market . An unbounded crossbeam channel
-    // Market is the recepient of that channel and therefore we have to pass rx to the market and tx's to the agents.
-    // The market in turn also establishes a private channl where it will sent the agents the acknowledgemnts of the order 
-    // and the portfolio updates if applicable.
 
-    // Step 1 : Refactor the  agents trait to accept an outboudn channel to the market and a private channel .
-    // Step 2 : Refactor the market to accept the inbound orders channels and the private channels to send the agents.
-    // Step 3 : The market should maintain the tx channels for each agent by id perhaps to simplify the lookup for sending the 
-    pub fn new() -> Self {
-        // Open a channel for agents to submit their actions to the market
-        let (tx_market, rx_market) = unbounded::<OrderRequest>();
+// --- This is the shared state agents will read from. ---
+#[derive(Debug, Clone)] // Clone is needed for the Market to initialize the shadow book
+pub struct MarketState {
+    pub order_books: HashMap<u64, OrderBook>,
+    pub stocks: StockMarket,
+    // Other snapshot data can be added here.
+}
+
+// This is the "pointer" to the shadow book that agents will hold.
+pub type ShadowBookHandle = Arc<RwLock<MarketState>>;
+
+impl MarketState {
+    pub fn book(&self, stock_id: u64) -> Option<&OrderBook> {
+        self.order_books.get(&stock_id)
+    }
+    pub fn get_mid_price(&self, stock_id: u64) -> Option<u64> {
+        let book = self.book(stock_id)?;
+        let best_bid = book.bids.keys().next_back()?;
+        let best_ask = book.asks.keys().next()?;
+        Some((best_bid + best_ask) / 2)
+    }
+}
+
+/// A dedicated struct to hold all the outbound channels FROM the market TO a single agent.
+pub struct AgentResponseChannels {
+    pub ack_tx: Sender<Order>,
+    pub trade_tx: Sender<Trade>,
+}
+
+pub struct Orchestra {
+    // The Orchestra now holds the actors it will manage.
+    // They are boxed to allow for different agent types (trait objects).
+    agents: Vec<Box<dyn Agent>>,
+    market: Market,
+}
+
+impl Orchestra {
+    pub fn new(agent_types: Vec<AgentType>,normal_processing:usize,premium_processing:usize) -> Self {
+        println!("[Orchestra] Initializing simulation...");
+
+        // === 1. Create Infrastructure ===
+        let stock_market = StockMarket::new();
+        // The shadow book is created empty. The Market is responsible for its initial state.
+        let normal_shadow_book: ShadowBookHandle =
+            Arc::new(RwLock::new(MarketState {
+                order_books: HashMap::new(),
+                stocks: stock_market.clone(), // Initial clone, market will overwrite
+            }));
+        // For now, premium is just a clone of the normal setup handle.
+        let premium_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
+                order_books: HashMap::new(),
+                stocks: stock_market.clone(), // Initial clone, market will overwrite
+            }));
+        println!("[Orchestra] Shared shadow books created.");
+
+        let (order_tx, order_rx) = unbounded::<OrderRequest>();
+        println!("[Orchestra] Central market order channel created.");
+
+        // === 2. Instantiate Agents and Register Their Channels ===
+        let mut agents: Vec<Box<dyn Agent>> = Vec::new();
+        let mut registration_data: HashMap<usize, AgentResponseChannels> = HashMap::new();
+
+        println!("[Orchestra] Creating {} agents...", agent_types.len());
+        for (id, agent_type) in agent_types.into_iter().enumerate() {
+            let (tx_ack, rx_ack) = unbounded::<Order>();
+            let (tx_trade, rx_trade) = unbounded::<Trade>();
+
+            let response_channels = AgentResponseChannels {
+                ack_tx: tx_ack,
+                trade_tx: tx_trade,
+            };
+            registration_data.insert(id, response_channels);
+
+            let view_handle = match agent_type {
+                _ => normal_shadow_book.clone(),
+            };
+
+            // Create the agent. Note we are only handling DumbMarket for now.
+            let new_agent: Box<dyn Agent> = match agent_type {
+                AgentType::DumbMarket => Box::new(DumbAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                // When you add other agents, they will be constructed here.
+                _ => unimplemented!("Agent type not yet supported in this refactor"),
+            };
+            agents.push(new_agent);
+        }
+        println!("[Orchestra] {} agents instantiated.", agents.len());
+
+        // === 3. Instantiate Market ===
+        // The Market is given the receiving end of the order channel, the agent address book,
+        // and a handle to the shadow book it must maintain.
+        let market = Market::new(
+            &stock_market,
+            order_rx,
+            registration_data,
+            normal_shadow_book.clone(), // Pass the handle for the normal book
+            normal_processing,
+            premium_shadow_book.clone(), // Pass the handle for the premium book
+            premium_processing,
+        );
+        println!("[Orchestra] Market instantiated and initialized.");
+
+        // === 4. Return the fully prepared, but not yet running, Orchestra ===
+        Orchestra { agents, market }
     }
 
+    /// This method consumes the Orchestra and launches all actors in their own threads.
+    /// It blocks until all simulation threads have completed.
+    pub fn run(self) {
+        println!("[Orchestra] Launching all actors...");
+
+        let mut handles: Vec<JoinHandle<()>> = vec![];
+
+        // First, move the market into its own thread.
+        // We must use a mutable variable to move out of the struct.
+        let mut market = self.market;
+        let market_handle = thread::spawn(move || {
+            market.run();
+        });
+        handles.push(market_handle);
+        println!("[Orchestra] Market thread launched.");
+
+        // Next, move each agent into its own thread.
+        for mut agent in self.agents {
+            let agent_handle = thread::spawn(move || {
+                agent.run();
+            });
+            handles.push(agent_handle);
+        }
+        println!("[Orchestra] {} agent threads launched.", handles.len() - 1);
+
+        // --- Wait for all threads to complete ---
+        println!("[Orchestra] All actors running. Waiting for completion...");
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        println!("[Orchestra] All threads have completed. Simulation finished.");
+    }
 }

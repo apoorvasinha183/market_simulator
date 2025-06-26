@@ -11,6 +11,7 @@ pub mod stocks;
 pub mod types;
 pub mod simulation;
 pub mod sentiment_engine;
+//pub mod simulation;
 // === 2. Re-export the public-facing components to create a clean API ===
 
 // --- From `agents` ---

@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 //use std::collections::HashMap;
 /// A read-only snapshot of the market given to an agent for decision-making.
+/// LEGACY : lEAVING IT HERE FOR NOW
 pub struct MarketView<'a> {
     /// One book per stock id.
     /// Live order books keyed by stock-id.
@@ -20,9 +21,9 @@ pub struct MarketView<'a> {
 
 /// The core trait that all our participant types will implement.
 /// TODO: Later add a SYMBOL ticker argument when we are managing lots of stocks to handle
-pub trait Agent {
+pub trait Agent:Send + Sync  {
     // === Core Decision-Making ===
-    fn decide_actions(&mut self, market_view: &MarketView) ;
+    fn decide_actions(&mut self) ;
 
     // === High-Level API for RL / External Controllers ===
     /// Creates a request to buy a certain volume of the asset.
