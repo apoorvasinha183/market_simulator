@@ -8,6 +8,8 @@ pub type Symbol = String;
 
 use serde::{Deserialize, Serialize};
 
+//use crate::sentiment;
+
 /// Immutable facts about a listed company. Adding a uniuqe stock ticker index to avoid the bs with String Copy
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Stock {
@@ -21,6 +23,8 @@ pub struct Stock {
     pub total_float: u64,
     /// Opening mid-price at time-zero of the simulation.
     pub initial_price: f64,
+    /// UDP port to listen to for stock's current sentiment.
+    pub sentiment_port: u64,
 }
 
 /// Convenience factory so call-sites stay concise.
@@ -32,6 +36,7 @@ impl Stock {
         company_name: T2,
         total_float: u64,
         initial_price: f64,
+        sentiment_port: u64,
     ) -> Self {
         Self {
             ticker: ticker.into(),
@@ -39,12 +44,13 @@ impl Stock {
             company_name: company_name.into(),
             total_float,
             initial_price,
+            sentiment_port
         }
     }
 }
 /// Maybe later we can have a Stock Mareket struct that holds a collection of stocks and their metadata.
 /// We can then have a facility to add stocks to the market, remove them, and query for them.
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub struct StockMarket {
     /// Collection of stocks available in the market.
     pub stocks: Vec<Stock>,
@@ -58,6 +64,22 @@ pub struct StockMarket {
 /// *Add or remove entries here to grow/shrink the simulation space. Right now I am fucking confused with IDs.*
 #[inline]
 pub fn default_stock_universe() -> Vec<Stock> {
+    // if stock.csv exists you build the vector from it otherwise fallback to the usual list
+    let file_path = "stock.csv".to_string();
+    if std::path::Path::new(&file_path).exists() {
+        // loop through the csv and build the vector
+        let mut stocks = Vec::new();
+        let mut rdr = csv::Reader::from_path(file_path).expect("Could not read stock.csv");
+        for result in rdr.deserialize() {
+            let stock: Stock = result.expect("Could not deserialize stock");
+            // print stock details
+            //println!("Loaded stock: {:?}", stock);
+            stocks.push(stock);}
+        //print how many stocks were loaded
+        println!("Loaded {} stocks ", stocks.len());
+        stocks
+    }
+    else{
     vec![
         Stock::new(
             "AAPL",
@@ -65,9 +87,10 @@ pub fn default_stock_universe() -> Vec<Stock> {
             "Apple Inc.",
             15_982_000_000, // float, not split-adjusted
             195.37,         // centre price at t=0
+            80,
         ),
-        Stock::new("MSFT", 2, "Microsoft Corporation", 7_448_000_000, 422.12),
-    ]
+        Stock::new("MSFT", 2, "Microsoft Corporation", 7_448_000_000, 422.12,80),
+    ] }
 }
 /// Prepares a stock id to stock mapping for fast lookups.
 /// This is used to quickly find a stock by its ID without iterating over the vector.
@@ -168,7 +191,7 @@ mod tests {
     use super::*;
 
     fn make_demo_stock() -> Stock {
-        Stock::new("GOOG", 42, "Alphabet Inc.", 12_345_678_000, 1337.00)
+        Stock::new("GOOG", 42, "Alphabet Inc.", 12_345_678_000, 1337.00,80)
     }
 
     #[test]

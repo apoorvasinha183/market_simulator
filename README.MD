@@ -1,221 +1,97 @@
-# Market Simulator
+# 🚀 Market Simulator
 
-A high-performance financial market simulator written in Rust for designing, training, and evaluating trading agents—classical or reinforcement-learning based—under realistic limit-order-book conditions.
+A high-performance, multi-threaded financial market simulator written in Rust. It's designed for designing, training, and evaluating trading agents—whether they're based on classical algorithms or modern reinforcement learning—in a realistic, high-fidelity limit order book environment.
 
-## Overview
+## What is this?
 
-**Market Simulator** is a comprehensive financial market simulation engine designed for researchers, quantitative developers, and algorithmic traders. The system provides exchange-grade order matching mechanics with microsecond-level performance characteristics, enabling realistic backtesting and agent development scenarios.
+Have you ever wanted to see how a trading idea would *really* perform? This project lets you do just that. It's a complete, end-to-end simulation of a stock market, from the exchange that matches orders to the different types of traders that populate it. You can write your own automated trading agents, drop them into the market, and see how they fare against a backdrop of market makers, retail investors, and even high-capital "whale" traders.
 
-### Key Features
+It's built to be both realistic and fast, using modern, concurrent Rust to handle thousands of events per second.
 
-* **Performance and Safety** – Implemented in pure safe Rust with core hot-loop execution in the low-microsecond range on commodity hardware
-* **Exchange-Grade Mechanics** – Price-time FIFO matching, partial fills, order cancellations, and multi-level order sweeps
-* **Pluggable Architecture** – Engine packaged as reusable crate with minimal `Agent` trait for runtime injection
-* **Synthetic Market Data** – Built-in generators for realistic price paths using Geometric Brownian Motion and Black-Scholes option pricing
-* **Multi-Asset Support** – Per-symbol sharded order books with cross-asset interaction capabilities
-* **Market Sentiment Integration** – Advanced sentiment modeling affecting market participant behavior
-* **Comprehensive Testing** – Unit tests for edge cases, Criterion benchmarks, and visualization tools
+## Key Features
 
-## Architecture
+*   **Realistic Exchange:** A true-to-life limit order book with price-time priority matching, partial fills, and cancellations.
+*   **Concurrent Architecture:** The market and every agent run in their own threads, communicating through high-speed channels for maximum performance and realism.
+*   **A World of Agents:** The simulation is populated by different types of traders, each with its own behavior, from simple market-order agents to sophisticated market makers.
+*   **Pluggable Agent Framework:** It's easy to create your own trading agents. Just implement the `Agent` trait and drop your creation into the simulation.
+*   **Live Visualization:** Comes with two real-time GUI applications built with `egui` to watch the market unfold. See the order book depth, price history, and more, live as it happens.
+*   **Sentiment Analysis:** The simulation includes a sentiment analysis engine that can influence agent behavior, adding another layer of realism.
+*   **Built with Rust:** All the performance, safety, and concurrency that Rust is famous for.
 
-### Core Components
+## How It Works: The Simulation Lifecycle
 
-The simulator is structured around several key modules:
+The simulation is managed by a central `Orchestra`, which is responsible for setting up and running the entire show.
 
-**Order Book Engine** (`src/simulators/order_book.rs`)
-- High-performance limit order book implementation
-- Price-time priority matching
-- Support for market orders, limit orders, and cancellations
-- Multi-level order sweeping capabilities
+1.  **Setup:** The `Orchestra` initializes the `Market` (the exchange), a cast of `Agents` (the traders), and the communication channels that connect them.
+2.  **Launch:** Each agent and the market are spawned into their own native threads.
+3.  **Interaction:** Agents make decisions based on their internal logic and a read-only "shadow" view of the market's order books. They send `OrderRequest` messages (limit orders, market orders, cancellations) to the market over a shared channel.
+4.  **Matching:** The `Market` thread continuously processes incoming orders, matching them in its private order books and generating `Trade` events.
+5.  **Communication:** The `Market` sends acknowledgements and trade notifications back to the relevant agents, who then update their internal state (like their cash and inventory).
+6.  **Visualization:** While all this is happening, you can run one of the visualizer applications to get a live, real-time view of the market state.
 
-**Market Simulation** (`src/market.rs`)
-- Central market state management
-- Tick-by-tick simulation orchestration
-- Agent coordination and execution scheduling
+## The Actors: A Look at the Agents
 
-**Agent Framework** (`src/agents/`)
-- Pluggable agent architecture
-- Reference implementations for market makers, momentum traders, and random flow
-- Standardized interface for custom agent development
+The simulation comes with a variety of built-in agent types:
 
-**Pricing Models** (`src/pricing/`)
-- Black-Scholes option pricing implementation
-- Greeks calculation for risk management
-- Fair value estimation utilities
+*   **`DumbAgent`:** Represents the unpredictable nature of retail traders by placing random market orders.
+*   **`DumbLimitAgent`:** A slightly more sophisticated retail trader that places limit orders around the current price.
+*   **`MarketMakerAgent`:** Provides liquidity to the market by maintaining a tight bid-ask spread, ensuring there are always orders to trade against.
+*   **`IpoAgent`:** Simulates an Initial Public Offering by placing a large number of sell orders at the beginning of the simulation.
+*   **`WhaleAgent`:** A high-capital, patient trader that places large, infrequent limit orders far from the mid-price, representing institutional flow.
 
-**Market Data Generation** (`src/simulators/gbm.rs`)
-- Geometric Brownian Motion price path generation
-- Configurable volatility and drift parameters
-- Realistic intraday price movement simulation
-
-**Market Sentiment** (`src/sentiment.rs`)
-- Sentiment factor modeling
-- Impact on agent behavior and market dynamics
-- Configurable sentiment scenarios
-
-### Data Types
-
-The system uses strongly-typed representations for all financial instruments and market operations:
-
-**Stock Management** (`src/stocks/`)
-- Stock symbol definitions and metadata
-- Multi-asset portfolio management
-- Cross-asset correlation modeling
-
-**Type System** (`src/types/` and `src/shared_types.rs`)
-- Comprehensive type definitions for orders, trades, and market events
-- Memory-efficient representations optimized for high-frequency operations
-
-## Performance Characteristics
-
-### Benchmark Results
-
-*Configuration: 50,000 resting orders, 25,000-share market sweep*
-*Hardware: Apple M1 Pro, single core, Rust 1.87 release profile*
-```
-
-Execution Time: [38.8 µs 40.1 µs 41.3 µs] (Criterion, 50 samples)
-Throughput: 1.26 G order-operations·s⁻¹
-```
-*High-volume scenario: 1,000,000 resting orders, 100,000 share sweep*
-```
-
-Execution Time: [2.72 ms 2.85 ms 2.98 ms]
-```
-Performance figures include complete order book construction; pure matching latency is significantly lower.
-
-## Project Development Status
-
-| Phase | Description | Status |
-|-------|-------------|---------|
-| **0 – Foundation** | Repository scaffolding, CI pipeline, basic crate layout | **Complete** |
-| **1 – Single-Asset Price Path** | Geometric Brownian Motion time series generation | **Complete** |
-| **2 – Fair Option Pricing** | Black-Scholes model implementation (pricing and Greeks) | **Complete** |
-| **3 – Order Book Dynamics** | Iterative price-level generation and matching engine | **Complete** |
-| **4 – Market Participants** | Ensemble of agents (market makers, institutional flow, retail) | **Complete** |
-| **5 – RL Integration** | Streaming interface (ZeroMQ/gRPC) for external policy control | *Deferred* |
-| **6 – Multi-Asset Support** | Per-symbol sharded books with cross-asset interaction | **Complete** |
-| **7 – Options Market** | Dedicated options pricing and trading infrastructure | *Planned* |
-
-## Installation and Setup
+## Getting Started
 
 ### Prerequisites
 
-- Rust 1.87.0 or later
-- Cargo package manager
+*   Rust 1.60 or later
+*   Cargo package manager
 
-### Building the Project
-```
-bash
-# Clone the repository
-git clone <repository-url>
-cd market-simulator
+### Running the Simulation
 
-# Build in release mode for optimal performance
-cargo build --release
+1.  **Clone the repository:**
 
-# Run comprehensive test suite
-cargo test
+    ```bash
+    git clone https://github.com/apoorvasinha183/market_simulator.git
+    cd market_simulator
+    ```
 
-# Generate documentation
-cargo doc --no-deps --open
-```
-### Running Benchmarks
+2.  **Build the project:**
 
-Execute performance benchmarks with Criterion:
-```
-bash
-# Full benchmark suite
-cargo bench
+    ```bash
+    cargo build --release
+    ```
 
-# Quick benchmark for CI environments
-cargo bench --bench order_book -- --sample-size 30 --measurement-time 6
+3.  **Run the visualizer:**
 
-# Enhanced order book benchmarks
-cargo bench --bench order_book_enhanced
-```
+    The best way to experience the simulation is through the live visualizer.
 
-## Visualization Tools
+    ```bash
+    cargo run --release --bin visual_order
+    ```
 
-The project includes several visualization utilities:
+    This will launch a GUI application where you can start, pause, and inspect the live order book and price history for the simulated stocks.
 
-**Order Book Visualizer** (`src/bin/visual_order.rs`)
-- Real-time order book depth visualization
-- Price level analysis
-- Order flow monitoring
+## Project Roadmap
 
-**Market Data Visualizer** (`src/bin/visualizer.rs`)
-- GBM price path visualization
-- Option pricing curves
-- Historical data analysis
-
-Run visualizers with:
-
-```bash
-cargo run --bin visual_order
-cargo run --bin visualizer
-```
-
-
-
-## Directory Structure
-
-```
-src/
-├── agents/              # Reference agent implementations
-├── bin/                 # Executable utilities and visualizers
-├── pricing/             # Financial pricing models (Black-Scholes)
-├── simulators/          # Core simulation engines
-│   ├── order_book.rs    # Limit order book matching engine
-│   └── gbm.rs           # Geometric Brownian Motion generator
-├── stocks/              # Stock symbol and metadata management
-├── types/               # Type definitions and data structures
-├── lib.rs               # Library entry point
-├── market.rs            # Central market simulation orchestrator
-├── sentiment.rs         # Market sentiment modeling
-└── shared_types.rs      # Common type definitions
-
-benches/                 # Performance benchmarks
-├── order_book.rs        # Basic order book benchmarks
-└── order_book_enhanced.rs # Advanced benchmarking scenarios
-
-benchmark_pdfs/          # Generated benchmark reports
-criterion_pdf.py         # Benchmark visualization utilities
-```
-
-
-## Configuration
-
-The simulator supports extensive configuration through environment variables and configuration files. Key parameters include:
-
-- Market microstructure settings (tick size, lot size)
-- Agent population and behavior parameters
-- Simulation duration and frequency
-- Performance optimization flags
-
+| Phase | Description | Status |
+| :--- | :--- | :--- |
+| **Foundation** | Core architecture, multi-threaded orchestra, agent framework | ✅ Complete |
+| **Core Actors** | Implementation of all major agent types | ✅ Complete |
+| **Visualization** | Real-time order book and price history visualizer | ✅ Complete |
+| **Testing** | Comprehensive unit and integration tests | ⏳ In Progress |
+| **RL Integration** | A streaming interface (e.g., gRPC) for external policy control | ấp Planned |
+| **Options Market** | Dedicated infrastructure for options pricing and trading | ấp Planned |
 
 ## Dependencies
 
 The project leverages several high-quality Rust crates:
 
-- **eframe/egui**: Modern GUI framework for visualization tools
-- **criterion**: Statistical benchmarking framework
-- **serde**: Serialization framework for data persistence
-- **rand**: High-performance random number generation
-- **statrs**: Statistical functions and distributions
-- **parking_lot**: High-performance synchronization primitives
+-   **eframe/egui**: For the modern GUI of the visualization tools.
+-   **crossbeam-channel**: For high-performance, multi-threaded message passing.
+-   **serde**: For data serialization.
+-   **rand**: For random number generation.
+-   **statrs**: For statistical functions and distributions.
 
 ## License
 
-[License information to be specified]
-
-## Documentation
-
-Comprehensive API documentation is available via `cargo doc --no-deps`. Generated documentation includes:
-
-- Complete API reference
-- Usage examples
-- Performance characteristics
-- Architecture diagrams
-
-Access documentation locally at `target/doc/market_simulator/index.html` or through the project's documentation hosting service.
+This project is licensed under the Apache License 2.0. A copy of the license can be found in the `LICENSE` file.

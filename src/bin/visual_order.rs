@@ -5,13 +5,13 @@ use eframe::egui;
 use egui::{Color32, FontId, RichText, Rounding, Stroke, Vec2};
 use egui_plot::{Legend, Line, Plot, PlotBounds, PlotPoints, Points};
 use market_simulator::{
-    AgentType, Market, Marketable,
+    simulation::orchestra::{Orchestra, ShadowBookHandle, MarketState},
+    AgentType,
     simulators::order_book::{OrderBook, PriceLevel},
-    stocks::definitions::StockMarket,
 };
 //use egui_plot::PlotItem;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 // Add debug logging
 fn debug_order_book(order_book: &OrderBook, stock_id: u64) {
@@ -61,7 +61,7 @@ fn format_number_u64(n: u64) -> String {
 //  GUI state
 // -----------------------------------------------------------------------------
 struct AgentVisualizer {
-    simulator: Box<dyn Marketable>,
+    shadow_handle: ShadowBookHandle,
     price_histories: HashMap<u64, Vec<f64>>,
     selected_id: u64,
     is_market_running: bool,
@@ -82,104 +82,27 @@ impl eframe::App for AgentVisualizer {
         self.apply_custom_style(ctx);
 
         // Step simulator every 100 ms
-        if self.is_market_running && self.last_update.elapsed() > Duration::from_millis(100) {
-            self.simulator.step();
+        if self.is_market_running {
             self.record_prices();
             self.last_update = Instant::now();
         }
         ctx.request_repaint();
 
+        let (market_state, order_book) = {
+            let state_guard = self.shadow_handle.read().unwrap();
+            let book = state_guard.order_books.get(&self.selected_id).cloned();
+            (state_guard.clone(), book)
+        };
+
+
         /* ───────────────────────── TOP BAR ────────────────────────── */
         egui::TopBottomPanel::top("top_panel")
             .min_height(60.0)
             .show(ctx, |ui| {
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new("🚀 Live Agent-Based Market")
-                            .font(FontId::proportional(24.0))
-                            .color(if self.theme_dark {
-                                Color32::WHITE
-                            } else {
-                                Color32::from_rgb(40, 40, 40)
-                            })
-                            .strong(),
-                    );
-
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        // Add debug button
-                        if ui.button("🐛 Debug").clicked() {
-                            if let Some(market) = self.simulator.as_any().downcast_ref::<Market>() {
-                                if let Some(order_book) =
-                                    market.order_books().get(&self.selected_id)
-                                {
-                                    debug_order_book(order_book, self.selected_id);
-                                }
-                            }
-                        }
-                        ui.separator();
-
-                        // theme toggle
-                        if ui
-                            .button(if self.theme_dark {
-                                "☀ Light"
-                            } else {
-                                "🌙 Dark"
-                            })
-                            .clicked()
-                        {
-                            self.theme_dark = !self.theme_dark;
-                        }
-                        ui.separator();
-
-                        // start / pause
-                        let start_stop = if self.is_market_running {
-                            egui::Button::new(RichText::new("⏸ Pause").color(Color32::WHITE))
-                                .fill(Color32::from_rgb(220, 53, 69))
-                        } else {
-                            egui::Button::new(RichText::new("▶ Start").color(Color32::WHITE))
-                                .fill(Color32::from_rgb(40, 167, 69))
-                        };
-                        if ui.add(start_stop.rounding(Rounding::same(8.0))).clicked() {
-                            self.is_market_running = !self.is_market_running;
-                        }
-
-                        // reset
-                        let reset =
-                            egui::Button::new(RichText::new("🔄 Reset").color(Color32::WHITE))
-                                .fill(Color32::from_rgb(108, 117, 125))
-                                .rounding(Rounding::same(8.0));
-                        if ui.add(reset).clicked() {
-                            self.reset_simulation();
-                        }
-
-                        ui.separator();
-
-                        // ▼ symbol picker (ticker text)
-                        if let Some(mkt) = self.simulator.as_any().downcast_ref::<Market>() {
-                            let ids: Vec<u64> = mkt.order_books().keys().cloned().collect();
-                            egui::ComboBox::from_id_source("symbol_combo")
-                                .selected_text(format!("🪙 {}", mkt.ticker(self.selected_id)))
-                                .show_ui(ui, |ui| {
-                                    for id in ids {
-                                        ui.selectable_value(
-                                            &mut self.selected_id,
-                                            id,
-                                            mkt.ticker(id),
-                                        );
-                                    }
-                                });
-                        }
-                    });
-                });
-                ui.add_space(8.0);
+                self.render_top_bar(ui, &market_state);
             });
 
-        /* ────────── rest requires Market down-cast ────────── */
-        let Some(market) = self.simulator.as_any().downcast_ref::<Market>() else {
-            return;
-        };
-        let Some(order_book) = market.order_books().get(&self.selected_id) else {
+        let Some(order_book) = order_book else {
             return;
         };
 
@@ -187,10 +110,10 @@ impl eframe::App for AgentVisualizer {
         self.debug_counter += 1;
 
         /* ───────────────────────── BOTTOM PANEL ───────────────────── */
-        self.render_order_book_tables(ctx, order_book, market);
+        self.render_order_book_tables(ctx, &order_book, &market_state);
 
         /* ───────────────────────── CENTRAL PANEL ──────────────────── */
-        self.render_plots(ctx, order_book, market);
+        self.render_plots(ctx, &order_book, &market_state);
     }
 }
 
@@ -198,35 +121,99 @@ impl eframe::App for AgentVisualizer {
 //  Internal helpers
 // -----------------------------------------------------------------------------
 impl AgentVisualizer {
-    fn record_prices(&mut self) {
-        if let Some(mkt) = self.simulator.as_any().downcast_ref::<Market>() {
-            for (&id, &px) in mkt.last_price_map_iter() {
-                let hist = self.price_histories.entry(id).or_default();
-                if hist.last() != Some(&px) {
-                    hist.push(px);
-                    if hist.len() > 1_000 {
-                        hist.remove(0);
+    fn render_top_bar(&mut self, ui: &mut egui::Ui, market_state: &MarketState) {
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("🚀 Live Agent-Based Market")
+                    .font(FontId::proportional(24.0))
+                    .color(if self.theme_dark {
+                        Color32::WHITE
+                    } else {
+                        Color32::from_rgb(40, 40, 40)
+                    })
+                    .strong(),
+            );
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // Add debug button
+                if ui.button("🐛 Debug").clicked() {
+                    if let Some(order_book) = market_state.order_books.get(&self.selected_id) {
+                        debug_order_book(order_book, self.selected_id);
                     }
                 }
-            }
-            if let Some(hist) = self.price_histories.get(&self.selected_id) {
-                if let Some((&last, tail)) = hist.split_last() {
-                    self.ath = tail.iter().fold(last, |a, &p| a.max(p));
-                    self.atl = tail.iter().fold(last, |a, &p| a.min(p));
+                ui.separator();
+
+                // theme toggle
+                if ui
+                    .button(if self.theme_dark {
+                        "☀ Light"
+                    } else {
+                        "🌙 Dark"
+                    })
+                    .clicked()
+                {
+                    self.theme_dark = !self.theme_dark;
                 }
+                ui.separator();
+
+                // start / pause
+                let start_stop = if self.is_market_running {
+                    egui::Button::new(RichText::new("⏸ Pause").color(Color32::WHITE))
+                        .fill(Color32::from_rgb(220, 53, 69))
+                } else {
+                    egui::Button::new(RichText::new("▶ Start").color(Color32::WHITE))
+                        .fill(Color32::from_rgb(40, 167, 69))
+                };
+                if ui.add(start_stop.rounding(Rounding::same(8.0))).clicked() {
+                    self.is_market_running = !self.is_market_running;
+                }
+
+                // reset (disabled for now)
+                ui.add_enabled(false, egui::Button::new(RichText::new("🔄 Reset").color(Color32::WHITE))
+                    .fill(Color32::from_rgb(108, 117, 125))
+                    .rounding(Rounding::same(8.0)));
+
+                ui.separator();
+
+                // ▼ symbol picker (ticker text)
+                let ids: Vec<u64> = market_state.stocks.get_all_ids();
+                egui::ComboBox::from_id_source("symbol_combo")
+                    .selected_text(format!("🪙 {}", market_state.stocks.get_ticker_by_id(self.selected_id).unwrap_or(&"UNKNOWN".to_string())))
+                    .show_ui(ui, |ui| {
+                        for id in ids {
+                            ui.selectable_value(
+                                &mut self.selected_id,
+                                id,
+                                market_state.stocks.get_ticker_by_id(id).unwrap_or(&"UNKNOWN".to_string()),
+                            );
+                        }
+                    });
+            });
+        });
+        ui.add_space(8.0);
+    }
+
+    fn record_prices(&mut self) {
+        let market_state = self.shadow_handle.read().unwrap();
+        for (&id, &px) in market_state.last_traded_price.iter() {
+            let hist = self.price_histories.entry(id).or_default();
+            if hist.last() != Some(&px) {
+                hist.push(px);
+                if hist.len() > 1_000 {
+                    hist.remove(0);
+                }
+            }
+        }
+        if let Some(hist) = self.price_histories.get(&self.selected_id) {
+            if let Some((&last, tail)) = hist.split_last() {
+                self.ath = tail.iter().fold(last, |a, &p| a.max(p));
+                self.atl = tail.iter().fold(last, |a, &p| a.min(p));
             }
         }
     }
 
-    fn reset_simulation(&mut self) {
-        self.is_market_running = false;
-        self.simulator.reset();
-        self.price_histories.clear();
-        let px = self.simulator.current_price();
-        self.price_histories.insert(self.selected_id, vec![px]);
-        self.ath = px;
-        self.atl = px;
-    }
+    
 
     fn apply_custom_style(&self, ctx: &egui::Context) {
         let mut style = (*ctx.style()).clone();
@@ -258,7 +245,7 @@ impl AgentVisualizer {
         &self,
         ctx: &egui::Context,
         order_book: &OrderBook,
-        market: &Market,
+        market_state: &MarketState,
     ) {
         egui::TopBottomPanel::bottom("bottom_panel")
             .resizable(true)
@@ -266,7 +253,7 @@ impl AgentVisualizer {
             .show(ctx, |ui| {
                 ui.add_space(8.0);
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    self.render_market_status(ui, market);
+                    self.render_market_status(ui, market_state);
                     ui.add_space(12.0);
                     ui.vertical_centered(|ui| {
                         ui.label(
@@ -383,7 +370,7 @@ impl AgentVisualizer {
         });
     }
 
-    fn render_plots(&self, ctx: &egui::Context, order_book: &OrderBook, market: &Market) {
+    fn render_plots(&self, ctx: &egui::Context, order_book: &OrderBook, market_state: &MarketState) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.columns(2, |cols| {
                 // ─── Depth Chart ─────────────────────────────────────────
@@ -440,22 +427,20 @@ impl AgentVisualizer {
                             }
 
                             // Current price indicator
-                            if let Some(m) = self.simulator.as_any().downcast_ref::<Market>() {
-                                let cp = m.last_price(self.selected_id);
-                                p.line(
-                                    Line::new(PlotPoints::from(vec![[cp, 0.0], [cp, 1_000_000.0]]))
-                                        .color(Color32::from_rgba_unmultiplied(255, 255, 255, 100))
-                                        .stroke(Stroke::new(
-                                            1.0,
-                                            Color32::from_rgba_unmultiplied(255, 255, 255, 150),
-                                        ))
-                                        .style(egui_plot::LineStyle::Dashed { length: 10.0 })
-                                        .name("Current Price"),
-                                );
-                            }
+                            let cp = *market_state.last_traded_price.get(&self.selected_id).unwrap_or(&0.0);
+                            p.line(
+                                Line::new(PlotPoints::from(vec![[cp, 0.0], [cp, 1_000_000.0]]))
+                                    .color(Color32::from_rgba_unmultiplied(255, 255, 255, 100))
+                                    .stroke(Stroke::new(
+                                        1.0,
+                                        Color32::from_rgba_unmultiplied(255, 255, 255, 150),
+                                    ))
+                                    .style(egui_plot::LineStyle::Dashed { length: 10.0 })
+                                    .name("Current Price"),
+                            );
 
                             // Zoom bounds around current price
-                            let center = market.last_price(self.selected_id);
+                            let center = *market_state.last_traded_price.get(&self.selected_id).unwrap_or(&0.0);
                             p.set_plot_bounds(PlotBounds::from_min_max(
                                 [center - 20.0, 0.0],
                                 [center + 20.0, 2_000_000.0],
@@ -508,13 +493,14 @@ impl AgentVisualizer {
     }
 
     /* ---------------- status bar ---------------- */
-    fn render_market_status(&self, ui: &mut egui::Ui, market: &Market) {
-        let Some(ob) = market.order_books().get(&self.selected_id) else {
+    fn render_market_status(&self, ui: &mut egui::Ui, market_state: &MarketState) {
+        let Some(ob) = market_state.order_books.get(&self.selected_id) else {
             return;
         };
         let best_bid = ob.bids.keys().last().copied();
         let best_ask = ob.asks.keys().next().copied();
-        let total_inv = market.total_inventory();
+        // total_inventory is not available in MarketState, so we'll remove it for now
+        // let total_inv = market_state.total_inventory();
 
         // Always render the status bar, even if bid/ask are missing
         let col = if self.is_market_running {
@@ -612,30 +598,12 @@ impl AgentVisualizer {
             metric_fixed_width(
                 ui,
                 "Volume",
-                &format_number_u64(market.cumulative_volume(self.selected_id).unwrap_or(0)),
+                &format_number_u64(market_state.cumulative_volume.get(&self.selected_id).copied().unwrap_or(0)),
                 Color32::WHITE,
                 100.0,
             );
 
-            // Net inventory - fixed width
-            let inv_col = if total_inv > 0 {
-                Color32::from_rgb(40, 167, 69)
-            } else if total_inv < 0 {
-                Color32::from_rgb(220, 53, 69)
-            } else {
-                Color32::GRAY
-            };
-            metric_fixed_width(
-                ui,
-                "Net Inv",
-                &if total_inv >= 0 {
-                    format!("+{}", format_number(total_inv as i32))
-                } else {
-                    format_number(total_inv as i32)
-                },
-                inv_col,
-                100.0,
-            );
+            
         });
 
         fn metric_fixed_width(ui: &mut egui::Ui, label: &str, val: &str, col: Color32, width: f32) {
@@ -666,27 +634,31 @@ fn main() -> Result<(), eframe::Error> {
     };
 
     let participants = vec![
-        AgentType::MarketMaker,
-        AgentType::DumbLimit,
         AgentType::DumbMarket,
+        AgentType::DumbLimit,
+        AgentType::MarketMaker,
         AgentType::WhaleAgent,
     ];
 
-    let simulator: Box<dyn Marketable> = Box::new(Market::new(&participants, StockMarket::new()));
+    let orchestra = Orchestra::new(participants, 100, 100);
+    let shadow_handle = orchestra.get_shadow_handle();
 
-    let mkt = simulator
-        .as_any()
-        .downcast_ref::<Market>()
-        .expect("simulator is Market");
+    std::thread::spawn(move || {
+        orchestra.run();
+    });
 
-    let first_id = *mkt.order_books().keys().next().expect("empty universe");
-    let first_px = mkt.last_price(first_id);
+    let initial_state = {
+        let state_guard = shadow_handle.read().unwrap();
+        state_guard.clone()
+    };
+    let first_id = *initial_state.order_books.keys().next().expect("empty universe");
+    let first_px = *initial_state.last_traded_price.get(&first_id).unwrap_or(&0.0);
 
     let mut hist = HashMap::new();
     hist.insert(first_id, vec![first_px]);
 
     let app_state = AgentVisualizer {
-        simulator,
+        shadow_handle,
         price_histories: hist,
         selected_id: first_id,
         is_market_running: false,
