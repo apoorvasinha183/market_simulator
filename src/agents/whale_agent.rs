@@ -203,7 +203,7 @@ impl Agent for WhaleAgent {
 
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_millis(200)); // Whales act less frequently
+            thread::sleep(std::time::Duration::from_micros(100)); // Whales act less frequently
         }
     }
 

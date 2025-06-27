@@ -443,7 +443,7 @@ impl AgentVisualizer {
                             let center = *market_state.last_traded_price.get(&self.selected_id).unwrap_or(&0.0);
                             p.set_plot_bounds(PlotBounds::from_min_max(
                                 [center - 20.0, 0.0],
-                                [center + 20.0, 2_000_000.0],
+                                [center + 20.0, 20_000_000.0],
                             ));
                         });
                 });
@@ -634,13 +634,13 @@ fn main() -> Result<(), eframe::Error> {
     };
 
     let participants = vec![
+        AgentType::MarketMaker,
         AgentType::DumbMarket,
         AgentType::DumbLimit,
-        AgentType::MarketMaker,
         AgentType::WhaleAgent,
     ];
 
-    let orchestra = Orchestra::new(participants, 100, 100);
+    let orchestra = Orchestra::new(participants, 1000, 100);
     let shadow_handle = orchestra.get_shadow_handle();
 
     std::thread::spawn(move || {

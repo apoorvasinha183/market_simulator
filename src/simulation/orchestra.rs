@@ -123,7 +123,7 @@ impl Orchestra {
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
-                    view_handle,
+                    premium_shadow_book.clone(), // Use premium book for MarketMaker
                 )),
                 AgentType::IPO => Box::new(IpoAgent::new(
                     id,

@@ -4,7 +4,7 @@ use super::{
     config::{
         MM_DESIRED_SPREAD, MM_INITIAL_CENTER_PRICE, MM_QUOTE_VOL_MAX,
         MM_QUOTE_VOL_MIN, MM_SEED_DECAY, MM_SEED_DEPTH_PCT, MM_SEED_LEVELS, MM_SEED_TICK_SPACING,
-        MM_SKEW_FACTOR, MM_UNSTICK_VOL_MAX, MM_UNSTICK_VOL_MIN,
+        MM_SKEW_FACTOR, MM_UNSTICK_VOL_MAX, MM_UNSTICK_VOL_MIN,PREMIUM_PROCESSING_LATENCY,
     },
 };
 use crate::{
@@ -159,7 +159,7 @@ impl MarketMakerAgent {
 
                         let bid_px = clamp(initial_price as i128 - (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128);
                         let ask_px = clamp(initial_price as i128 + (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128);
-
+                        std::thread::sleep(std::time::Duration::from_millis(PREMIUM_PROCESSING_LATENCY as u64));
                         order_channel_clone.send(OrderRequest::LimitOrder { agent_id, stock_id, side: Side::Buy, price: bid_px, volume: vol }).unwrap();
                         order_channel_clone.send(OrderRequest::LimitOrder { agent_id, stock_id, side: Side::Sell, price: ask_px, volume: vol }).unwrap();
                     }
@@ -231,7 +231,7 @@ impl Agent for MarketMakerAgent {
 
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_millis(50));
+            thread::sleep(std::time::Duration::from_micros(10));
         }
     }
 

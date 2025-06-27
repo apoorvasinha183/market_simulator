@@ -13,6 +13,7 @@ use super::{
         LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN,
     },
 };
+use crate::stocks;
 use crate::{
     agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
     simulation::orchestra::ShadowBookHandle,
@@ -128,8 +129,8 @@ impl DumbLimitAgent {
 
         let ids: Vec<u64> = view.stocks.get_all_ids();
         if ids.is_empty() { return; }
-        let stock_id = *ids.choose(&mut rng).unwrap();
-        
+        //let stock_id = *ids.choose(&mut rng).unwrap();
+        for stock_id in ids{
         let book = match view.book(stock_id) {
             Some(b) => b,
             None => return,
@@ -160,7 +161,7 @@ impl DumbLimitAgent {
                     volume,
                 }).expect("Failed to send limit order");
             }
-        }
+        }}
     }
 }
 
@@ -189,7 +190,7 @@ impl Agent for DumbLimitAgent {
 
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_micros(100));
+            thread::sleep(std::time::Duration::from_micros(30));
         }
     }
 

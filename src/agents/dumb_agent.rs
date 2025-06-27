@@ -9,7 +9,7 @@ use super::{
     config::{
         DUMB_AGENT_ACTION_PROB, DUMB_AGENT_LARGE_VOL_CHANCE, DUMB_AGENT_LARGE_VOL_MAX,
         DUMB_AGENT_LARGE_VOL_MIN, DUMB_AGENT_NUM_TRADERS, DUMB_AGENT_TYPICAL_VOL_MAX,
-        DUMB_AGENT_TYPICAL_VOL_MIN,
+        DUMB_AGENT_TYPICAL_VOL_MIN,NORMAL_PROCESSING_LATENCY,
     },
 };
 use crate::{
@@ -137,8 +137,8 @@ impl DumbAgent {
         if universe.is_empty() {
             return;
         }
-        let stock_id = *universe.choose(&mut rng).unwrap();
-
+        //let stock_id = *universe.choose(&mut rng).unwrap();
+        for stock_id in universe{
         for _ in 0..DUMB_AGENT_NUM_TRADERS {
             if rng.gen_bool(DUMB_AGENT_ACTION_PROB) {
                 let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
@@ -166,9 +166,10 @@ impl DumbAgent {
                     side,
                     volume,
                 };
+                //std::thread::sleep(std::time::Duration::from_millis(NORMAL_PROCESSING_LATENCY as u64));
                 order_channel.send(order_req).expect("Failed to send order request");
             }
-        }
+        }}
     }
 }
 
@@ -203,7 +204,7 @@ impl Agent for DumbAgent {
         // --- 3. The main thread runs the decision loop ---
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_micros(100));
+            thread::sleep(std::time::Duration::from_micros(20));
         }
     }
 

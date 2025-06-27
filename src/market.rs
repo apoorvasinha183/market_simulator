@@ -69,7 +69,7 @@ impl Market {
         /* 2. CORRECTED: Time-Zero State Synchronization */
         // The Market, as the source of truth, populates the initial state of the
         // empty, agent-facing shadow book it was given by the Orchestra.
-        println!("[Market] Synchronizing initial state to the shadow book...");
+        //println!("[Market] Synchronizing initial state to the shadow book...");
         { // Scoped block to ensure the write lock is released immediately.
             let mut state_lock = shadow_book_handle.write().unwrap();
             state_lock.stocks = stocks.clone();
@@ -77,8 +77,8 @@ impl Market {
             state_lock.last_traded_price = last_traded_price.clone();
             state_lock.cumulative_volume = cumulative_volume.clone();
         } // Write lock is released here.
-        println!("[Market] Shadow book synchronized.");
-        println!("[Market] Synchronizing initial state to the rich people's book...");
+        //println!("[Market] Shadow book synchronized.");
+        //println!("[Market] Synchronizing initial state to the rich people's book...");
         { // Scoped block to ensure the write lock is released immediately.
             let mut state_lock = vip_book_handle.write().unwrap();
             state_lock.stocks = stocks.clone();
@@ -86,7 +86,7 @@ impl Market {
             state_lock.last_traded_price = last_traded_price.clone();
             state_lock.cumulative_volume = cumulative_volume.clone();
         } // Write lock is released here.
-        println!("[Market] Vip book synchronized(meh).");
+        //println!("[Market] Vip book synchronized(meh).");
 
 
         /* 3. Create the channel for the shadow reconciliation worker */
@@ -97,7 +97,7 @@ impl Market {
         Self::spawn_shadow_worker(shadow_update_rx, shadow_book_handle.clone(),update_threshold);
         // Rich people ..pfft
         Self::spawn_shadow_worker(vip_shadow_update_rx, vip_book_handle, vip_update_threshold);
-        println!("[Market] Shadow book reconciliation worker thread spawned.");
+        //println!("[Market] Shadow book reconciliation worker thread spawned.");
 
         Self {
             order_books,
@@ -130,7 +130,7 @@ impl Market {
             // 3. Counter for events since the last swap.
             let mut event_counter = 0;
 
-            println!("[ShadowWorker] Online with update threshold: {}. Waiting for market events...", update_threshold);
+            //println!("[ShadowWorker] Online with update threshold: {}. Waiting for market events...", update_threshold);
             
             while let Ok(event) = update_rx.recv() {
                 // Always log the event first.
@@ -169,7 +169,7 @@ impl Market {
 
                 // --- Check if it's time to swap buffers ---
                 if event_counter >= update_threshold {
-                    println!("[ShadowWorker] Update threshold reached. Swapping buffers...");
+                    //println!("[ShadowWorker] Update threshold reached. Swapping buffers...");
 
                     // --- Step A: Acquire lock and SWAP buffers ---
                     // The write lock is held for the shortest possible time.
@@ -183,7 +183,7 @@ impl Market {
                     // --- Step B: Catch up the new back_buffer (the old front_buffer) ---
                     // Replay all the events we logged since the last swap onto our new back_buffer
                     // to bring it up to the current state.
-                    println!("[ShadowWorker] Replaying {} logged events to catch up...", event_log.len());
+                    //println!("[ShadowWorker] Replaying {} logged events to catch up...", event_log.len());
                     for logged_event in &event_log {
                         match logged_event {
                             ShadowEvent::LimitOrder(order) => {
@@ -219,10 +219,10 @@ impl Market {
                     // --- Step C: Reset for the next cycle ---
                     event_log.clear();
                     event_counter = 0;
-                    println!("[ShadowWorker] Catch-up complete. Resuming normal operation.");
+                    //println!("[ShadowWorker] Catch-up complete. Resuming normal operation.");
                 }
             }
-            println!("[ShadowWorker] Channel closed. Shutting down.");
+            //println!("[ShadowWorker] Channel closed. Shutting down.");
         });
     }
 
@@ -304,11 +304,11 @@ impl Market {
 
 impl Marketable for Market {
     fn run(&mut self) {
-        println!("[Market] Matching engine online. Waiting for orders...");
+        //println!("[Market] Matching engine online. Waiting for orders...");
         while let Ok(req) = self.order_rx.recv() {
             self.process_request(req);
         }
-        println!("[Market] Order channel closed. Shutting down matching engine.");
+        //println!("[Market] Order channel closed. Shutting down matching engine.");
     }
     
     // Stubs for remaining trait methods that are no longer relevant to this design.
