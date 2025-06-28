@@ -1,11 +1,11 @@
+use crate::stocks::definitions::StockMarket;
 use std::{
-    collections::{HashMap,VecDeque},
+    collections::{HashMap, VecDeque},
     net::UdpSocket,
     sync::mpsc,
     thread,
     //time::{Duration, Instant},
 };
-use crate::stocks::definitions::StockMarket;
 
 #[derive(Debug)]
 pub struct SentimentEngine {
@@ -47,7 +47,7 @@ impl SentimentEngine {
                                 // Send the update to the main thread.
                                 // If send fails, the receiver has been dropped, so we can exit.
                                 if thread_tx.send((stock_id, value)).is_err() {
-                                    break; 
+                                    break;
                                 }
                             }
                         }

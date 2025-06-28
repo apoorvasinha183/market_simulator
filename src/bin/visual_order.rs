@@ -5,14 +5,14 @@ use eframe::egui;
 use egui::{Color32, FontId, RichText, Rounding, Stroke, Vec2};
 use egui_plot::{Legend, Line, Plot, PlotBounds, PlotPoints, Points};
 use market_simulator::{
-    simulation::orchestra::{Orchestra, ShadowBookHandle, MarketState},
     AgentType,
+    simulation::orchestra::{MarketState, Orchestra, ShadowBookHandle},
     simulators::order_book::{OrderBook, PriceLevel},
 };
 //use egui_plot::PlotItem;
+use core_affinity;
 use std::collections::HashMap;
 use std::time::Instant;
-use core_affinity;
 // Add debug logging
 fn debug_order_book(order_book: &OrderBook, stock_id: u64) {
     println!("=== DEBUG ORDER BOOK FOR STOCK {} ===", stock_id);
@@ -94,7 +94,6 @@ impl eframe::App for AgentVisualizer {
             (state_guard.clone(), book)
         };
 
-
         /* ───────────────────────── TOP BAR ────────────────────────── */
         egui::TopBottomPanel::top("top_panel")
             .min_height(60.0)
@@ -170,22 +169,34 @@ impl AgentVisualizer {
                 }
 
                 // reset (disabled for now)
-                ui.add_enabled(false, egui::Button::new(RichText::new("🔄 Reset").color(Color32::WHITE))
-                    .fill(Color32::from_rgb(108, 117, 125))
-                    .rounding(Rounding::same(8.0)));
+                ui.add_enabled(
+                    false,
+                    egui::Button::new(RichText::new("🔄 Reset").color(Color32::WHITE))
+                        .fill(Color32::from_rgb(108, 117, 125))
+                        .rounding(Rounding::same(8.0)),
+                );
 
                 ui.separator();
 
                 // ▼ symbol picker (ticker text)
                 let ids: Vec<u64> = market_state.stocks.get_all_ids();
                 egui::ComboBox::from_id_source("symbol_combo")
-                    .selected_text(format!("🪙 {}", market_state.stocks.get_ticker_by_id(self.selected_id).unwrap_or(&"UNKNOWN".to_string())))
+                    .selected_text(format!(
+                        "🪙 {}",
+                        market_state
+                            .stocks
+                            .get_ticker_by_id(self.selected_id)
+                            .unwrap_or(&"UNKNOWN".to_string())
+                    ))
                     .show_ui(ui, |ui| {
                         for id in ids {
                             ui.selectable_value(
                                 &mut self.selected_id,
                                 id,
-                                market_state.stocks.get_ticker_by_id(id).unwrap_or(&"UNKNOWN".to_string()),
+                                market_state
+                                    .stocks
+                                    .get_ticker_by_id(id)
+                                    .unwrap_or(&"UNKNOWN".to_string()),
                             );
                         }
                     });
@@ -212,8 +223,6 @@ impl AgentVisualizer {
             }
         }
     }
-
-    
 
     fn apply_custom_style(&self, ctx: &egui::Context) {
         let mut style = (*ctx.style()).clone();
@@ -370,7 +379,12 @@ impl AgentVisualizer {
         });
     }
 
-    fn render_plots(&self, ctx: &egui::Context, order_book: &OrderBook, market_state: &MarketState) {
+    fn render_plots(
+        &self,
+        ctx: &egui::Context,
+        order_book: &OrderBook,
+        market_state: &MarketState,
+    ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.columns(2, |cols| {
                 // ─── Depth Chart ─────────────────────────────────────────
@@ -427,7 +441,10 @@ impl AgentVisualizer {
                             }
 
                             // Current price indicator
-                            let cp = *market_state.last_traded_price.get(&self.selected_id).unwrap_or(&0.0);
+                            let cp = *market_state
+                                .last_traded_price
+                                .get(&self.selected_id)
+                                .unwrap_or(&0.0);
                             p.line(
                                 Line::new(PlotPoints::from(vec![[cp, 0.0], [cp, 1_000_000.0]]))
                                     .color(Color32::from_rgba_unmultiplied(255, 255, 255, 100))
@@ -440,7 +457,10 @@ impl AgentVisualizer {
                             );
 
                             // Zoom bounds around current price
-                            let center = *market_state.last_traded_price.get(&self.selected_id).unwrap_or(&0.0);
+                            let center = *market_state
+                                .last_traded_price
+                                .get(&self.selected_id)
+                                .unwrap_or(&0.0);
                             p.set_plot_bounds(PlotBounds::from_min_max(
                                 [center - 20.0, 0.0],
                                 [center + 20.0, 20_000_000.0],
@@ -598,12 +618,16 @@ impl AgentVisualizer {
             metric_fixed_width(
                 ui,
                 "Volume",
-                &format_number_u64(market_state.cumulative_volume.get(&self.selected_id).copied().unwrap_or(0)),
+                &format_number_u64(
+                    market_state
+                        .cumulative_volume
+                        .get(&self.selected_id)
+                        .copied()
+                        .unwrap_or(0),
+                ),
                 Color32::WHITE,
                 100.0,
             );
-
-            
         });
 
         fn metric_fixed_width(ui: &mut egui::Ui, label: &str, val: &str, col: Color32, width: f32) {
@@ -654,8 +678,15 @@ fn main() -> Result<(), eframe::Error> {
         let state_guard = shadow_handle.read().unwrap();
         state_guard.clone()
     };
-    let first_id = *initial_state.order_books.keys().next().expect("empty universe");
-    let first_px = *initial_state.last_traded_price.get(&first_id).unwrap_or(&0.0);
+    let first_id = *initial_state
+        .order_books
+        .keys()
+        .next()
+        .expect("empty universe");
+    let first_px = *initial_state
+        .last_traded_price
+        .get(&first_id)
+        .unwrap_or(&0.0);
 
     let mut hist = HashMap::new();
     hist.insert(first_id, vec![first_px]);

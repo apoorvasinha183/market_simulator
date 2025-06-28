@@ -17,15 +17,15 @@ pub struct MarketView<'a> {
 
 /// The core trait that all our participant types will implement.
 /// TODO: Later add a SYMBOL ticker argument when we are managing lots of stocks to handle
-pub trait Agent:Send + Sync  {
+pub trait Agent: Send + Sync {
     // === Core Decision-Making ===
-    fn decide_actions(&mut self) ;
+    fn decide_actions(&mut self);
 
     // === High-Level API for RL / External Controllers ===
     /// Creates a request to buy a certain volume of the asset.
-    fn buy_stock(&mut self, stock_id: u64, volume: u64) ;
+    fn buy_stock(&mut self, stock_id: u64, volume: u64);
     /// Creates a request to sell a certain volume of the asset.
-    fn sell_stock(&mut self, stock_id: u64, volume: u64) ;
+    fn sell_stock(&mut self, stock_id: u64, volume: u64);
 
     // === Order & Position Management ===
     /// The "promise fulfillment" callback from the Market.
@@ -33,7 +33,7 @@ pub trait Agent:Send + Sync  {
     fn acknowledge_order(&mut self);
 
     /// The Market can call this to force an agent to cover a short position.
-    fn margin_call(&mut self) ;
+    fn margin_call(&mut self);
 
     /// A way for the simulation engine to update the agent's internal state after a trade.
     fn update_portfolio(&mut self);
@@ -43,7 +43,7 @@ pub trait Agent:Send + Sync  {
     fn get_pending_orders(&self) -> Vec<Order>;
 
     /// Creates a request to cancel an open order.
-    fn cancel_open_order(&mut self, order_id: u64) ;
+    fn cancel_open_order(&mut self, order_id: u64);
     /// To have the agents run perpetually
     // TODO: decide_actions return type should be void since we will be adding a mpsc channel to send actions to the market.
     // Right now this will be a stub

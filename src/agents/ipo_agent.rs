@@ -1,7 +1,7 @@
 // src/agents/ipo_agent.rs
-use std::collections::HashMap;
 use crossbeam_channel::{Receiver, Sender};
-use std::sync::{Arc, RwLock, Mutex};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
 use super::agent_trait::{Agent, MarketView};
@@ -61,7 +61,8 @@ impl IpoAgent {
         agent_id: usize,
     ) {
         while let Ok(tr) = port_rx.recv() {
-            if tr.maker_agent_id == agent_id { // IPO agent is always a maker
+            if tr.maker_agent_id == agent_id {
+                // IPO agent is always a maker
                 let mut inventory_lock = inventory.write().unwrap();
                 let mut cash_lock = cash.write().unwrap();
                 let mut open_orders_lock = open_orders.write().unwrap();
@@ -120,7 +121,10 @@ impl IpoAgent {
         let start_px: u64 = 15_000; // $150.00
         let tick: u64 = 5; // $0.05
 
-        println!("[IpoAgent {}] Placing IPO ladder for stock {}", id, stock_id);
+        println!(
+            "[IpoAgent {}] Placing IPO ladder for stock {}",
+            id, stock_id
+        );
         for i in 0..num_levels {
             let order_req = OrderRequest::LimitOrder {
                 agent_id: id,
@@ -129,7 +133,9 @@ impl IpoAgent {
                 price: start_px + (i as u64) * tick,
                 volume: vol_per,
             };
-            order_channel.send(order_req).expect("Failed to send IPO order");
+            order_channel
+                .send(order_req)
+                .expect("Failed to send IPO order");
         }
     }
 }
@@ -148,10 +154,16 @@ impl Agent for IpoAgent {
         let agent_id = self.id;
         //let open_orders_handle_for_portfolio = self.open_orders.clone();
         let open_orders_handle_for_acks = self.open_orders.clone();
-        
+
         thread::spawn(move || {
             let rx = portfolio_rx_handle.lock().unwrap();
-            Self::run_portfolio_updater_internal(&rx, &inventory_handle, &cash_handle, &open_orders_handle, agent_id);
+            Self::run_portfolio_updater_internal(
+                &rx,
+                &inventory_handle,
+                &cash_handle,
+                &open_orders_handle,
+                agent_id,
+            );
         });
 
         thread::spawn(move || {
@@ -163,8 +175,11 @@ impl Agent for IpoAgent {
         // A small sleep gives the simulation a moment to stabilize before the IPO dump.
         thread::sleep(std::time::Duration::from_millis(50));
         self.decide_actions();
-        
-        println!("[IpoAgent {}] IPO orders placed. Now in passive listening mode.", self.id);
+
+        println!(
+            "[IpoAgent {}] IPO orders placed. Now in passive listening mode.",
+            self.id
+        );
 
         // --- Go into a passive sleep loop ---
         // The agent's main thread has no more decisions to make, but it must stay alive
@@ -182,7 +197,7 @@ impl Agent for IpoAgent {
             &self.order_channel,
         );
     }
-    
+
     // This agent does not perform these actions after the initial IPO.
     fn buy_stock(&mut self, _id: u64, _v: u64) {}
     fn sell_stock(&mut self, _id: u64, _v: u64) {}

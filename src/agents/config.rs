@@ -1,18 +1,12 @@
 // src/agents/config.rs
 
-
-
 //! A centralized place for tuning agent behavior parameters.
-
-
 
 // --- General ---
 
 pub const TICKS_UNTIL_ACTIVE: u32 = 5;
 
 pub const MARGIN_CALL_THRESHOLD: i64 = -20_000;
-
-
 
 // --- MarketMakerAgent ---
 
@@ -44,8 +38,6 @@ pub const MM_QUOTE_VOL_MIN: u64 = 1_000;
 
 pub const MM_QUOTE_VOL_MAX: u64 = 10_000;
 
-
-
 // --- DumbAgent (Retail Market Orders) ---
 
 // This ensemble now represents the full retail market, with occasional "burn" events.
@@ -69,8 +61,6 @@ pub const DUMB_AGENT_LARGE_VOL_CHANCE: f64 = 0.001;
 pub const DUMB_AGENT_LARGE_VOL_MIN: u64 = 750;
 
 pub const DUMB_AGENT_LARGE_VOL_MAX: u64 = 20000;
-
-
 
 // --- DumbLimitAgent (Smarter Retail & Speculators) ---
 
@@ -104,13 +94,8 @@ pub const WHALE_PRICE_OFFSET_MIN: u64 = 500;
 
 pub const CRAZY_WHALE: f64 = 0.01;
 
-
-
-
-
 //latencies
 
 pub const NORMAL_PROCESSING_LATENCY: usize = 0; // Normal agents
 
 pub const PREMIUM_PROCESSING_LATENCY: usize = 0; // Premium agents
-

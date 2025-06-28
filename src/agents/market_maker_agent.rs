@@ -2,9 +2,9 @@
 use super::{
     agent_trait::{Agent, MarketView},
     config::{
-        MM_DESIRED_SPREAD, MM_INITIAL_CENTER_PRICE, MM_QUOTE_VOL_MAX,
-        MM_QUOTE_VOL_MIN, MM_SEED_DECAY, MM_SEED_DEPTH_PCT, MM_SEED_LEVELS, MM_SEED_TICK_SPACING,
-        MM_SKEW_FACTOR, MM_UNSTICK_VOL_MAX, MM_UNSTICK_VOL_MIN,PREMIUM_PROCESSING_LATENCY,
+        MM_DESIRED_SPREAD, MM_INITIAL_CENTER_PRICE, MM_QUOTE_VOL_MAX, MM_QUOTE_VOL_MIN,
+        MM_SEED_DECAY, MM_SEED_DEPTH_PCT, MM_SEED_LEVELS, MM_SEED_TICK_SPACING, MM_SKEW_FACTOR,
+        MM_UNSTICK_VOL_MAX, MM_UNSTICK_VOL_MIN, PREMIUM_PROCESSING_LATENCY,
     },
 };
 use crate::{
@@ -84,9 +84,18 @@ impl MarketMakerAgent {
                 let mut open_orders_lock = open_orders.write().unwrap();
 
                 let vol_delta = if tr.taker_agent_id == agent_id {
-                    if tr.taker_side == Side::Buy { tr.volume as i64 } else { -(tr.volume as i64) }
-                } else { // This agent was the maker
-                    if tr.taker_side == Side::Sell { tr.volume as i64 } else { -(tr.volume as i64) }
+                    if tr.taker_side == Side::Buy {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
+                } else {
+                    // This agent was the maker
+                    if tr.taker_side == Side::Sell {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 };
 
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
@@ -123,12 +132,17 @@ impl MarketMakerAgent {
     ) {
         {
             let mut ticks = ticks_until_active.lock().unwrap();
-            if *ticks > 0 { *ticks -= 1; return; }
+            if *ticks > 0 {
+                *ticks -= 1;
+                return;
+            }
         }
 
         let view = view_handle.read().unwrap();
         let ids: Vec<u64> = view.stocks.get_all_ids();
-        if ids.is_empty() { return; }
+        if ids.is_empty() {
+            return;
+        }
 
         let mut handles = Vec::new();
 
@@ -137,13 +151,22 @@ impl MarketMakerAgent {
             let inventory_clone = inventory.clone();
             let bootstrapped_clone = bootstrapped.clone();
             let book_clone = view.book(stock_id).cloned();
-            let initial_price = view.stocks.get_stock_by_id(stock_id)
+            let initial_price = view
+                .stocks
+                .get_stock_by_id(stock_id)
                 .map(|s| (s.initial_price * 100.0) as u64)
                 .unwrap_or(MM_INITIAL_CENTER_PRICE);
 
             let handle = thread::spawn(move || {
-                let book = match book_clone { Some(b) => b, None => return };
-                let is_bootstrapped = *bootstrapped_clone.read().unwrap().get(&stock_id).unwrap_or(&false);
+                let book = match book_clone {
+                    Some(b) => b,
+                    None => return,
+                };
+                let is_bootstrapped = *bootstrapped_clone
+                    .read()
+                    .unwrap()
+                    .get(&stock_id)
+                    .unwrap_or(&false);
                 let agent_id = id; // move id into thread
 
                 if !is_bootstrapped {
@@ -157,11 +180,37 @@ impl MarketMakerAgent {
                         let vol = vol_at_lvl;
                         vol_at_lvl = (vol_at_lvl as f64 * MM_SEED_DECAY) as u64;
 
-                        let bid_px = clamp(initial_price as i128 - (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128);
-                        let ask_px = clamp(initial_price as i128 + (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING) as i128);
-                        std::thread::sleep(std::time::Duration::from_millis(PREMIUM_PROCESSING_LATENCY as u64));
-                        order_channel_clone.send(OrderRequest::LimitOrder { agent_id, stock_id, side: Side::Buy, price: bid_px, volume: vol }).unwrap();
-                        order_channel_clone.send(OrderRequest::LimitOrder { agent_id, stock_id, side: Side::Sell, price: ask_px, volume: vol }).unwrap();
+                        let bid_px = clamp(
+                            initial_price as i128
+                                - (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING)
+                                    as i128,
+                        );
+                        let ask_px = clamp(
+                            initial_price as i128
+                                + (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING)
+                                    as i128,
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(
+                            PREMIUM_PROCESSING_LATENCY as u64,
+                        ));
+                        order_channel_clone
+                            .send(OrderRequest::LimitOrder {
+                                agent_id,
+                                stock_id,
+                                side: Side::Buy,
+                                price: bid_px,
+                                volume: vol,
+                            })
+                            .unwrap();
+                        order_channel_clone
+                            .send(OrderRequest::LimitOrder {
+                                agent_id,
+                                stock_id,
+                                side: Side::Sell,
+                                price: ask_px,
+                                volume: vol,
+                            })
+                            .unwrap();
                     }
                     bootstrapped_clone.write().unwrap().insert(stock_id, true);
                 } else {
@@ -170,12 +219,30 @@ impl MarketMakerAgent {
 
                     if let (Some(bid), None) = (best_bid, best_ask) {
                         let ask_px = clamp(bid as i128 + 1);
-                        let vol = rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
-                        order_channel_clone.send(OrderRequest::LimitOrder { agent_id, stock_id, side: Side::Sell, price: ask_px, volume: vol }).unwrap();
+                        let vol =
+                            rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
+                        order_channel_clone
+                            .send(OrderRequest::LimitOrder {
+                                agent_id,
+                                stock_id,
+                                side: Side::Sell,
+                                price: ask_px,
+                                volume: vol,
+                            })
+                            .unwrap();
                     } else if let (None, Some(ask)) = (best_bid, best_ask) {
                         let bid_px = clamp(ask as i128 - 1);
-                        let vol = rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
-                        order_channel_clone.send(OrderRequest::LimitOrder { agent_id, stock_id, side: Side::Buy, price: bid_px, volume: vol }).unwrap();
+                        let vol =
+                            rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
+                        order_channel_clone
+                            .send(OrderRequest::LimitOrder {
+                                agent_id,
+                                stock_id,
+                                side: Side::Buy,
+                                price: bid_px,
+                                volume: vol,
+                            })
+                            .unwrap();
                     } else {
                         let center = match (best_bid, best_ask) {
                             (Some(b), Some(a)) if a > b => ((b as u128 + a as u128) / 2) as u64,
@@ -183,16 +250,37 @@ impl MarketMakerAgent {
                             _ => return,
                         };
 
-                        let current_inventory = *inventory_clone.read().unwrap().get(&stock_id).unwrap_or(&0);
+                        let current_inventory =
+                            *inventory_clone.read().unwrap().get(&stock_id).unwrap_or(&0);
                         let inventory_skew = (current_inventory as f64 * MM_SKEW_FACTOR) as i64;
                         let our_center = clamp(center as i128 - inventory_skew as i128);
                         let bid_px = clamp(our_center as i128 - (MM_DESIRED_SPREAD / 2) as i128);
                         let ask_px = clamp(our_center as i128 + (MM_DESIRED_SPREAD / 2) as i128);
 
-                        if ask_px > bid_px && !best_ask.map_or(false, |a| bid_px >= a) && !best_bid.map_or(false, |b| ask_px <= b) {
-                            let vol = rand::thread_rng().gen_range(MM_QUOTE_VOL_MIN..=MM_QUOTE_VOL_MAX);
-                            order_channel_clone.send(OrderRequest::LimitOrder { agent_id, stock_id, side: Side::Buy, price: bid_px, volume: vol }).unwrap();
-                            order_channel_clone.send(OrderRequest::LimitOrder { agent_id, stock_id, side: Side::Sell, price: ask_px, volume: vol }).unwrap();
+                        if ask_px > bid_px
+                            && !best_ask.map_or(false, |a| bid_px >= a)
+                            && !best_bid.map_or(false, |b| ask_px <= b)
+                        {
+                            let vol =
+                                rand::thread_rng().gen_range(MM_QUOTE_VOL_MIN..=MM_QUOTE_VOL_MAX);
+                            order_channel_clone
+                                .send(OrderRequest::LimitOrder {
+                                    agent_id,
+                                    stock_id,
+                                    side: Side::Buy,
+                                    price: bid_px,
+                                    volume: vol,
+                                })
+                                .unwrap();
+                            order_channel_clone
+                                .send(OrderRequest::LimitOrder {
+                                    agent_id,
+                                    stock_id,
+                                    side: Side::Sell,
+                                    price: ask_px,
+                                    volume: vol,
+                                })
+                                .unwrap();
                         }
                     }
                 }
@@ -221,7 +309,13 @@ impl Agent for MarketMakerAgent {
 
         thread::spawn(move || {
             let rx = portfolio_rx_handle.lock().unwrap();
-            Self::run_portfolio_updater_internal(&rx, &inventory_handle, &cash_handle, &open_orders_handle_for_portfolio, agent_id);
+            Self::run_portfolio_updater_internal(
+                &rx,
+                &inventory_handle,
+                &cash_handle,
+                &open_orders_handle_for_portfolio,
+                agent_id,
+            );
         });
 
         thread::spawn(move || {
@@ -247,11 +341,25 @@ impl Agent for MarketMakerAgent {
     }
 
     fn buy_stock(&mut self, stock_id: u64, volume: u64) {
-        self.order_channel.send(OrderRequest::MarketOrder { agent_id: self.id, stock_id, side: Side::Buy, volume }).expect("Failed to send buy order");
+        self.order_channel
+            .send(OrderRequest::MarketOrder {
+                agent_id: self.id,
+                stock_id,
+                side: Side::Buy,
+                volume,
+            })
+            .expect("Failed to send buy order");
     }
 
     fn sell_stock(&mut self, stock_id: u64, volume: u64) {
-        self.order_channel.send(OrderRequest::MarketOrder { agent_id: self.id, stock_id, side: Side::Sell, volume }).expect("Failed to send sell order");
+        self.order_channel
+            .send(OrderRequest::MarketOrder {
+                agent_id: self.id,
+                stock_id,
+                side: Side::Sell,
+                volume,
+            })
+            .expect("Failed to send sell order");
     }
 
     fn margin_call(&mut self) {
@@ -260,12 +368,25 @@ impl Agent for MarketMakerAgent {
         if cash <= -margin {
             let inventory = self.inventory.read().unwrap();
             for (&stock_id, &vol) in inventory.iter() {
-                if vol > 0 { 
-                    self.order_channel.send(OrderRequest::MarketOrder { agent_id: self.id, stock_id, side: Side::Sell, volume:vol.unsigned_abs() }).expect("Failed to send sell order");
-                 }
-                else if vol < 0 { 
-                    self.order_channel.send(OrderRequest::MarketOrder { agent_id: self.id, stock_id, side: Side::Buy, volume: vol.unsigned_abs() }).expect("Failed to send buy order");
-                 }
+                if vol > 0 {
+                    self.order_channel
+                        .send(OrderRequest::MarketOrder {
+                            agent_id: self.id,
+                            stock_id,
+                            side: Side::Sell,
+                            volume: vol.unsigned_abs(),
+                        })
+                        .expect("Failed to send sell order");
+                } else if vol < 0 {
+                    self.order_channel
+                        .send(OrderRequest::MarketOrder {
+                            agent_id: self.id,
+                            stock_id,
+                            side: Side::Buy,
+                            volume: vol.unsigned_abs(),
+                        })
+                        .expect("Failed to send buy order");
+                }
             }
         }
     }
@@ -286,9 +407,17 @@ impl Agent for MarketMakerAgent {
                 let mut cash_lock = self.cash.write().unwrap();
                 let mut open_orders_lock = self.open_orders.write().unwrap();
                 let vol_delta = if tr.taker_agent_id == self.id {
-                    if tr.taker_side == Side::Buy { tr.volume as i64 } else { -(tr.volume as i64) }
+                    if tr.taker_side == Side::Buy {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 } else {
-                    if tr.taker_side == Side::Sell { tr.volume as i64 } else { -(tr.volume as i64) }
+                    if tr.taker_side == Side::Sell {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 };
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
                 *cash_lock -= vol_delta as f64 * (tr.price as f64 / 100.0);
@@ -316,12 +445,10 @@ impl Agent for MarketMakerAgent {
     fn get_id(&self) -> usize {
         self.id
     }
-    
+
     fn get_inventory(&self) -> i64 {
         self.inventory.read().unwrap().values().sum()
     }
-
-
 
     fn clone_agent(&self) -> Box<dyn Agent> {
         Box::new(self.clone())
@@ -332,10 +459,11 @@ impl Agent for MarketMakerAgent {
         let new_port_value = inventory_lock.iter().fold(0.0, |acc, (stock_id, &vol)| {
             if let Some(px) = view.get_mid_price(*stock_id) {
                 acc + (vol as f64 * (px as f64 / 100.0))
-            } else { acc }
+            } else {
+                acc
+            }
         });
         *self.port_value.write().unwrap() = new_port_value;
         new_port_value
     }
 }
-

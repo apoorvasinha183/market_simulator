@@ -44,13 +44,13 @@ impl Stock {
             company_name: company_name.into(),
             total_float,
             initial_price,
-            sentiment_port
+            sentiment_port,
         }
     }
 }
 /// Maybe later we can have a Stock Mareket struct that holds a collection of stocks and their metadata.
 /// We can then have a facility to add stocks to the market, remove them, and query for them.
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct StockMarket {
     /// Collection of stocks available in the market.
     pub stocks: Vec<Stock>,
@@ -74,23 +74,31 @@ pub fn default_stock_universe() -> Vec<Stock> {
             let stock: Stock = result.expect("Could not deserialize stock");
             // print stock details
             //println!("Loaded stock: {:?}", stock);
-            stocks.push(stock);}
+            stocks.push(stock);
+        }
         //print how many stocks were loaded
         println!("Loaded {} stocks ", stocks.len());
         stocks
+    } else {
+        vec![
+            Stock::new(
+                "AAPL",
+                1,
+                "Apple Inc.",
+                15_982_000_000, // float, not split-adjusted
+                195.37,         // centre price at t=0
+                80,
+            ),
+            Stock::new(
+                "MSFT",
+                2,
+                "Microsoft Corporation",
+                7_448_000_000,
+                422.12,
+                80,
+            ),
+        ]
     }
-    else{
-    vec![
-        Stock::new(
-            "AAPL",
-            1,
-            "Apple Inc.",
-            15_982_000_000, // float, not split-adjusted
-            195.37,         // centre price at t=0
-            80,
-        ),
-        Stock::new("MSFT", 2, "Microsoft Corporation", 7_448_000_000, 422.12,80),
-    ] }
 }
 /// Prepares a stock id to stock mapping for fast lookups.
 /// This is used to quickly find a stock by its ID without iterating over the vector.
@@ -191,7 +199,7 @@ mod tests {
     use super::*;
 
     fn make_demo_stock() -> Stock {
-        Stock::new("GOOG", 42, "Alphabet Inc.", 12_345_678_000, 1337.00,80)
+        Stock::new("GOOG", 42, "Alphabet Inc.", 12_345_678_000, 1337.00, 80)
     }
 
     #[test]

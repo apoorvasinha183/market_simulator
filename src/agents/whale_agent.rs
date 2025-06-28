@@ -1,15 +1,15 @@
 // src/agents/whale_agent.rs
+use crossbeam_channel::{Receiver, Sender};
 use rand::{Rng, seq::SliceRandom};
 use std::collections::HashMap;
-use crossbeam_channel::{Receiver, Sender};
-use std::sync::{Arc, RwLock, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
 use super::{
     agent_trait::{Agent, MarketView},
     config::{
-        CRAZY_WHALE, WHALE_ACTION_PROB, WHALE_ORDER_VOLUME,
-        WHALE_PRICE_OFFSET_MAX, WHALE_PRICE_OFFSET_MIN,
+        CRAZY_WHALE, WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX,
+        WHALE_PRICE_OFFSET_MIN,
     },
     latency::WHALE_TICKS_UNTIL_ACTIVE,
 };
@@ -60,7 +60,7 @@ impl WhaleAgent {
             port_value: Arc::new(RwLock::new(0.0)),
         }
     }
-    
+
     // --- INTERNAL WORKER FUNCTIONS ---
 
     fn run_portfolio_updater_internal(
@@ -77,9 +77,17 @@ impl WhaleAgent {
                 let mut open_orders_lock = open_orders.write().unwrap();
 
                 let vol_delta = if tr.taker_agent_id == agent_id {
-                    if tr.taker_side == Side::Buy { tr.volume as i64 } else { -(tr.volume as i64) }
+                    if tr.taker_side == Side::Buy {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 } else {
-                    if tr.taker_side == Side::Sell { tr.volume as i64 } else { -(tr.volume as i64) }
+                    if tr.taker_side == Side::Sell {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 };
 
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
@@ -115,7 +123,10 @@ impl WhaleAgent {
     ) {
         {
             let mut ticks = ticks_until_active.lock().unwrap();
-            if *ticks > 0 { *ticks -= 1; return; }
+            if *ticks > 0 {
+                *ticks -= 1;
+                return;
+            }
         }
 
         let mut rng = rand::thread_rng();
@@ -125,7 +136,9 @@ impl WhaleAgent {
 
         let view = view_handle.read().unwrap();
         let ids: Vec<u64> = view.stocks.get_all_ids();
-        if ids.is_empty() { return; }
+        if ids.is_empty() {
+            return;
+        }
         let stock_id = *ids.choose(&mut rng).unwrap();
 
         // --- 1. Atomically cancel all existing orders and clear internal map ---
@@ -133,10 +146,12 @@ impl WhaleAgent {
             // Acquire a WRITE lock to prevent other threads from modifying open_orders.
             let mut open_orders_lock = open_orders.write().unwrap();
             for order_id in open_orders_lock.keys() {
-                order_channel.send(OrderRequest::CancelOrder {
-                    agent_id: id,
-                    order_id: *order_id,
-                }).expect("Failed to send cancel order");
+                order_channel
+                    .send(OrderRequest::CancelOrder {
+                        agent_id: id,
+                        order_id: *order_id,
+                    })
+                    .expect("Failed to send cancel order");
             }
             open_orders_lock.clear();
         } // Write lock is released here.
@@ -144,13 +159,19 @@ impl WhaleAgent {
         // --- 2. Place fresh orders ---
         if rng.gen_bool(CRAZY_WHALE) {
             let vol = rng.gen_range(WHALE_ORDER_VOLUME / 2..=WHALE_ORDER_VOLUME);
-            let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
-            order_channel.send(OrderRequest::MarketOrder {
-                agent_id: id,
-                stock_id,
-                side,
-                volume: vol,
-            }).expect("Failed to send whale market order");
+            let side = if rng.gen_bool(0.5) {
+                Side::Buy
+            } else {
+                Side::Sell
+            };
+            order_channel
+                .send(OrderRequest::MarketOrder {
+                    agent_id: id,
+                    stock_id,
+                    side,
+                    volume: vol,
+                })
+                .expect("Failed to send whale market order");
         } else {
             if let Some(mid) = view.get_mid_price(stock_id) {
                 let buy_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
@@ -158,21 +179,25 @@ impl WhaleAgent {
                 let bid_px = mid.saturating_sub(buy_bias);
                 let ask_px = mid.saturating_add(sell_bias);
 
-                order_channel.send(OrderRequest::LimitOrder {
-                    agent_id: id,
-                    stock_id,
-                    side: Side::Buy,
-                    price: bid_px,
-                    volume: WHALE_ORDER_VOLUME,
-                }).expect("Failed to send whale limit order");
+                order_channel
+                    .send(OrderRequest::LimitOrder {
+                        agent_id: id,
+                        stock_id,
+                        side: Side::Buy,
+                        price: bid_px,
+                        volume: WHALE_ORDER_VOLUME,
+                    })
+                    .expect("Failed to send whale limit order");
 
-                order_channel.send(OrderRequest::LimitOrder {
-                    agent_id: id,
-                    stock_id,
-                    side: Side::Sell,
-                    price: ask_px,
-                    volume: WHALE_ORDER_VOLUME,
-                }).expect("Failed to send whale limit order");
+                order_channel
+                    .send(OrderRequest::LimitOrder {
+                        agent_id: id,
+                        stock_id,
+                        side: Side::Sell,
+                        price: ask_px,
+                        volume: WHALE_ORDER_VOLUME,
+                    })
+                    .expect("Failed to send whale limit order");
             }
         }
     }
@@ -193,7 +218,13 @@ impl Agent for WhaleAgent {
 
         thread::spawn(move || {
             let rx = portfolio_rx_handle.lock().unwrap();
-            Self::run_portfolio_updater_internal(&rx, &inventory_handle, &cash_handle, &open_orders_handle_for_portfolio, agent_id);
+            Self::run_portfolio_updater_internal(
+                &rx,
+                &inventory_handle,
+                &cash_handle,
+                &open_orders_handle_for_portfolio,
+                agent_id,
+            );
         });
 
         thread::spawn(move || {
@@ -218,21 +249,25 @@ impl Agent for WhaleAgent {
     }
 
     fn buy_stock(&mut self, stock_id: u64, volume: u64) {
-        self.order_channel.send(OrderRequest::MarketOrder {
-            agent_id: self.id,
-            stock_id,
-            side: Side::Buy,
-            volume,
-        }).expect("Failed to send buy order");
+        self.order_channel
+            .send(OrderRequest::MarketOrder {
+                agent_id: self.id,
+                stock_id,
+                side: Side::Buy,
+                volume,
+            })
+            .expect("Failed to send buy order");
     }
 
     fn sell_stock(&mut self, stock_id: u64, volume: u64) {
-        self.order_channel.send(OrderRequest::MarketOrder {
-            agent_id: self.id,
-            stock_id,
-            side: Side::Sell,
-            volume,
-        }).expect("Failed to send sell order");
+        self.order_channel
+            .send(OrderRequest::MarketOrder {
+                agent_id: self.id,
+                stock_id,
+                side: Side::Sell,
+                volume,
+            })
+            .expect("Failed to send sell order");
     }
 
     fn margin_call(&mut self) {
@@ -251,14 +286,22 @@ impl Agent for WhaleAgent {
         let rx = self.port_channel.lock().unwrap();
         while let Ok(tr) = rx.try_recv() {
             if tr.taker_agent_id == self.id || tr.maker_agent_id == self.id {
-                 let mut inventory_lock = self.inventory.write().unwrap();
-                 let mut cash_lock = self.cash.write().unwrap();
-                 let mut open_orders_lock = self.open_orders.write().unwrap();
-                 
-                 let vol_delta = if tr.taker_agent_id == self.id {
-                    if tr.taker_side == Side::Buy { tr.volume as i64 } else { -(tr.volume as i64) }
+                let mut inventory_lock = self.inventory.write().unwrap();
+                let mut cash_lock = self.cash.write().unwrap();
+                let mut open_orders_lock = self.open_orders.write().unwrap();
+
+                let vol_delta = if tr.taker_agent_id == self.id {
+                    if tr.taker_side == Side::Buy {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 } else {
-                    if tr.taker_side == Side::Sell { tr.volume as i64 } else { -(tr.volume as i64) }
+                    if tr.taker_side == Side::Sell {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 };
 
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
@@ -282,10 +325,12 @@ impl Agent for WhaleAgent {
     fn cancel_open_order(&mut self, id: u64) {
         // This would now send a request rather than just modifying the internal map.
         if self.open_orders.write().unwrap().remove(&id).is_some() {
-            self.order_channel.send(OrderRequest::CancelOrder {
-                agent_id: self.id,
-                order_id: id,
-            }).expect("Failed to send cancel order request");
+            self.order_channel
+                .send(OrderRequest::CancelOrder {
+                    agent_id: self.id,
+                    order_id: id,
+                })
+                .expect("Failed to send cancel order request");
         }
     }
 
@@ -307,7 +352,9 @@ impl Agent for WhaleAgent {
         let new_port_value = inventory_lock.iter().fold(0.0, |acc, (stock_id, &vol)| {
             if let Some(px) = view.get_mid_price(*stock_id) {
                 acc + (vol as f64 * (px as f64 / 100.0))
-            } else { acc }
+            } else {
+                acc
+            }
         });
         *self.port_value.write().unwrap() = new_port_value;
         new_port_value

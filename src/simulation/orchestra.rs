@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 
 // --- Crate-level imports ---
+use crate::OrderBook; // Assuming order_book.rs is in simulators
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
 use crate::agents::dumb_agent::DumbAgent;
@@ -12,12 +13,11 @@ use crate::agents::dumb_limit_agent::DumbLimitAgent;
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
 use crate::agents::whale_agent::WhaleAgent;
-use crate::market::Market; 
+use crate::market::Market;
+use crate::simulators::market_trait::Marketable;
 use crate::stocks::StockMarket;
 use crate::types::order::{Order, OrderRequest, Trade};
-use crate::OrderBook; // Assuming order_book.rs is in simulators
-use crossbeam_channel::{unbounded, Sender};
-use crate::simulators::market_trait::Marketable;
+use crossbeam_channel::{Sender, unbounded};
 
 // --- This is the shared state agents will read from. ---
 #[derive(Debug, Clone)] // Clone is needed for the Market to initialize the shadow book
@@ -58,26 +58,29 @@ pub struct Orchestra {
 }
 
 impl Orchestra {
-    pub fn new(agent_types: Vec<AgentType>,normal_processing:usize,premium_processing:usize) -> Self {
+    pub fn new(
+        agent_types: Vec<AgentType>,
+        normal_processing: usize,
+        premium_processing: usize,
+    ) -> Self {
         println!("[Orchestra] Initializing simulation...");
 
         // === 1. Create Infrastructure ===
         let stock_market = StockMarket::new();
         // The shadow book is created empty. The Market is responsible for its initial state.
-        let normal_shadow_book: ShadowBookHandle =
-            Arc::new(RwLock::new(MarketState {
-                order_books: HashMap::new(),
-                stocks: stock_market.clone(), // Initial clone, market will overwrite
-                last_traded_price: HashMap::new(),
-                cumulative_volume: HashMap::new(),
-            }));
+        let normal_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
+            order_books: HashMap::new(),
+            stocks: stock_market.clone(), // Initial clone, market will overwrite
+            last_traded_price: HashMap::new(),
+            cumulative_volume: HashMap::new(),
+        }));
         // For now, premium is just a clone of the normal setup handle.
         let premium_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
-                order_books: HashMap::new(),
-                stocks: stock_market.clone(), // Initial clone, market will overwrite
-                last_traded_price: HashMap::new(),
-                cumulative_volume: HashMap::new(),
-            }));
+            order_books: HashMap::new(),
+            stocks: stock_market.clone(), // Initial clone, market will overwrite
+            last_traded_price: HashMap::new(),
+            cumulative_volume: HashMap::new(),
+        }));
         println!("[Orchestra] Shared shadow books created.");
 
         let (order_tx, order_rx) = unbounded::<OrderRequest>();
@@ -159,7 +162,11 @@ impl Orchestra {
         println!("[Orchestra] Market instantiated and initialized.");
 
         // === 4. Return the fully prepared, but not yet running, Orchestra ===
-        Orchestra { agents, market, shadow_handle: normal_shadow_book.clone() }
+        Orchestra {
+            agents,
+            market,
+            shadow_handle: normal_shadow_book.clone(),
+        }
     }
 
     pub fn get_shadow_handle(&self) -> ShadowBookHandle {

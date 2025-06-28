@@ -5,12 +5,12 @@ pub mod agents;
 pub mod market;
 pub mod pricing;
 pub mod sentiment;
+pub mod sentiment_engine;
 pub mod shared_types;
+pub mod simulation;
 pub mod simulators;
 pub mod stocks;
 pub mod types;
-pub mod simulation;
-pub mod sentiment_engine;
 //pub mod simulation;
 // === 2. Re-export the public-facing components to create a clean API ===
 
@@ -45,5 +45,5 @@ pub use stocks::{Stock, StockMarket, Symbol, default_stock_universe};
 
 // --- From 'sentiment' ---
 //pub use sentiment::{SentimentConfig, get as get_sentiment, init as init_sentiment};
-pub use sentiment_engine::{SentimentEngine};
+pub use sentiment_engine::SentimentEngine;
 // -- From the orchestra agent ---

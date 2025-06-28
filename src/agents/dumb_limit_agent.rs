@@ -1,9 +1,9 @@
 // src/agents/dumb_limit_agent.rs
 
+use crossbeam_channel::{Receiver, Sender};
 use rand::{Rng, seq::SliceRandom};
 use std::collections::HashMap;
-use crossbeam_channel::{Receiver, Sender};
-use std::sync::{Arc, RwLock, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
 use super::{
@@ -79,11 +79,19 @@ impl DumbLimitAgent {
                 let mut open_orders_lock = open_orders.write().unwrap();
 
                 let vol_delta = if tr.taker_agent_id == agent_id {
-                    if tr.taker_side == Side::Buy { tr.volume as i64 } else { -(tr.volume as i64) }
+                    if tr.taker_side == Side::Buy {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 } else {
-                    if tr.taker_side == Side::Sell { tr.volume as i64 } else { -(tr.volume as i64) }
+                    if tr.taker_side == Side::Sell {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 };
-                
+
                 // CORRECTED: Update the inventory for the specific stock involved in the trade.
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
                 *cash_lock -= vol_delta as f64 * (tr.price as f64 / 100.0);
@@ -128,40 +136,53 @@ impl DumbLimitAgent {
         let mut rng = rand::thread_rng();
 
         let ids: Vec<u64> = view.stocks.get_all_ids();
-        if ids.is_empty() { return; }
+        if ids.is_empty() {
+            return;
+        }
         //let stock_id = *ids.choose(&mut rng).unwrap();
-        for stock_id in ids{
-        let book = match view.book(stock_id) {
-            Some(b) => b,
-            None => return,
-        };
+        for stock_id in ids {
+            let book = match view.book(stock_id) {
+                Some(b) => b,
+                None => return,
+            };
 
-        let best_bid = book.bids.keys().next_back().copied();
-        let best_ask = book.asks.keys().next().copied();
+            let best_bid = book.bids.keys().next_back().copied();
+            let best_ask = book.asks.keys().next().copied();
 
-        for _ in 0..LIMIT_AGENT_NUM_TRADERS {
-            if !rng.gen_bool(LIMIT_AGENT_ACTION_PROB) { continue; }
+            for _ in 0..LIMIT_AGENT_NUM_TRADERS {
+                if !rng.gen_bool(LIMIT_AGENT_ACTION_PROB) {
+                    continue;
+                }
 
-            if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
-                if bid >= ask { continue; }
+                if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
+                    if bid >= ask {
+                        continue;
+                    }
 
-                let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
-                let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
-                let price = match side {
-                    Side::Buy => bid.saturating_add(offset),
-                    Side::Sell => ask.saturating_sub(offset),
-                };
-                let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
+                    let side = if rng.gen_bool(0.5) {
+                        Side::Buy
+                    } else {
+                        Side::Sell
+                    };
+                    let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
+                    let price = match side {
+                        Side::Buy => bid.saturating_add(offset),
+                        Side::Sell => ask.saturating_sub(offset),
+                    };
+                    let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
 
-                order_channel.send(OrderRequest::LimitOrder {
-                    agent_id: id,
-                    stock_id,
-                    side,
-                    price,
-                    volume,
-                }).expect("Failed to send limit order");
+                    order_channel
+                        .send(OrderRequest::LimitOrder {
+                            agent_id: id,
+                            stock_id,
+                            side,
+                            price,
+                            volume,
+                        })
+                        .expect("Failed to send limit order");
+                }
             }
-        }}
+        }
     }
 }
 
@@ -180,7 +201,13 @@ impl Agent for DumbLimitAgent {
 
         thread::spawn(move || {
             let rx = portfolio_rx_handle.lock().unwrap();
-            Self::run_portfolio_updater_internal(&rx, &inventory_handle, &cash_handle, &open_orders_handle_1, agent_id);
+            Self::run_portfolio_updater_internal(
+                &rx,
+                &inventory_handle,
+                &cash_handle,
+                &open_orders_handle_1,
+                agent_id,
+            );
         });
 
         thread::spawn(move || {
@@ -204,21 +231,25 @@ impl Agent for DumbLimitAgent {
     }
 
     fn buy_stock(&mut self, stock_id: u64, volume: u64) {
-        self.order_channel.send(OrderRequest::MarketOrder {
-            agent_id: self.id,
-            stock_id,
-            side: Side::Buy,
-            volume,
-        }).expect("Failed to send buy order");
+        self.order_channel
+            .send(OrderRequest::MarketOrder {
+                agent_id: self.id,
+                stock_id,
+                side: Side::Buy,
+                volume,
+            })
+            .expect("Failed to send buy order");
     }
 
     fn sell_stock(&mut self, stock_id: u64, volume: u64) {
-        self.order_channel.send(OrderRequest::MarketOrder {
-            agent_id: self.id,
-            side: Side::Sell,
-            stock_id,
-            volume,
-        }).expect("Failed to send sell order");
+        self.order_channel
+            .send(OrderRequest::MarketOrder {
+                agent_id: self.id,
+                side: Side::Sell,
+                stock_id,
+                volume,
+            })
+            .expect("Failed to send sell order");
     }
 
     fn margin_call(&mut self) {
@@ -227,12 +258,14 @@ impl Agent for DumbLimitAgent {
         for (&stock_id, &volume) in inventory_lock.iter() {
             // If we are short on any stock, buy to cover the position.
             if volume < 0 {
-                self.order_channel.send(OrderRequest::MarketOrder {
-            agent_id: self.id,
-            stock_id,
-            side: Side::Buy,
-            volume:volume.unsigned_abs(),
-        }).expect("Failed to send buy order");
+                self.order_channel
+                    .send(OrderRequest::MarketOrder {
+                        agent_id: self.id,
+                        stock_id,
+                        side: Side::Buy,
+                        volume: volume.unsigned_abs(),
+                    })
+                    .expect("Failed to send buy order");
             }
         }
     }
@@ -248,14 +281,22 @@ impl Agent for DumbLimitAgent {
         let rx = self.port_channel.lock().unwrap();
         while let Ok(tr) = rx.try_recv() {
             if tr.taker_agent_id == self.id || tr.maker_agent_id == self.id {
-                 let mut inventory_lock = self.inventory.write().unwrap();
-                 let mut cash_lock = self.cash.write().unwrap();
-                 let mut open_orders_lock = self.open_orders.write().unwrap();
-                 
-                 let vol_delta = if tr.taker_agent_id == self.id {
-                    if tr.taker_side == Side::Buy { tr.volume as i64 } else { -(tr.volume as i64) }
+                let mut inventory_lock = self.inventory.write().unwrap();
+                let mut cash_lock = self.cash.write().unwrap();
+                let mut open_orders_lock = self.open_orders.write().unwrap();
+
+                let vol_delta = if tr.taker_agent_id == self.id {
+                    if tr.taker_side == Side::Buy {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 } else {
-                    if tr.taker_side == Side::Sell { tr.volume as i64 } else { -(tr.volume as i64) }
+                    if tr.taker_side == Side::Sell {
+                        tr.volume as i64
+                    } else {
+                        -(tr.volume as i64)
+                    }
                 };
 
                 // CORRECTED: Same logic as the internal worker.

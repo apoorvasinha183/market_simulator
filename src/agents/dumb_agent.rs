@@ -1,22 +1,22 @@
 // src/agents/dumb_agent.rs
-use rand::{Rng, seq::SliceRandom};
-use std::collections::HashMap;
-use crossbeam_channel::{Receiver, Sender};
-use std::sync::{Arc, RwLock, Mutex};
-use std::thread;
 use super::{
     agent_trait::{Agent, MarketView},
     config::{
         DUMB_AGENT_ACTION_PROB, DUMB_AGENT_LARGE_VOL_CHANCE, DUMB_AGENT_LARGE_VOL_MAX,
         DUMB_AGENT_LARGE_VOL_MIN, DUMB_AGENT_NUM_TRADERS, DUMB_AGENT_TYPICAL_VOL_MAX,
-        DUMB_AGENT_TYPICAL_VOL_MIN,NORMAL_PROCESSING_LATENCY,
+        DUMB_AGENT_TYPICAL_VOL_MIN, NORMAL_PROCESSING_LATENCY,
     },
 };
 use crate::{
     agents::latency::DUMB_AGENT_TICKS_UNTIL_ACTIVE,
-    types::order::{Order, OrderRequest, Side, Trade},
     simulation::orchestra::ShadowBookHandle,
+    types::order::{Order, OrderRequest, Side, Trade},
 };
+use crossbeam_channel::{Receiver, Sender};
+use rand::{Rng, seq::SliceRandom};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, RwLock};
+use std::thread;
 
 // The struct is now a container of shareable handles.
 // Deriving Clone is cheap as it only clones the Arcs.
@@ -24,7 +24,7 @@ use crate::{
 pub struct DumbAgent {
     id: usize,
     // Senders are Clone, so no wrapping needed.
-    order_channel : Sender<OrderRequest>,
+    order_channel: Sender<OrderRequest>,
     // Receivers are not Clone, so we wrap them to be able to move handles into threads.
     ack_channel: Arc<Mutex<Receiver<Order>>>,
     port_channel: Arc<Mutex<Receiver<Trade>>>,
@@ -40,7 +40,13 @@ pub struct DumbAgent {
 }
 
 impl DumbAgent {
-    pub fn new(id: usize,tx_order:Sender<OrderRequest>,rx_order:Receiver<Order>,pt_order:Receiver<Trade>,view:ShadowBookHandle) -> Self {
+    pub fn new(
+        id: usize,
+        tx_order: Sender<OrderRequest>,
+        rx_order: Receiver<Order>,
+        pt_order: Receiver<Trade>,
+        view: ShadowBookHandle,
+    ) -> Self {
         Self {
             id,
             order_channel: tx_order,
@@ -78,15 +84,15 @@ impl DumbAgent {
                 let mut inventory_lock = inventory.write().unwrap();
                 let mut cash_lock = cash.write().unwrap();
                 let mut open_orders_lock = open_orders.write().unwrap();
-                
+
                 // update the inventory for the specific stock_id
                 let stock_id = tr.stock_id;
                 let vol = tr.volume as i64 * if tr.taker_side == Side::Buy { 1 } else { -1 };
                 *inventory_lock.entry(stock_id).or_insert(0) += vol;
-    
+
                 // update cash based on the trade price and volume
                 *cash_lock -= (tr.price as f64 / 100.0) * tr.volume as f64;
-                
+
                 // update the open orders
                 if tr.maker_agent_id == agent_id {
                     if let Some(o) = open_orders_lock.get_mut(&tr.maker_order_id) {
@@ -138,38 +144,45 @@ impl DumbAgent {
             return;
         }
         //let stock_id = *universe.choose(&mut rng).unwrap();
-        for stock_id in universe{
-        for _ in 0..DUMB_AGENT_NUM_TRADERS {
-            if rng.gen_bool(DUMB_AGENT_ACTION_PROB) {
-                let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
-                let volume = if rng.gen_bool(DUMB_AGENT_LARGE_VOL_CHANCE) {
-                    rng.gen_range(DUMB_AGENT_LARGE_VOL_MIN..=DUMB_AGENT_LARGE_VOL_MAX)
-                } else {
-                    rng.gen_range(DUMB_AGENT_TYPICAL_VOL_MIN..=DUMB_AGENT_TYPICAL_VOL_MAX)
-                };
+        for stock_id in universe {
+            for _ in 0..DUMB_AGENT_NUM_TRADERS {
+                if rng.gen_bool(DUMB_AGENT_ACTION_PROB) {
+                    let side = if rng.gen_bool(0.5) {
+                        Side::Buy
+                    } else {
+                        Side::Sell
+                    };
+                    let volume = if rng.gen_bool(DUMB_AGENT_LARGE_VOL_CHANCE) {
+                        rng.gen_range(DUMB_AGENT_LARGE_VOL_MIN..=DUMB_AGENT_LARGE_VOL_MAX)
+                    } else {
+                        rng.gen_range(DUMB_AGENT_TYPICAL_VOL_MIN..=DUMB_AGENT_TYPICAL_VOL_MAX)
+                    };
 
-                if side == Side::Buy {
-                    if let Some(px) = view.get_mid_price(stock_id) {
-                        let cost = volume as f64 * (px as f64 / 100.0);
-                        // Lock cash and margin for reading, drop locks immediately.
-                        let current_cash = *cash.read().unwrap();
-                        let current_margin = *margin.read().unwrap();
-                        if cost > current_cash + current_margin {
-                            continue;
+                    if side == Side::Buy {
+                        if let Some(px) = view.get_mid_price(stock_id) {
+                            let cost = volume as f64 * (px as f64 / 100.0);
+                            // Lock cash and margin for reading, drop locks immediately.
+                            let current_cash = *cash.read().unwrap();
+                            let current_margin = *margin.read().unwrap();
+                            if cost > current_cash + current_margin {
+                                continue;
+                            }
                         }
                     }
-                }
 
-                let order_req = OrderRequest::MarketOrder {
-                    agent_id: id,
-                    stock_id,
-                    side,
-                    volume,
-                };
-                //std::thread::sleep(std::time::Duration::from_millis(NORMAL_PROCESSING_LATENCY as u64));
-                order_channel.send(order_req).expect("Failed to send order request");
+                    let order_req = OrderRequest::MarketOrder {
+                        agent_id: id,
+                        stock_id,
+                        side,
+                        volume,
+                    };
+                    //std::thread::sleep(std::time::Duration::from_millis(NORMAL_PROCESSING_LATENCY as u64));
+                    order_channel
+                        .send(order_req)
+                        .expect("Failed to send order request");
+                }
             }
-        }}
+        }
     }
 }
 
@@ -192,7 +205,13 @@ impl Agent for DumbAgent {
             // This thread takes ownership of the receiver from the Mutex.
             let rx = portfolio_rx_handle.lock().unwrap();
             // The thread's entire job is to call our dedicated, blocking function.
-            Self::run_portfolio_updater_internal(&rx, &inventory_handle, &cash_handle, &open_orders_handle_1, agent_id);
+            Self::run_portfolio_updater_internal(
+                &rx,
+                &inventory_handle,
+                &cash_handle,
+                &open_orders_handle_1,
+                agent_id,
+            );
         });
 
         thread::spawn(move || {
@@ -227,7 +246,9 @@ impl Agent for DumbAgent {
             side: Side::Buy,
             volume,
         };
-        self.order_channel.send(order_req).expect("Failed to send order request");
+        self.order_channel
+            .send(order_req)
+            .expect("Failed to send order request");
     }
 
     fn sell_stock(&mut self, stock_id: u64, volume: u64) {
@@ -237,7 +258,9 @@ impl Agent for DumbAgent {
             side: Side::Sell,
             volume,
         };
-        self.order_channel.send(order_req).expect("Failed to send order request");
+        self.order_channel
+            .send(order_req)
+            .expect("Failed to send order request");
     }
 
     fn margin_call(&mut self) {
@@ -254,7 +277,9 @@ impl Agent for DumbAgent {
                         side: Side::Sell,
                         volume: vol.unsigned_abs(),
                     };
-                    self.order_channel.send(order_req).expect("Failed to send liquidation order");
+                    self.order_channel
+                        .send(order_req)
+                        .expect("Failed to send liquidation order");
                 }
             }
         }
@@ -282,7 +307,7 @@ impl Agent for DumbAgent {
                 let mut inventory_lock = self.inventory.write().unwrap();
                 let mut cash_lock = self.cash.write().unwrap();
                 let mut open_orders_lock = self.open_orders.write().unwrap();
-                
+
                 let stock_id = tr.stock_id;
                 let vol = tr.volume as i64 * if tr.taker_side == Side::Buy { 1 } else { -1 };
                 *inventory_lock.entry(stock_id).or_insert(0) += vol;
@@ -330,7 +355,7 @@ impl Agent for DumbAgent {
                 acc
             }
         });
-        
+
         // Lock and update the shared port_value state.
         *self.port_value.write().unwrap() = new_port_value;
         new_port_value
