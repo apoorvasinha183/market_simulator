@@ -12,7 +12,7 @@ use market_simulator::{
 //use egui_plot::PlotItem;
 use std::collections::HashMap;
 use std::time::Instant;
-
+use core_affinity;
 // Add debug logging
 fn debug_order_book(order_book: &OrderBook, stock_id: u64) {
     println!("=== DEBUG ORDER BOOK FOR STOCK {} ===", stock_id);
@@ -632,6 +632,9 @@ fn main() -> Result<(), eframe::Error> {
             .with_min_inner_size([1_000.0, 700.0]),
         ..Default::default()
     };
+    // Print the number of available cores
+    let cores = core_affinity::get_core_ids().unwrap_or_default();
+    println!("Available cores: {}", cores.len());
 
     let participants = vec![
         AgentType::MarketMaker,

@@ -66,9 +66,9 @@ pub const DUMB_AGENT_TYPICAL_VOL_MAX: u64 = 50;
 
 pub const DUMB_AGENT_LARGE_VOL_CHANCE: f64 = 0.001;
 
-pub const DUMB_AGENT_LARGE_VOL_MIN: u64 = 75_0;
+pub const DUMB_AGENT_LARGE_VOL_MIN: u64 = 750;
 
-pub const DUMB_AGENT_LARGE_VOL_MAX: u64 = 750_00;
+pub const DUMB_AGENT_LARGE_VOL_MAX: u64 = 20000;
 
 
 
@@ -80,9 +80,9 @@ pub const LIMIT_AGENT_ACTION_PROB: f64 = 0.5;
 
 // Their order sizes are now more substantial, able to absorb some of the "noise".
 
-pub const LIMIT_AGENT_VOL_MIN: u64 = 500;
+pub const LIMIT_AGENT_VOL_MIN: u64 = 5000;
 
-pub const LIMIT_AGENT_VOL_MAX: u64 = 5_000;
+pub const LIMIT_AGENT_VOL_MAX: u64 = 50000;
 
 // The speculative offset remains large, representing diverse opinions on price.
 
