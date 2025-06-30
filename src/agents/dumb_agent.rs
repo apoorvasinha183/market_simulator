@@ -4,7 +4,7 @@ use super::{
     config::{
         DUMB_AGENT_ACTION_PROB, DUMB_AGENT_LARGE_VOL_CHANCE, DUMB_AGENT_LARGE_VOL_MAX,
         DUMB_AGENT_LARGE_VOL_MIN, DUMB_AGENT_NUM_TRADERS, DUMB_AGENT_TYPICAL_VOL_MAX,
-        DUMB_AGENT_TYPICAL_VOL_MIN, NORMAL_PROCESSING_LATENCY,
+        DUMB_AGENT_TYPICAL_VOL_MIN,
     },
 };
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     types::order::{Order, OrderRequest, Side, Trade},
 };
 use crossbeam_channel::{Receiver, Sender};
-use rand::{Rng, seq::SliceRandom};
+use rand::{Rng};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
@@ -78,7 +78,8 @@ impl DumbAgent {
     ) {
         // This loop will block here until a trade arrives or the channel closes.
         while let Ok(tr) = port_rx.recv() {
-            // Only process trades relevant to this agent.
+            // Only process trades relevant to this agent. -- Sorry,I asked AI to correct my code.this is impossible to violate because
+            // of the architecture.
             if tr.maker_agent_id == agent_id || tr.taker_agent_id == agent_id {
                 // Lock the specific state needed for the update.
                 let mut inventory_lock = inventory.write().unwrap();

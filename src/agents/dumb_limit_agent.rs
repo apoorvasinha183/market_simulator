@@ -1,7 +1,7 @@
 // src/agents/dumb_limit_agent.rs
 
 use crossbeam_channel::{Receiver, Sender};
-use rand::{Rng, seq::SliceRandom};
+use rand::{Rng};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
@@ -13,7 +13,7 @@ use super::{
         LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN,
     },
 };
-use crate::stocks;
+//use crate::stocks;
 use crate::{
     agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
     simulation::orchestra::ShadowBookHandle,
