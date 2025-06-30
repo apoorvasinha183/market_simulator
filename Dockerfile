@@ -1,6 +1,9 @@
 # Stage 1: Builder
 FROM rust:latest AS builder
 
+# Install protobuf compiler
+RUN apt-get update && apt-get install -y protobuf-compiler
+
 WORKDIR /usr/src/market_simulator
 
 # Copy the entire project
