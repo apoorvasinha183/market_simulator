@@ -1,0 +1,10 @@
+# Ignore git directory
+.git
+# Ignore IDE directories
+.idea
+# Ignore build artifacts
+target
+# Ignore benchmark results
+benchmark_results
+# Ignore local secrets if any
+*.env

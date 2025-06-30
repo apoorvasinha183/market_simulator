@@ -24,3 +24,20 @@ harness = false
 [[bench]]
 name = "order_book_enhanced"
 harness = false
+
+[dependencies.prost]
+version = "0.12.3"
+
+[dependencies.tokio]
+version = "1.36.0"
+features = ["macros", "rt-multi-thread"]
+
+[dependencies.tokio-stream]
+version = "0.1.15"
+
+[dependencies.tonic]
+version = "0.11.0"
+
+[build-dependencies]
+prost-build = "0.12.3"
+tonic-build = "0.11.0"

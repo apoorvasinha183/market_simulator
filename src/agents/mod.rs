@@ -9,3 +9,4 @@ pub mod ipo_agent;
 pub mod latency;
 pub mod market_maker_agent;
 pub mod whale_agent;
+pub mod customer_agent;

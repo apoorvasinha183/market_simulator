@@ -665,6 +665,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::DumbMarket,
         AgentType::DumbLimit,
         AgentType::WhaleAgent,
+        AgentType::CustomerAgent,
     ];
 
     let orchestra = Orchestra::new(participants, 1000, 100);

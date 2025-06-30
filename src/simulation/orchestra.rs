@@ -13,6 +13,7 @@ use crate::agents::dumb_limit_agent::DumbLimitAgent;
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
 use crate::agents::whale_agent::WhaleAgent;
+use crate::agents::customer_agent::CustomerAgent;
 use crate::market::Market;
 use crate::simulators::market_trait::Marketable;
 use crate::stocks::StockMarket;
@@ -136,6 +137,13 @@ impl Orchestra {
                     view_handle,
                 )),
                 AgentType::WhaleAgent => Box::new(WhaleAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                AgentType::CustomerAgent => Box::new(CustomerAgent::new(
                     id,
                     order_tx.clone(),
                     rx_ack,
