@@ -14,4 +14,4 @@ RUN conda env create -f environment.yml
 SHELL ["/bin/bash", "-c"]
 
 # Define the command to run the application
-CMD ["conda run -n market_client python -u run_broker.py"]
+CMD conda run -n market_client python -u run_broker.py

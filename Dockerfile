@@ -13,7 +13,7 @@ COPY . .
 RUN cargo build --release --bin visual_order
 
 # Stage 2: Final image
-FROM debian:buster-slim
+FROM debian:bookworm-slim
 
 # Copy the binary from the builder stage
 COPY --from=builder /usr/src/market_simulator/target/release/visual_order /usr/local/bin/visual_order
