@@ -10,7 +10,7 @@ WORKDIR /usr/src/market_simulator
 COPY . .
 
 # Build the visual_order binary
-RUN cargo build --release --bin visual_order
+RUN cargo build --release --bin grpc_server
 
 # Stage 2: Final image
 FROM debian:bookworm-slim
@@ -22,4 +22,4 @@ COPY --from=builder /usr/src/market_simulator/target/release/visual_order /usr/l
 EXPOSE 50051
 
 # Set the default command to run the visualizer
-CMD ["visual_order"]
+CMD ["grpc_server"]
