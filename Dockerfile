@@ -16,7 +16,7 @@ RUN cargo build --release --bin grpc_server
 FROM debian:bookworm-slim
 
 # Copy the binary from the builder stage
-COPY --from=builder /usr/src/market_simulator/target/release/visual_order /usr/local/bin/visual_order
+COPY --from=builder /usr/src/market_simulator/target/release/grpc_server /usr/local/bin/grpc_server
 
 # Expose the gRPC port
 EXPOSE 50051
