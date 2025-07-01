@@ -4,7 +4,7 @@ use super::{
     config::{
         DUMB_AGENT_ACTION_PROB, DUMB_AGENT_LARGE_VOL_CHANCE, DUMB_AGENT_LARGE_VOL_MAX,
         DUMB_AGENT_LARGE_VOL_MIN, DUMB_AGENT_NUM_TRADERS, DUMB_AGENT_TYPICAL_VOL_MAX,
-        DUMB_AGENT_TYPICAL_VOL_MIN, NORMAL_PROCESSING_LATENCY,
+        DUMB_AGENT_TYPICAL_VOL_MIN,
     },
 };
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
     types::order::{Order, OrderRequest, Side, Trade},
 };
 use crossbeam_channel::{Receiver, Sender};
-use rand::{Rng, seq::SliceRandom};
+use rand::{Rng};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
@@ -78,7 +78,8 @@ impl DumbAgent {
     ) {
         // This loop will block here until a trade arrives or the channel closes.
         while let Ok(tr) = port_rx.recv() {
-            // Only process trades relevant to this agent.
+            // Only process trades relevant to this agent. -- Sorry,I asked AI to correct my code.this is impossible to violate because
+            // of the architecture.
             if tr.maker_agent_id == agent_id || tr.taker_agent_id == agent_id {
                 // Lock the specific state needed for the update.
                 let mut inventory_lock = inventory.write().unwrap();
@@ -118,72 +119,97 @@ impl DumbAgent {
         }
     }
 
-    /// The logic for a single decision tick.
-    fn decide_actions_internal(
-        id: usize,
-        ticks_until_active: &Arc<Mutex<u32>>,
-        cash: &Arc<RwLock<f64>>,
-        margin: &Arc<RwLock<f64>>,
-        view_handle: &ShadowBookHandle,
-        order_channel: &Sender<OrderRequest>,
-    ) {
-        // Lock ticks, decrement, and check if active. Drop lock immediately.
-        {
-            let mut ticks = ticks_until_active.lock().unwrap();
-            if *ticks > 0 {
-                *ticks -= 1;
-                return;
-            }
-        } // Lock on `ticks_until_active` is released here.
-
-        let view = view_handle.read().unwrap();
-        let mut rng = rand::thread_rng();
-
-        let universe: Vec<u64> = view.stocks.get_all_ids();
-        if universe.is_empty() {
+/// The logic for a single decision tick - now with parallel stock processing
+fn decide_actions_internal(
+    id: usize,
+    ticks_until_active: &Arc<Mutex<u32>>,
+    cash: &Arc<RwLock<f64>>,
+    margin: &Arc<RwLock<f64>>,
+    view_handle: &ShadowBookHandle,
+    order_channel: &Sender<OrderRequest>,
+) {
+    // Lock ticks, decrement, and check if active. Drop lock immediately.
+    {
+        let mut ticks = ticks_until_active.lock().unwrap();
+        if *ticks > 0 {
+            *ticks -= 1;
             return;
         }
-        //let stock_id = *universe.choose(&mut rng).unwrap();
-        for stock_id in universe {
-            for _ in 0..DUMB_AGENT_NUM_TRADERS {
-                if rng.gen_bool(DUMB_AGENT_ACTION_PROB) {
-                    let side = if rng.gen_bool(0.5) {
-                        Side::Buy
-                    } else {
-                        Side::Sell
-                    };
-                    let volume = if rng.gen_bool(DUMB_AGENT_LARGE_VOL_CHANCE) {
-                        rng.gen_range(DUMB_AGENT_LARGE_VOL_MIN..=DUMB_AGENT_LARGE_VOL_MAX)
-                    } else {
-                        rng.gen_range(DUMB_AGENT_TYPICAL_VOL_MIN..=DUMB_AGENT_TYPICAL_VOL_MAX)
-                    };
+    }
 
-                    if side == Side::Buy {
-                        if let Some(px) = view.get_mid_price(stock_id) {
-                            let cost = volume as f64 * (px as f64 / 100.0);
-                            // Lock cash and margin for reading, drop locks immediately.
-                            let current_cash = *cash.read().unwrap();
-                            let current_margin = *margin.read().unwrap();
+    let view = view_handle.read().unwrap();
+    let universe: Vec<u64> = view.stocks.get_all_ids();
+    if universe.is_empty() {
+        return;
+    }
+
+    // Clone the necessary handles for parallel processing
+    let cash_handle = cash.clone();
+    let margin_handle = margin.clone();
+    let order_channel_clone = order_channel.clone();
+
+    // Use thread::scope to ensure all threads complete before returning
+    thread::scope(|s| {
+        // Spawn a thread for each stock
+        for &stock_id in &universe {
+            let cash_ref = cash_handle.clone();
+            let margin_ref = margin_handle.clone();
+            let order_sender = order_channel_clone.clone();
+            
+            // Get price reference before spawning thread
+            let price_ref = match view.get_mid_price(stock_id) {
+                Some(mid) => mid,
+                None => match view.last_traded_price.get(&stock_id) {
+                    Some(&last_price) => (last_price * 100.0) as u64,
+                    None => {
+                        // Fallback to initial_price if no mid or last traded price
+                        view.stocks.get_stock_by_id(stock_id)
+                            .map(|s| (s.initial_price * 100.0) as u64)
+                            .unwrap_or(15000) // Default to 150.00
+                    }
+                },
+            };
+
+            s.spawn(move || {
+                let mut rng = rand::thread_rng();
+                
+                // Process multiple traders for this stock
+                for _ in 0..DUMB_AGENT_NUM_TRADERS {
+                    if rng.gen_bool(DUMB_AGENT_ACTION_PROB) {
+                        let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
+                        let volume = if rng.gen_bool(DUMB_AGENT_LARGE_VOL_CHANCE) {
+                            rng.gen_range(DUMB_AGENT_LARGE_VOL_MIN..=DUMB_AGENT_LARGE_VOL_MAX)
+                        } else {
+                            rng.gen_range(DUMB_AGENT_TYPICAL_VOL_MIN..=DUMB_AGENT_TYPICAL_VOL_MAX)
+                        };
+
+                        // Check cash/margin constraints for buy orders
+                        if side == Side::Buy {
+                            let cost = volume as f64 * (price_ref as f64 / 100.0);
+                            let current_cash = *cash_ref.read().unwrap();
+                            let current_margin = *margin_ref.read().unwrap();
                             if cost > current_cash + current_margin {
                                 continue;
                             }
                         }
-                    }
 
-                    let order_req = OrderRequest::MarketOrder {
-                        agent_id: id,
-                        stock_id,
-                        side,
-                        volume,
-                    };
-                    //std::thread::sleep(std::time::Duration::from_millis(NORMAL_PROCESSING_LATENCY as u64));
-                    order_channel
-                        .send(order_req)
-                        .expect("Failed to send order request");
+                        let order_req = OrderRequest::MarketOrder {
+                            agent_id: id,
+                            stock_id,
+                            side,
+                            volume,
+                        };
+                        
+                        if let Err(e) = order_sender.send(order_req) {
+                            eprintln!("[DumbAgent {}] Failed to send order for stock {}: {}", id, stock_id, e);
+                        }
+                    }
                 }
-            }
+            });
         }
-    }
+        // All threads will be joined automatically when the scope ends
+    });
+}
 }
 
 // -----------------------------------------------------------------------------
@@ -223,7 +249,7 @@ impl Agent for DumbAgent {
         // --- 3. The main thread runs the decision loop ---
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_micros(20));
+            thread::sleep(std::time::Duration::from_millis(10));
         }
     }
 

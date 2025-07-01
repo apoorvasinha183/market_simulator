@@ -1,97 +1,144 @@
-# 🚀 Market Simulator
+# Market Simulation Platform
 
-A high-performance, multi-threaded financial market simulator written in Rust. It's designed for designing, training, and evaluating trading agents—whether they're based on classical algorithms or modern reinforcement learning—in a realistic, high-fidelity limit order book environment.
-
-## What is this?
-
-Have you ever wanted to see how a trading idea would *really* perform? This project lets you do just that. It's a complete, end-to-end simulation of a stock market, from the exchange that matches orders to the different types of traders that populate it. You can write your own automated trading agents, drop them into the market, and see how they fare against a backdrop of market makers, retail investors, and even high-capital "whale" traders.
-
-It's built to be both realistic and fast, using modern, concurrent Rust to handle thousands of events per second.
+This project provides a high-performance, distributed financial market simulator written in Rust. It is designed for research, testing, and analysis of trading strategies and market dynamics within a realistic limit order book environment. The platform enables the simulation of various market participants and their interactions, offering a robust tool for understanding complex market behaviors.
 
 ## Key Features
 
-*   **Realistic Exchange:** A true-to-life limit order book with price-time priority matching, partial fills, and cancellations.
-*   **Concurrent Architecture:** The market and every agent run in their own threads, communicating through high-speed channels for maximum performance and realism.
-*   **A World of Agents:** The simulation is populated by different types of traders, each with its own behavior, from simple market-order agents to sophisticated market makers.
-*   **Pluggable Agent Framework:** It's easy to create your own trading agents. Just implement the `Agent` trait and drop your creation into the simulation.
-*   **Live Visualization:** Comes with two real-time GUI applications built with `egui` to watch the market unfold. See the order book depth, price history, and more, live as it happens.
-*   **Sentiment Analysis:** The simulation includes a sentiment analysis engine that can influence agent behavior, adding another layer of realism.
-*   **Built with Rust:** All the performance, safety, and concurrency that Rust is famous for.
+*   **High-Performance Matching Engine:** Implements a true-to-life limit order book with price-time priority matching, partial fills, and cancellations, optimized for speed and concurrency in Rust.
+*   **Multi-threaded Agent Simulation:** The market and each agent operate in their own threads, communicating through high-speed channels for maximum performance and realism.
+*   **Diverse Agent Ecosystem:** Populated by various agent types, each with distinct behaviors, including market order agents, sophisticated market makers, and high-capital "whale" traders.
+*   **Pluggable Agent Framework:** An extensible `Agent` trait in Rust allows for easy development and integration of custom trading agents.
+*   **Real-time Communication via gRPC:** Utilizes gRPC for efficient, bi-directional streaming of market data and order flow between the Rust backend and Python clients, enabling external control and observation.
+*   **Configurable Market Parameters:** Provides extensive configuration options for tuning agent behaviors, liquidity levels, and other market parameters to simulate diverse market conditions.
+*   **Live Visualization:** Includes real-time GUI applications built with `egui` to observe market dynamics, order book depth, and price history as the simulation unfolds.
+*   **Sentiment Analysis Integration:** Features a sentiment analysis engine that can influence agent behavior, adding an additional layer of market realism.
+*   **Docker Support:** Comprehensive Docker configurations are provided for streamlined setup and deployment of the entire simulation environment.
 
-## How It Works: The Simulation Lifecycle
+## Architecture
 
-The simulation is managed by a central `Orchestra`, which is responsible for setting up and running the entire show.
+The platform employs a client-server architecture with a clear separation of concerns:
 
-1.  **Setup:** The `Orchestra` initializes the `Market` (the exchange), a cast of `Agents` (the traders), and the communication channels that connect them.
-2.  **Launch:** Each agent and the market are spawned into their own native threads.
-3.  **Interaction:** Agents make decisions based on their internal logic and a read-only "shadow" view of the market's order books. They send `OrderRequest` messages (limit orders, market orders, cancellations) to the market over a shared channel.
-4.  **Matching:** The `Market` thread continuously processes incoming orders, matching them in its private order books and generating `Trade` events.
-5.  **Communication:** The `Market` sends acknowledgements and trade notifications back to the relevant agents, who then update their internal state (like their cash and inventory).
-6.  **Visualization:** While all this is happening, you can run one of the visualizer applications to get a live, real-time view of the market state.
+*   **Rust Backend:** This is the core of the simulation, implemented in Rust for its performance and concurrency capabilities. It manages the central `Market` (the exchange), which handles order books, trade execution, and agent state updates. The backend also hosts the gRPC server, exposing the simulation's API.
+*   **Python Client:** This component serves as the external interface to the simulation. It connects to the Rust gRPC server, allowing users to send various order types (Market, Limit) and receive real-time updates such as order acknowledgments and trade notifications. This enables flexible control and data consumption for external trading algorithms or analysis tools.
+*   **gRPC Communication:** Protocol Buffers define the service contract (`market_gateway.proto`), ensuring a language-agnostic and efficient communication layer. A bi-directional streaming RPC facilitates real-time data exchange between the Rust backend and Python clients.
 
-## The Actors: A Look at the Agents
+## Technologies Used
 
-The simulation comes with a variety of built-in agent types:
+*   **Rust:**
+    *   `tokio`: Asynchronous runtime for concurrent operations.
+    *   `tonic`, `prost`: gRPC framework and Protocol Buffer implementation.
+    *   `crossbeam-channel`: High-performance multi-producer, multi-consumer channels.
+    *   `parking_lot`, `once_cell`: Concurrency primitives for shared state management.
+    *   `eframe`, `egui_plot`: For GUI development and plotting in the visualizer.
+    *   `criterion`: Benchmarking framework.
+*   **Python:**
+    *   `grpcio`, `grpcio-tools`: Python gRPC libraries.
+    *   `pytest`: For testing the Python client.
+*   **Docker:** For containerization and simplified deployment using `docker-compose`.
 
-*   **`DumbAgent`:** Represents the unpredictable nature of retail traders by placing random market orders.
-*   **`DumbLimitAgent`:** A slightly more sophisticated retail trader that places limit orders around the current price.
-*   **`MarketMakerAgent`:** Provides liquidity to the market by maintaining a tight bid-ask spread, ensuring there are always orders to trade against.
-*   **`IpoAgent`:** Simulates an Initial Public Offering by placing a large number of sell orders at the beginning of the simulation.
-*   **`WhaleAgent`:** A high-capital, patient trader that places large, infrequent limit orders far from the mid-price, representing institutional flow.
-
-## Getting Started
+## Setup and Installation
 
 ### Prerequisites
 
-*   Rust 1.60 or later
-*   Cargo package manager
+*   Rust (with Cargo)
+*   Python 3.10+
+*   Conda (recommended for Python environment management)
+*   Docker (if using Docker for deployment)
 
-### Running the Simulation
+### Local Setup (without Docker)
 
 1.  **Clone the repository:**
-
     ```bash
     git clone https://github.com/apoorvasinha183/market_simulator.git
     cd market_simulator
     ```
 
-2.  **Build the project:**
+2.  **Rust Backend Setup:**
+    *   Build the Rust project:
+        ```bash
+        cargo build --release
+        ```
+    *   Run the gRPC server:
+        ```bash
+        cargo run --release --bin grpc_server
+        ```
+        Keep this terminal open as the server will run continuously.
 
+3.  **Python Client Setup:**
+    *   Navigate to the `python_client` directory:
+        ```bash
+        cd python_client
+        ```
+    *   Create and activate the Conda environment:
+        ```bash
+        conda env create -f environment.yml
+        conda activate market_simulator_env
+        ```
+    *   Install Python dependencies:
+        ```bash
+        pip install -r requirements.txt
+        ```
+    *   Generate gRPC Python stubs (if not already generated or if `.proto` files change):
+        ```bash
+        python -m grpc_tools.protoc -I../proto --python_out=./market_gateway_client/generated --grpc_python_out=./market_gateway_client/generated ../proto/market_gateway.proto
+        ```
+    *   Run the Python broker client:
+        ```bash
+        python run_broker.py
+        ```
+        This will connect to the Rust server and begin sending orders.
+
+### Docker Setup
+
+1.  **Build and run services using Docker Compose:**
     ```bash
-    cargo build --release
+    docker-compose up --build
     ```
+    This command will build the Docker images for both the Rust server and Python client, and then start them.
 
-3.  **Run the visualizer:**
+## Usage
 
-    The best way to experience the simulation is through the live visualizer.
+Once the Rust gRPC server and Python client are running:
 
+*   The Rust server's console will display market events, agent actions, and trade executions.
+*   The Python client's console will show the orders being sent and any acknowledgments or trade updates received from the server.
+*   To run the live market visualizer:
     ```bash
     cargo run --release --bin visual_order
     ```
+    This will launch a GUI application providing a real-time view of the order book and price history.
 
-    This will launch a GUI application where you can start, pause, and inspect the live order book and price history for the simulated stocks.
+## Project Structure
+
+*   `./`: Root directory, containing `Cargo.toml`, `docker-compose.yml`, `README.md`, etc.
+*   `proto/`: Defines the gRPC service contract in `market_gateway.proto`.
+*   `src/`: Rust source code for the simulation backend.
+    *   `src/agents/`: Implementations of various agent behaviors and configurations.
+    *   `src/bin/`: Executable binaries, including the gRPC server and visualizer.
+    *   `src/pricing/`: Modules for pricing models.
+    *   `src/sentiment_engine/`: Components for sentiment analysis.
+    *   `src/simulation/`: Core orchestration logic for the simulation.
+    *   `src/simulators/`: Implementations of the market and order book.
+    *   `src/stocks/`: Definitions and management of stock instruments.
+    *   `src/types/`: Fundamental data structures for orders, trades, and other market entities.
+*   `python_client/`: Python client application.
+    *   `python_client/market_gateway_client/`: Python client logic and generated gRPC files.
+    *   `python_client/tests/`: Unit and integration tests for the Python client.
+    *   `python_client/environment.yml`, `python_client/requirements.txt`: Python dependency management files.
+*   `benches/`: Rust benchmarking code.
+*   `tests/`: Rust integration tests.
 
 ## Project Roadmap
 
 | Phase | Description | Status |
 | :--- | :--- | :--- |
-| **Foundation** | Core architecture, multi-threaded orchestra, agent framework | ✅ Complete |
-| **Core Actors** | Implementation of all major agent types | ✅ Complete |
-| **Visualization** | Real-time order book and price history visualizer | ✅ Complete |
-| **Testing** | Comprehensive unit and integration tests | ⏳ In Progress |
-| **RL Integration** | A streaming interface (e.g., gRPC) for external policy control | ấp Planned |
-| **Options Market** | Dedicated infrastructure for options pricing and trading | ấp Planned |
-
-## Dependencies
-
-The project leverages several high-quality Rust crates:
-
--   **eframe/egui**: For the modern GUI of the visualization tools.
--   **crossbeam-channel**: For high-performance, multi-threaded message passing.
--   **serde**: For data serialization.
--   **rand**: For random number generation.
--   **statrs**: For statistical functions and distributions.
+| **Foundation** | Core architecture, multi-threaded orchestra, agent framework | Complete |
+| **Core Actors** | Implementation of all major agent types | Complete |
+| **Visualization** | Real-time order book and price history visualizer | Complete |
+| **Testing** | Comprehensive unit and integration tests | In Progress |
+| **RL Integration** | A streaming interface (e.g., gRPC) for external policy control | Planned |
+| **Options Market** | Dedicated infrastructure for options pricing and trading | Planned |
 
 ## License
 
-This project is licensed under the MIT License. A copy of the license can be found in the `LICENSE` file.
+This project is licensed under the MIT License. See the `LICENSE` file for details.

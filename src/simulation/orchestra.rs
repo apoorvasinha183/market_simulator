@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // --- Crate-level imports ---
 use crate::OrderBook; // Assuming order_book.rs is in simulators
@@ -13,6 +14,7 @@ use crate::agents::dumb_limit_agent::DumbLimitAgent;
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
 use crate::agents::whale_agent::WhaleAgent;
+use crate::agents::customer_agent::CustomerAgent;
 use crate::market::Market;
 use crate::simulators::market_trait::Marketable;
 use crate::stocks::StockMarket;
@@ -67,6 +69,7 @@ impl Orchestra {
 
         // === 1. Create Infrastructure ===
         let stock_market = StockMarket::new();
+
         // The shadow book is created empty. The Market is responsible for its initial state.
         let normal_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
             order_books: HashMap::new(),
@@ -142,6 +145,13 @@ impl Orchestra {
                     rx_trade,
                     view_handle,
                 )),
+                AgentType::CustomerAgent => Box::new(CustomerAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
             };
             agents.push(new_agent);
         }
@@ -197,12 +207,5 @@ impl Orchestra {
             handles.push(agent_handle);
         }
         println!("[Orchestra] {} agent threads launched.", handles.len() - 1);
-
-        // --- Wait for all threads to complete ---
-        println!("[Orchestra] All actors running. Waiting for completion...");
-        for handle in handles {
-            handle.join().unwrap();
-        }
-        println!("[Orchestra] All threads have completed. Simulation finished.");
     }
 }

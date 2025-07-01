@@ -141,9 +141,15 @@ impl WhaleAgent {
         }
         let stock_id = *ids.choose(&mut rng).unwrap();
 
-        // --- 1. Atomically cancel all existing orders and clear internal map ---
+        
+        
+        // --- 2. Place fresh orders ---
+        if rng.gen_bool(CRAZY_WHALE) {
+            // --- 1. Atomically cancel all existing orders and clear internal map ---
+        
         {
             // Acquire a WRITE lock to prevent other threads from modifying open_orders.
+            /* */
             let mut open_orders_lock = open_orders.write().unwrap();
             for order_id in open_orders_lock.keys() {
                 order_channel
@@ -154,10 +160,12 @@ impl WhaleAgent {
                     .expect("Failed to send cancel order");
             }
             open_orders_lock.clear();
-        } // Write lock is released here.
+        } // Write lock is released here.clear
 
-        // --- 2. Place fresh orders ---
-        if rng.gen_bool(CRAZY_WHALE) {
+
+
+
+
             let vol = rng.gen_range(WHALE_ORDER_VOLUME / 2..=WHALE_ORDER_VOLUME);
             let side = if rng.gen_bool(0.5) {
                 Side::Buy
@@ -234,7 +242,7 @@ impl Agent for WhaleAgent {
 
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_micros(100)); // Whales act less frequently
+            thread::sleep(std::time::Duration::from_millis(100)); // Whales act less frequently
         }
     }
 

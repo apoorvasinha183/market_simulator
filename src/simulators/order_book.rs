@@ -55,6 +55,7 @@ impl OrderBook {
         side: Side,
         mut volume_to_fill: u64,
     ) -> Vec<Trade> {
+        //println!("[OrderBook] Processing market order: agent_id={}, side={:?}, volume={}", taker_agent_id, side, volume_to_fill);
         let mut trades = Vec::new();
         let mut filled_order_ids = Vec::new();
         let mut empty_levels = Vec::new();

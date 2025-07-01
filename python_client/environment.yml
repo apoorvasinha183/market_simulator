@@ -1,0 +1,10 @@
+name: market_client
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pytest # Added for testing
+  - pip:
+    - grpcio==1.64.0
+    - grpcio-tools==1.64.0
