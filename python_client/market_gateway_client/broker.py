@@ -48,29 +48,49 @@ class Broker:
             except queue.Empty:
                 continue
 
-    def _spam_orders(self, volume, num_iterations):
+    def send_order(self, client_id, stock_id, side, order_type, volume, price=0.0):
         """
-        Background thread: enqueue a fixed number of market-buy orders.
+        Public method to send an order to the market.
         """
         submit_order_request = market_gateway_pb2.SubmitOrderRequest(
-            client_id="customer_agent_0",
-            stock_id=1,
-            side="Buy",
-            price=0.0,          # Market order
+            client_id=client_id,
+            stock_id=stock_id,
+            side=side,
+            price=price,
             volume=volume,
-            order_type="Market",
+            order_type=order_type,
         )
         from_python_message = market_gateway_pb2.FromPython(
             submit_order=submit_order_request
         )
+        self.outgoing_messages.put(from_python_message)
+        print(f"[Broker] Enqueued order: {order_type} {side} {volume}@{price} for stock {stock_id}")
 
-        print(f"[Broker] 🔫  Spam thread started (volume={volume}, iterations={num_iterations})")
-        for i in range(num_iterations):
-            self.outgoing_messages.put(from_python_message)
-            # Introduce a random delay between 0.5 and 2 seconds
-            print(f"Sending {i+1}-th order")
-            time.sleep(random.uniform(0.5, 10))
-        print("[Broker] Spam thread finished.")
+    def _order_generator_thread(self, num_orders=100):
+        """
+        Background thread: generates and enqueues various types of orders.
+        """
+        print(f"[Broker] 🔫  Order generator thread started (generating {num_orders} orders).")
+        stock_ids = [1, 2, 3] # Example stock IDs
+        sides = ["Buy", "Sell"]
+        order_types = ["Market", "Limit"]
+
+        for i in range(num_orders):
+            client_id = f"customer_agent_{random.randint(0, 2)}" # Example client IDs
+            stock_id = random.choice(stock_ids)
+            side = random.choice(sides)
+            order_type = random.choice(order_types)
+            volume = random.randint(5e6, 5e10) # Adjusted volume for more impact
+
+            price = 0.0
+            if order_type == "Limit":
+                # Generate a more dynamic price for limit orders
+                base_price = 150.0 # Still a base, but now with wider swings
+                price = round(base_price + random.uniform(-10.0, 10.0), 2)
+
+            self.send_order(client_id, stock_id, side, order_type, volume, price)
+            time.sleep(random.uniform(0.05, 0.5)) # Faster order generation
+        print("[Broker] Order generator thread finished.")
 
     # ──────────────────────────────────────────────────────────────────────────
     # public API
@@ -99,15 +119,15 @@ class Broker:
             )
             listener_thread.start()
 
-            # Launch spam thread with fixed parameters
-            spam_thread = threading.Thread(
-                target=self._spam_orders, args=(1000000000, 200,), daemon=True
+            # Launch order generator thread
+            order_gen_thread = threading.Thread(
+                target=self._order_generator_thread, args=(200,), daemon=True
             )
-            spam_thread.start()
-            print("[Broker] Started deterministic order spamming.")
+            order_gen_thread.start()
+            print("[Broker] Started dynamic order generation.")
 
-            # Keep main thread alive until spamming is done
-            while spam_thread.is_alive():
+            # Keep main thread alive until order generation is done
+            while order_gen_thread.is_alive():
                 time.sleep(0.1)
 
         except grpc.RpcError as e:

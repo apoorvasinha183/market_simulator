@@ -53,22 +53,68 @@ impl MarketGateway for CustomerAgentServer {
                     if let Some(event) = result.event {
                         match event {
                             market_gateway::from_python::Event::SubmitOrder(req) => {
-                                println!("[CustomerAgent {}] Received order from Python client: {:?}", agent_id_clone, req);
-                                let order_type = OrderRequest::MarketOrder {
-                                    agent_id: agent_id_clone,
-                                    stock_id: 1, // Hardcoded stock_id
-                                    side: Side::Buy, // Hardcoded side
-                                    volume: req.volume,
+                                //println!("[CustomerAgent {}] Received order from Python client: {:?}", agent_id_clone, req);
+                                let side = match req.side.as_str() {
+                                    "Buy" => Side::Buy,
+                                    "Sell" => Side::Sell,
+                                    _ => {
+                                        eprintln!("[CustomerAgent {}] Invalid side received: {}", agent_id_clone, req.side);
+                                        tx_clone.send(Ok(ToPython {
+                                            event: Some(market_gateway::to_python::Event::OrderAck(OrderAck {
+                                                client_id: req.client_id,
+                                                order_id: 0,
+                                                status: "Rejected".to_string(),
+                                                details: format!("Invalid side: {}", req.side),
+                                            })),
+                                        }))
+                                        .await
+                                        .unwrap();
+                                        return;
+                                    }
                                 };
-                                sender_clone.send(order_type.clone()).unwrap();
-                                println!("[CustomerAgent {}] Forwarded order to market: {:?}", agent_id_clone, order_type);
+
+                                let order_request = match req.order_type.as_str() {
+                                    "Market" => OrderRequest::MarketOrder {
+                                        agent_id: agent_id_clone,
+                                        stock_id: req.stock_id,
+                                        side,
+                                        volume: req.volume,
+                                    },
+                                    "Limit" => {
+                                        let price_in_cents = (req.price * 100.0).round() as u64;
+                                        OrderRequest::LimitOrder {
+                                            agent_id: agent_id_clone,
+                                            stock_id: req.stock_id,
+                                            side,
+                                            price: price_in_cents,
+                                            volume: req.volume,
+                                        }
+                                    },
+                                    _ => {
+                                        eprintln!("[CustomerAgent {}] Invalid order type received: {}", agent_id_clone, req.order_type);
+                                        tx_clone.send(Ok(ToPython {
+                                            event: Some(market_gateway::to_python::Event::OrderAck(OrderAck {
+                                                client_id: req.client_id,
+                                                order_id: 0,
+                                                status: "Rejected".to_string(),
+                                                details: format!("Invalid order type: {}", req.order_type),
+                                            })),
+                                        }))
+                                        .await
+                                        .unwrap();
+                                        return;
+                                    }
+                                };
+
+                                sender_clone.send(order_request.clone()).unwrap();
+                                //println!("[CustomerAgent {}] Forwarded order to market: {:?}", agent_id_clone, order_request);
 
                                 tx_clone.send(Ok(ToPython {
                                     event: Some(market_gateway::to_python::Event::OrderAck(OrderAck {
                                         client_id: req.client_id,
-                                        order_id: 0, // Dummy order_id for now
+                                        order_id: 0,
                                         status: "Accepted".to_string(),
-                                        details: "Buy order sent to market".to_string(),
+                                        details: "Order sent to market".to_string(),
                                     })),
                                 }))
                                 .await
