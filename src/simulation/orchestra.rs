@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // --- Crate-level imports ---
 use crate::OrderBook; // Assuming order_book.rs is in simulators

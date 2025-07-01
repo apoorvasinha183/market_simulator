@@ -1,7 +1,7 @@
 // src/agents/dumb_limit_agent.rs
 
 use crossbeam_channel::{Receiver, Sender};
-use rand::{Rng};
+use rand::Rng;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
@@ -13,7 +13,6 @@ use super::{
         LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN,
     },
 };
-//use crate::stocks;
 use crate::{
     agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
     simulation::orchestra::ShadowBookHandle,
@@ -30,7 +29,6 @@ pub struct DumbLimitAgent {
     port_channel: Arc<Mutex<Receiver<Trade>>>,
     view_handle: ShadowBookHandle,
     // State Handles
-    // CORRECTED: Inventory is now a HashMap to track position per-stock.
     inventory: Arc<RwLock<HashMap<u64, i64>>>,
     ticks_until_active: Arc<Mutex<u32>>,
     open_orders: Arc<RwLock<HashMap<u64, Order>>>,
@@ -84,6 +82,7 @@ impl DumbLimitAgent {
                         -(tr.volume as i64)
                     }
                 } else {
+                    // maker_agent_id == agent_id
                     if tr.taker_side == Side::Sell {
                         tr.volume as i64
                     } else {
@@ -91,7 +90,6 @@ impl DumbLimitAgent {
                     }
                 };
 
-                // CORRECTED: Update the inventory for the specific stock involved in the trade.
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
                 *cash_lock -= vol_delta as f64 * (tr.price as f64 / 100.0);
 
@@ -137,7 +135,7 @@ impl DumbLimitAgent {
             return;
         }
 
-        let book_data: std::collections::HashMap<u64, (Option<u64>, Option<u64>)> = ids
+        let book_data: HashMap<u64, (Option<u64>, Option<u64>)> = ids
             .iter()
             .map(|&stock_id| {
                 let book = view.book(stock_id);
@@ -151,6 +149,7 @@ impl DumbLimitAgent {
             let mut handles: Vec<std::thread::ScopedJoinHandle<()>> = Vec::new();
             for stock_id in ids {
                 if let Some(&(best_bid, best_ask)) = book_data.get(&stock_id) {
+                    let order_channel = order_channel.clone();
                     let handle = s.spawn(move || {
                         let mut rng = rand::thread_rng();
                         for _ in 0..LIMIT_AGENT_NUM_TRADERS {
@@ -170,28 +169,33 @@ impl DumbLimitAgent {
                                 };
                                 let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
                                 let price = match side {
-                                    Side::Buy => {
-                                        let proposed_price = bid.saturating_add(offset);
-                                        // Ensure buy price is not higher than best ask - 1
-                                        proposed_price.min(ask.saturating_sub(1))
-                                    },
-                                    Side::Sell => {
-                                        let proposed_price = ask.saturating_sub(offset);
-                                        // Ensure sell price is not lower than best bid + 1
-                                        proposed_price.max(bid.saturating_add(1))
-                                    },
+                                    Side::Buy => bid.saturating_sub(offset),
+                                    Side::Sell => ask.saturating_add(offset),
                                 };
                                 let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
 
-                                order_channel
-                                    .send(OrderRequest::LimitOrder {
-                                        agent_id: id,
-                                        stock_id,
-                                        side,
-                                        price,
-                                        volume,
-                                    })
-                                    .expect("Failed to send limit order");
+                                // There's a small chance the agent will become impatient and cross the spread
+                                // This introduces more aggressive buying and selling behavior
+                                if rng.gen_bool(0.1) {
+                                    order_channel
+                                        .send(OrderRequest::MarketOrder {
+                                            agent_id: id,
+                                            stock_id,
+                                            side,
+                                            volume,
+                                        })
+                                        .expect("Failed to send market order");
+                                } else {
+                                    order_channel
+                                        .send(OrderRequest::LimitOrder {
+                                            agent_id: id,
+                                            stock_id,
+                                            side,
+                                            price,
+                                            volume,
+                                        })
+                                        .expect("Failed to send limit order");
+                                }
                             }
                         }
                     });
@@ -237,7 +241,7 @@ impl Agent for DumbLimitAgent {
 
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_micros(30));
+            thread::sleep(std::time::Duration::from_millis(10));
         }
     }
 
@@ -273,7 +277,6 @@ impl Agent for DumbLimitAgent {
     }
 
     fn margin_call(&mut self) {
-        // CORRECTED: Margin call now iterates over the portfolio and liquidates any short positions.
         let inventory_lock = self.inventory.read().unwrap();
         for (&stock_id, &volume) in inventory_lock.iter() {
             // If we are short on any stock, buy to cover the position.
@@ -312,6 +315,7 @@ impl Agent for DumbLimitAgent {
                         -(tr.volume as i64)
                     }
                 } else {
+                    // maker_agent_id == self.id
                     if tr.taker_side == Side::Sell {
                         tr.volume as i64
                     } else {
@@ -319,9 +323,9 @@ impl Agent for DumbLimitAgent {
                     }
                 };
 
-                // CORRECTED: Same logic as the internal worker.
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
                 *cash_lock -= vol_delta as f64 * (tr.price as f64 / 100.0);
+                
                 if tr.maker_agent_id == self.id {
                     if let Some(o) = open_orders_lock.get_mut(&tr.maker_order_id) {
                         o.filled += tr.volume;
@@ -347,7 +351,6 @@ impl Agent for DumbLimitAgent {
     }
 
     fn get_inventory(&self) -> i64 {
-        // CORRECTED: Returns the sum of all positions, just like DumbAgent.
         self.inventory.read().unwrap().values().sum()
     }
 
@@ -356,7 +359,6 @@ impl Agent for DumbLimitAgent {
     }
 
     fn evaluate_port(&mut self, view: &MarketView) -> f64 {
-        // CORRECTED: Properly evaluates the portfolio based on the HashMap of positions.
         let inventory_lock = self.inventory.read().unwrap();
         let new_port_value = inventory_lock.iter().fold(0.0, |acc, (stock_id, &vol)| {
             if let Some(px) = view.get_mid_price(*stock_id) {

@@ -36,7 +36,7 @@ impl MarketGateway for CustomerAgentServer {
         &self,
         request: Request<Streaming<FromPython>>,
     ) -> Result<Response<Self::EventStreamStream>, Status> {
-        println!("[CustomerAgent {}] Python client connected!", self.agent_id);
+        //println!("[CustomerAgent {}] Python client connected!", self.agent_id);
         let mut stream = request.into_inner();
 
         // This channel will be used to send events (Acks, Trades) back to the Python client.
@@ -47,32 +47,36 @@ impl MarketGateway for CustomerAgentServer {
         let agent_id_clone = self.agent_id;
         tokio::spawn(async move {
             while let Some(result) = stream.message().await.ok().flatten() {
-                if let Some(event) = result.event {
-                    match event {
-                        market_gateway::from_python::Event::SubmitOrder(req) => {
-                            println!("[CustomerAgent {}] Received order from Python client: {:?}", agent_id_clone, req);
-                            // Convert the gRPC request to the simulation's internal OrderRequest
-                            let order_type = if req.order_type.to_lowercase() == "market" {
-                                OrderRequest::MarketOrder {
+                let sender_clone = sender_clone.clone();
+                let tx_clone = tx.clone();
+                tokio::spawn(async move {
+                    if let Some(event) = result.event {
+                        match event {
+                            market_gateway::from_python::Event::SubmitOrder(req) => {
+                                println!("[CustomerAgent {}] Received order from Python client: {:?}", agent_id_clone, req);
+                                let order_type = OrderRequest::MarketOrder {
                                     agent_id: agent_id_clone,
-                                    stock_id: req.stock_id,
-                                    side: if req.side.to_lowercase() == "buy" { Side::Buy } else { Side::Sell },
+                                    stock_id: 1, // Hardcoded stock_id
+                                    side: Side::Buy, // Hardcoded side
                                     volume: req.volume,
-                                }
-                            } else {
-                                OrderRequest::LimitOrder {
-                                    agent_id: agent_id_clone,
-                                    stock_id: req.stock_id,
-                                    side: if req.side.to_lowercase() == "buy" { Side::Buy } else { Side::Sell },
-                                    price: (req.price * 100.0) as u64, // Convert to cents
-                                    volume: req.volume,
-                                }
-                            };
-                            // Send it to the main market
-                            sender_clone.send(order_type).unwrap();
+                                };
+                                sender_clone.send(order_type.clone()).unwrap();
+                                println!("[CustomerAgent {}] Forwarded order to market: {:?}", agent_id_clone, order_type);
+
+                                tx_clone.send(Ok(ToPython {
+                                    event: Some(market_gateway::to_python::Event::OrderAck(OrderAck {
+                                        client_id: req.client_id,
+                                        order_id: 0, // Dummy order_id for now
+                                        status: "Accepted".to_string(),
+                                        details: "Buy order sent to market".to_string(),
+                                    })),
+                                }))
+                                .await
+                                .unwrap();
+                            }
                         }
                     }
-                }
+                });
             }
         });
 

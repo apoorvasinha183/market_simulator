@@ -57,6 +57,7 @@ use std::collections::HashMap;
 use std::thread;
 
 use crate::simulation::orchestra::{AgentResponseChannels, MarketState, ShadowBookHandle};
+use crate::types::order;
 use crate::{
     Marketable, OrderBook,
     stocks::definitions::StockMarket,
@@ -70,7 +71,6 @@ enum ShadowEvent {
     LimitOrder(Order),
     MarketOrder(Order),
     CancelOrder { order_id: u64, agent_id: usize },
-    Trade(Trade),
 }
 
 // -----------------------------------------------------------------------------
@@ -118,7 +118,7 @@ impl Market {
         /* 2. CORRECTED: Time-Zero State Synchronization */
         // The Market, as the source of truth, populates the initial state of the
         // empty, agent-facing shadow book it was given by the Orchestra.
-        //println!("[Market] Synchronizing initial state to the shadow book...");
+        ////println!("[Market] Synchronizing initial state to the shadow book...");
         {
             // Scoped block to ensure the write lock is released immediately.
             let mut state_lock = shadow_book_handle.write().unwrap();
@@ -127,8 +127,8 @@ impl Market {
             state_lock.last_traded_price = last_traded_price.clone();
             state_lock.cumulative_volume = cumulative_volume.clone();
         } // Write lock is released here.
-        //println!("[Market] Shadow book synchronized.");
-        //println!("[Market] Synchronizing initial state to the rich people's book...");
+        ////println!("[Market] Shadow book synchronized.");
+        ////println!("[Market] Synchronizing initial state to the rich people's book...");
         {
             // Scoped block to ensure the write lock is released immediately.
             let mut state_lock = vip_book_handle.write().unwrap();
@@ -137,7 +137,7 @@ impl Market {
             state_lock.last_traded_price = last_traded_price.clone();
             state_lock.cumulative_volume = cumulative_volume.clone();
         } // Write lock is released here.
-        //println!("[Market] Vip book synchronized(meh).");
+        ////println!("[Market] Vip book synchronized(meh).");
 
         /* 3. Create the channel for the shadow reconciliation worker */
         let (shadow_update_tx, shadow_update_rx) = unbounded::<ShadowEvent>();
@@ -151,8 +151,9 @@ impl Market {
         );
         // Rich people ..pfft
         Self::spawn_shadow_worker(vip_shadow_update_rx, vip_book_handle, vip_update_threshold);
-        //println!("[Market] Shadow book reconciliation worker thread spawned.");
-
+        ////println!("[Market] Shadow book reconciliation worker thread spawned.");
+        // print out the connected agent ids
+        println!("[Market] Connected agents: {:?}", agent_channels.keys());
         Self {
             order_books,
             last_traded_price,
@@ -175,6 +176,7 @@ impl Market {
             // --- Worker-Private State ---
             // 1. The BACK BUFFER: a private copy of the order books for processing.
             //    Initialized by cloning the already-synced front buffer.
+            //let mut rounds:u64 = 0;
             let mut back_buffer: MarketState = shadow_book_handle.read().unwrap().clone();
 
             // 2. A temporary log to hold events during the catch-up phase after a swap.
@@ -183,22 +185,29 @@ impl Market {
             // 3. Counter for events since the last swap.
             let mut event_counter = 0;
 
-            //println!("[ShadowWorker] Online with update threshold: {}. Waiting for market events...", update_threshold);
+            ////println!("[ShadowWorker] Online with update threshold: {}. Waiting for market events...", update_threshold);
 
             while let Ok(event) = update_rx.recv() {
                 // Always log the event first.
                 event_log.push(event.clone());
 
                 // --- Apply event to the private BACK BUFFER (no locking required) ---
-                match event {
+                let trades = match event {
                     ShadowEvent::LimitOrder(mut order) => {
                         if let Some(book) = back_buffer.order_books.get_mut(&order.stock_id) {
-                            book.process_limit_order(&mut order);
+                            book.process_limit_order(&mut order)
+                        } else {
+                            Vec::new()
                         }
                     }
                     ShadowEvent::MarketOrder(order) => {
+                        if order.volume > 1_000_000 {
+                            println!("[ShadowWorker] ALERT: Processing large market order: Agent {}, Side {:?}, Volume {}", order.agent_id, order.side, order.volume);
+                        }
                         if let Some(book) = back_buffer.order_books.get_mut(&order.stock_id) {
-                            book.process_market_order(order.agent_id, order.side, order.volume);
+                            book.process_market_order(order.agent_id, order.side, order.volume)
+                        } else {
+                            Vec::new()
                         }
                     }
                     ShadowEvent::CancelOrder { order_id, agent_id } => {
@@ -207,18 +216,21 @@ impl Market {
                                 break;
                             }
                         }
+                        Vec::new()
                     }
-                    ShadowEvent::Trade(trade) => {
-                        if let Some(price_mut) =
-                            back_buffer.last_traded_price.get_mut(&trade.stock_id)
-                        {
-                            *price_mut = trade.price as f64 / 100.0;
-                        }
-                        if let Some(vol_mut) =
-                            back_buffer.cumulative_volume.get_mut(&trade.stock_id)
-                        {
-                            *vol_mut += trade.volume;
-                        }
+                };
+
+                // Update the back buffer with the trades that were generated
+                for trade in trades {
+                    if let Some(price_mut) =
+                        back_buffer.last_traded_price.get_mut(&trade.stock_id)
+                    {
+                        *price_mut = trade.price as f64 / 100.0;
+                    }
+                    if let Some(vol_mut) =
+                        back_buffer.cumulative_volume.get_mut(&trade.stock_id)
+                    {
+                        *vol_mut += trade.volume;
                     }
                 }
 
@@ -226,7 +238,7 @@ impl Market {
 
                 // --- Check if it's time to swap buffers ---
                 if event_counter >= update_threshold {
-                    //println!("[ShadowWorker] Update threshold reached. Swapping buffers...");
+                    ////println!("[ShadowWorker] Update threshold reached. Swapping buffers...");
 
                     // --- Step A: Acquire lock and SWAP buffers ---
                     // The write lock is held for the shortest possible time.
@@ -240,15 +252,17 @@ impl Market {
                     // --- Step B: Catch up the new back_buffer (the old front_buffer) ---
                     // Replay all the events we logged since the last swap onto our new back_buffer
                     // to bring it up to the current state.
-                    //println!("[ShadowWorker] Replaying {} logged events to catch up...", event_log.len());
+                    ////println!("[ShadowWorker] Replaying {} logged events to catch up...", event_log.len());
                     for logged_event in &event_log {
-                        match logged_event {
+                        let trades = match logged_event {
                             ShadowEvent::LimitOrder(order) => {
                                 if let Some(book) = back_buffer.order_books.get_mut(&order.stock_id)
                                 {
                                     // Need a mutable clone to pass to process_limit_order
                                     let mut o = order.clone();
-                                    book.process_limit_order(&mut o);
+                                    book.process_limit_order(&mut o)
+                                } else {
+                                    Vec::new()
                                 }
                             }
                             ShadowEvent::MarketOrder(order) => {
@@ -258,7 +272,9 @@ impl Market {
                                         order.agent_id,
                                         order.side,
                                         order.volume,
-                                    );
+                                    )
+                                } else {
+                                    Vec::new()
                                 }
                             }
                             ShadowEvent::CancelOrder { order_id, agent_id } => {
@@ -267,18 +283,21 @@ impl Market {
                                         break;
                                     }
                                 }
+                                Vec::new()
                             }
-                            ShadowEvent::Trade(trade) => {
-                                if let Some(price_mut) =
-                                    back_buffer.last_traded_price.get_mut(&trade.stock_id)
-                                {
-                                    *price_mut = trade.price as f64 / 100.0;
-                                }
-                                if let Some(vol_mut) =
-                                    back_buffer.cumulative_volume.get_mut(&trade.stock_id)
-                                {
-                                    *vol_mut += trade.volume;
-                                }
+                        };
+
+                        // ALSO UPDATE THE STATS DURING THE CATCH-UP
+                        for trade in trades {
+                            if let Some(price_mut) =
+                                back_buffer.last_traded_price.get_mut(&trade.stock_id)
+                            {
+                                *price_mut = trade.price as f64 / 100.0;
+                            }
+                            if let Some(vol_mut) =
+                                back_buffer.cumulative_volume.get_mut(&trade.stock_id)
+                            {
+                                *vol_mut += trade.volume;
                             }
                         }
                     }
@@ -286,10 +305,12 @@ impl Market {
                     // --- Step C: Reset for the next cycle ---
                     event_log.clear();
                     event_counter = 0;
-                    //println!("[ShadowWorker] Catch-up complete. Resuming normal operation.");
+                    //rounds += 1;
+                    ////println!("[ShadowWorker] Catch-up complete. Swapped buffers. Rounds: {}. Ready for next events.", rounds);
+                    ////println!("[ShadowWorker] Catch-up complete. Resuming normal operation.");
                 }
             }
-            //println!("[ShadowWorker] Channel closed. Shutting down.");
+            ////println!("[ShadowWorker] Channel closed. Shutting down.");
         });
     }
 
@@ -301,6 +322,7 @@ impl Market {
 
     /// The core logic of the matching engine for a single incoming order.
     fn process_request(&mut self, req: OrderRequest) {
+        //println!("[Market] Processing request: {:?}", req);
         let mut trades = Vec::<Trade>::new();
 
         match req {
@@ -339,6 +361,12 @@ impl Market {
                 side,
                 volume,
             } => {
+                if volume > 1_000_000 {
+                    println!(
+                        "[Market] ALERT: Processing large market order: Agent {}, Side {:?}, Volume {}",
+                        agent_id, side, volume
+                    );
+                }
                 let px_cents = (self
                     .last_traded_price
                     .get(&stock_id)
@@ -355,6 +383,8 @@ impl Market {
                     price: px_cents,
                     filled: 0,
                 };
+                // if agent number 4 has attached a debug message
+                
                 if let Some(ch) = self.agent_channels.get(&agent_id) {
                     ch.ack_tx.send(order.clone()).unwrap();
                 }
@@ -385,18 +415,20 @@ impl Market {
 
         // Post-trade processing
         for tr in &trades {
+            // check if any of the sides on the trade is agent 4, if so, print a debug message
+            /* 
+            if tr.taker_agent_id == 4 || tr.maker_agent_id == 4 {
+                println!("[Market] Debug Trade: {:?} - Taker: {}, Maker: {}",
+                         tr,
+                         tr.taker_agent_id,
+                         tr.maker_agent_id);
+            } */
             if let Some(taker_ch) = self.agent_channels.get(&tr.taker_agent_id) {
                 taker_ch.trade_tx.send(tr.clone()).unwrap();
             }
             if let Some(maker_ch) = self.agent_channels.get(&tr.maker_agent_id) {
                 maker_ch.trade_tx.send(tr.clone()).unwrap();
             }
-            self.shadow_update_tx
-                .send(ShadowEvent::Trade(tr.clone()))
-                .unwrap();
-            self.vip_shadow_update_tx
-                .send(ShadowEvent::Trade(tr.clone()))
-                .unwrap();
         }
 
         // Update internal market statistics
@@ -412,11 +444,15 @@ impl Market {
 
 impl Marketable for Market {
     fn run(&mut self) {
-        //println!("[Market] Matching engine online. Waiting for orders...");
+        ////println!("[Market] Matching engine online. Waiting for orders...");
+        let mut orders_processed:u64 = 0;
         while let Ok(req) = self.order_rx.recv() {
+            
             self.process_request(req);
+            orders_processed += 1;
+            //println!("[Market] Processed {} orders so far in this cycle.", orders_processed);
         }
-        //println!("[Market] Order channel closed. Shutting down matching engine.");
+        ////println!("[Market] Order channel closed. Shutting down matching engine.");
     }
 
     // Stubs for remaining trait methods that are no longer relevant to this design.

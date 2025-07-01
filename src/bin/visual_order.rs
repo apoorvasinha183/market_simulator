@@ -680,7 +680,7 @@ fn main() -> Result<(), eframe::Error> {
     // Print the number of available cores
     let cores = core_affinity::get_core_ids().unwrap_or_default();
     println!("Available cores: {}", cores.len());
-
+    
     let participants = vec![
         AgentType::MarketMaker,
         AgentType::DumbMarket,
@@ -688,8 +688,12 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::WhaleAgent,
         AgentType::CustomerAgent,
     ];
+    
+    /*let participants = vec![
+        AgentType::IPO,
+    ];*/
 
-    let orchestra = Orchestra::new(participants, 10000, 100);
+    let orchestra = Orchestra::new(participants, 10000, 1000);
     let shadow_handle = orchestra.get_shadow_handle();
 
     std::thread::spawn(move || {

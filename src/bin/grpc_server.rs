@@ -2,7 +2,7 @@ use market_simulator::{
     AgentType,
     simulation::orchestra::Orchestra,
 };
-use std::thread;
+use std::{thread, io};
 
 fn main() {
     println!("Starting gRPC Market Server...");
@@ -25,9 +25,12 @@ fn main() {
     // The CustomerAgent's run method will start the gRPC server.
     // Since the Orchestra runs agents in their own threads, the CustomerAgent
     // will start its gRPC server in its dedicated thread.
-    // We just need to ensure the main thread doesn't exit immediately.
-    // In a real application, you might have a graceful shutdown mechanism here.
-    loop {
-        thread::park(); // Park the main thread indefinitely
-    }
+    
+    // Graceful shutdown mechanism:
+    // The server will run as long as stdin is open. Closing it from the
+    // test script will cause this to exit, allowing for a clean shutdown.
+    println!("Server running. Close stdin to shut down.");
+    let mut buffer = String::new();
+    io::stdin().read_line(&mut buffer).unwrap();
+    println!("Stdin closed, shutting down server.");
 }

@@ -31,7 +31,7 @@ pub struct Order {
 }
 
 /// Message from an agent to the market engine.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum OrderRequest {
     /// Limit order at a specific price.
     LimitOrder {
