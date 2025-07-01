@@ -42,19 +42,14 @@ fn debug_order_book(order_book: &OrderBook, stock_id: u64) {
 // -----------------------------------------------------------------------------
 //  Helpers
 // -----------------------------------------------------------------------------
-fn format_number(n: i32) -> String {
-    let negative = n.is_negative();
-    let mut s = n.abs().to_string();
+fn format_number(n: u64) -> String {
+    let mut s = n.to_string();
     let mut out = String::new();
     while s.len() > 3 {
         let tail = s.split_off(s.len() - 3);
         out = format!(",{tail}{out}");
     }
-    out = format!("{s}{out}");
-    if negative { format!("-{out}") } else { out }
-}
-fn format_number_u64(n: u64) -> String {
-    format_number(n as i32)
+    format!("{s}{out}")
 }
 
 // -----------------------------------------------------------------------------
@@ -368,7 +363,7 @@ impl AgentVisualizer {
                                 .strong(),
                         );
                         ui.label(
-                            RichText::new(format_number(lvl.total_volume as i32))
+                            RichText::new(format_number(lvl.total_volume as u64))
                                 .font(FontId::monospace(14.0)),
                         );
                         ui.end_row();
@@ -456,14 +451,40 @@ impl AgentVisualizer {
                                     .name("Current Price"),
                             );
 
-                            // Zoom bounds around current price
-                            let center = *market_state
-                                .last_traded_price
-                                .get(&self.selected_id)
-                                .unwrap_or(&0.0);
+                            // Calculate mid-price for centering the x-axis
+                            let mid_price = if let (Some(&best_bid), Some(&best_ask)) = (
+                                order_book.bids.keys().last(),
+                                order_book.asks.keys().next(),
+                            ) {
+                                (best_bid as f64 / 100.0 + best_ask as f64 / 100.0) / 2.0
+                            } else {
+                                *market_state
+                                    .last_traded_price
+                                    .get(&self.selected_id)
+                                    .unwrap_or(&0.0)
+                            };
+
+                            // Calculate max cumulative volume for y-axis scaling
+                            let max_cum_volume = {
+                                let mut max_vol: f64 = 0.0;
+                                let mut cum_bid: u64 = 0;
+                                for (_, lvl) in order_book.bids.iter().rev() {
+                                    cum_bid += lvl.total_volume as u64;
+                                    max_vol = max_vol.max(cum_bid as f64);
+                                }
+                                let mut cum_ask: u64 = 0;
+                                for (_, lvl) in order_book.asks.iter() {
+                                    cum_ask += lvl.total_volume as u64;
+                                    max_vol = max_vol.max(cum_ask as f64);
+                                }
+                                max_vol
+                            };
+
+                            // Set plot bounds dynamically
+                            let x_range = 20.0; // Adjust this value to control the visible price range
                             p.set_plot_bounds(PlotBounds::from_min_max(
-                                [center - 20.0, 0.0],
-                                [center + 20.0, 20_000_000.0],
+                                [mid_price - x_range, 0.0],
+                                [mid_price + x_range, max_cum_volume * 1.1], // Add 10% buffer to max volume
                             ));
                         });
                 });
@@ -618,7 +639,7 @@ impl AgentVisualizer {
             metric_fixed_width(
                 ui,
                 "Volume",
-                &format_number_u64(
+                &format_number(
                     market_state
                         .cumulative_volume
                         .get(&self.selected_id)
@@ -668,7 +689,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::CustomerAgent,
     ];
 
-    let orchestra = Orchestra::new(participants, 1000, 100);
+    let orchestra = Orchestra::new(participants, 10000, 100);
     let shadow_handle = orchestra.get_shadow_handle();
 
     std::thread::spawn(move || {

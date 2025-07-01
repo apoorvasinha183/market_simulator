@@ -26,7 +26,7 @@ pub const MM_SEED_LEVELS: usize = 10;
 
 pub const MM_SEED_DECAY: f64 = 0.90;
 
-pub const MM_SEED_DEPTH_PCT: f64 = 0.002;
+pub const MM_SEED_DEPTH_PCT: f64 = 0.01;
 
 pub const MM_SEED_TICK_SPACING: u64 = 5;
 
@@ -56,9 +56,9 @@ pub const DUMB_AGENT_TYPICAL_VOL_MAX: u64 = 50;
 
 // high-impact market order that can clear several levels of the book.
 
-pub const DUMB_AGENT_LARGE_VOL_CHANCE: f64 = 0.001;
+pub const DUMB_AGENT_LARGE_VOL_CHANCE: f64 = 0.01;
 
-pub const DUMB_AGENT_LARGE_VOL_MIN: u64 = 750;
+pub const DUMB_AGENT_LARGE_VOL_MIN: u64 = 7500;
 
 pub const DUMB_AGENT_LARGE_VOL_MAX: u64 = 20000;
 
@@ -70,13 +70,13 @@ pub const LIMIT_AGENT_ACTION_PROB: f64 = 0.5;
 
 // Their order sizes are now more substantial, able to absorb some of the "noise".
 
-pub const LIMIT_AGENT_VOL_MIN: u64 = 5000;
+pub const LIMIT_AGENT_VOL_MIN: u64 = 500;
 
-pub const LIMIT_AGENT_VOL_MAX: u64 = 50000;
+pub const LIMIT_AGENT_VOL_MAX: u64 = 5000;
 
 // The speculative offset remains large, representing diverse opinions on price.
 
-pub const LIMIT_AGENT_MAX_OFFSET: u64 = 2000; // $5.00 in cents
+pub const LIMIT_AGENT_MAX_OFFSET: u64 = 200; // $5.00 in cents
 
 pub const LIMIT_AGENT_NUM_TRADERS: u32 = 200;
 
@@ -84,7 +84,7 @@ pub const LIMIT_AGENT_NUM_TRADERS: u32 = 200;
 
 pub const WHALE_INITIAL_INVENTORY: i64 = 50_000_000;
 
-pub const WHALE_ACTION_PROB: f64 = 0.01; // Acts very infrequently (5% chance per tick)
+pub const WHALE_ACTION_PROB: f64 = 0.1; // Acts very infrequently (5% chance per tick)
 
 pub const WHALE_ORDER_VOLUME: u64 = 1_000_000; // Places massive orders
 

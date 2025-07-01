@@ -53,7 +53,6 @@ impl DumbLimitAgent {
             ack_channel: Arc::new(Mutex::new(ack_channel)),
             port_channel: Arc::new(Mutex::new(port_channel)),
             view_handle,
-            // CORRECTED: Initialize as an empty HashMap.
             inventory: Arc::new(RwLock::new(HashMap::new())),
             ticks_until_active: Arc::new(Mutex::new(LIMIT_AGENT_TICKS_UNTIL_ACTIVE)),
             open_orders: Arc::new(RwLock::new(HashMap::new())),
@@ -133,56 +132,77 @@ impl DumbLimitAgent {
         }
 
         let view = view_handle.read().unwrap();
-        let mut rng = rand::thread_rng();
-
         let ids: Vec<u64> = view.stocks.get_all_ids();
         if ids.is_empty() {
             return;
         }
-        //let stock_id = *ids.choose(&mut rng).unwrap();
-        for stock_id in ids {
-            let book = match view.book(stock_id) {
-                Some(b) => b,
-                None => return,
-            };
 
-            let best_bid = book.bids.keys().next_back().copied();
-            let best_ask = book.asks.keys().next().copied();
+        let book_data: std::collections::HashMap<u64, (Option<u64>, Option<u64>)> = ids
+            .iter()
+            .map(|&stock_id| {
+                let book = view.book(stock_id);
+                let best_bid = book.and_then(|b| b.bids.keys().next_back().copied());
+                let best_ask = book.and_then(|b| b.asks.keys().next().copied());
+                (stock_id, (best_bid, best_ask))
+            })
+            .collect();
 
-            for _ in 0..LIMIT_AGENT_NUM_TRADERS {
-                if !rng.gen_bool(LIMIT_AGENT_ACTION_PROB) {
-                    continue;
-                }
+        thread::scope(|s| {
+            let mut handles: Vec<std::thread::ScopedJoinHandle<()>> = Vec::new();
+            for stock_id in ids {
+                if let Some(&(best_bid, best_ask)) = book_data.get(&stock_id) {
+                    let handle = s.spawn(move || {
+                        let mut rng = rand::thread_rng();
+                        for _ in 0..LIMIT_AGENT_NUM_TRADERS {
+                            if !rng.gen_bool(LIMIT_AGENT_ACTION_PROB) {
+                                continue;
+                            }
 
-                if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
-                    if bid >= ask {
-                        continue;
-                    }
+                            if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
+                                if bid >= ask {
+                                    continue;
+                                }
 
-                    let side = if rng.gen_bool(0.5) {
-                        Side::Buy
-                    } else {
-                        Side::Sell
-                    };
-                    let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
-                    let price = match side {
-                        Side::Buy => bid.saturating_add(offset),
-                        Side::Sell => ask.saturating_sub(offset),
-                    };
-                    let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
+                                let side = if rng.gen_bool(0.5) {
+                                    Side::Buy
+                                } else {
+                                    Side::Sell
+                                };
+                                let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
+                                let price = match side {
+                                    Side::Buy => {
+                                        let proposed_price = bid.saturating_add(offset);
+                                        // Ensure buy price is not higher than best ask - 1
+                                        proposed_price.min(ask.saturating_sub(1))
+                                    },
+                                    Side::Sell => {
+                                        let proposed_price = ask.saturating_sub(offset);
+                                        // Ensure sell price is not lower than best bid + 1
+                                        proposed_price.max(bid.saturating_add(1))
+                                    },
+                                };
+                                let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
 
-                    order_channel
-                        .send(OrderRequest::LimitOrder {
-                            agent_id: id,
-                            stock_id,
-                            side,
-                            price,
-                            volume,
-                        })
-                        .expect("Failed to send limit order");
+                                order_channel
+                                    .send(OrderRequest::LimitOrder {
+                                        agent_id: id,
+                                        stock_id,
+                                        side,
+                                        price,
+                                        volume,
+                                    })
+                                    .expect("Failed to send limit order");
+                            }
+                        }
+                    });
+                    handles.push(handle);
                 }
             }
-        }
+
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
     }
 }
 

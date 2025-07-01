@@ -2330,6 +2330,7 @@ dependencies = [
  "rand_distr",
  "serde",
  "serde_json",
+ "socket2 0.5.10",
  "statrs",
  "tokio",
  "tokio-stream",

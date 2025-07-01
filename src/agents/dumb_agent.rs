@@ -138,52 +138,68 @@ impl DumbAgent {
         } // Lock on `ticks_until_active` is released here.
 
         let view = view_handle.read().unwrap();
-        let mut rng = rand::thread_rng();
-
         let universe: Vec<u64> = view.stocks.get_all_ids();
         if universe.is_empty() {
             return;
         }
-        //let stock_id = *universe.choose(&mut rng).unwrap();
-        for stock_id in universe {
-            for _ in 0..DUMB_AGENT_NUM_TRADERS {
-                if rng.gen_bool(DUMB_AGENT_ACTION_PROB) {
-                    let side = if rng.gen_bool(0.5) {
-                        Side::Buy
-                    } else {
-                        Side::Sell
-                    };
-                    let volume = if rng.gen_bool(DUMB_AGENT_LARGE_VOL_CHANCE) {
-                        rng.gen_range(DUMB_AGENT_LARGE_VOL_MIN..=DUMB_AGENT_LARGE_VOL_MAX)
-                    } else {
-                        rng.gen_range(DUMB_AGENT_TYPICAL_VOL_MIN..=DUMB_AGENT_TYPICAL_VOL_MAX)
-                    };
 
-                    if side == Side::Buy {
-                        if let Some(px) = view.get_mid_price(stock_id) {
-                            let cost = volume as f64 * (px as f64 / 100.0);
-                            // Lock cash and margin for reading, drop locks immediately.
-                            let current_cash = *cash.read().unwrap();
-                            let current_margin = *margin.read().unwrap();
-                            if cost > current_cash + current_margin {
-                                continue;
+        let mid_prices: std::collections::HashMap<u64, u64> = universe
+            .iter()
+            .filter_map(|&id| view.get_mid_price(id).map(|price| (id, price)))
+            .collect();
+
+        thread::scope(|s| {
+            let mut handles: Vec<std::thread::ScopedJoinHandle<()>> = Vec::new();
+            for stock_id in universe {
+                if let Some(&mid_price) = mid_prices.get(&stock_id) {
+                    let handle = s.spawn(move || {
+                        let mut rng = rand::thread_rng();
+                        for _ in 0..DUMB_AGENT_NUM_TRADERS {
+                            if rng.gen_bool(DUMB_AGENT_ACTION_PROB) {
+                                let side = if rng.gen_bool(0.5) {
+                                    Side::Buy
+                                } else {
+                                    Side::Sell
+                                };
+                                let volume = if rng.gen_bool(DUMB_AGENT_LARGE_VOL_CHANCE) {
+                                    rng.gen_range(
+                                        DUMB_AGENT_LARGE_VOL_MIN..=DUMB_AGENT_LARGE_VOL_MAX,
+                                    )
+                                } else {
+                                    rng.gen_range(
+                                        DUMB_AGENT_TYPICAL_VOL_MIN..=DUMB_AGENT_TYPICAL_VOL_MAX,
+                                    )
+                                };
+
+                                if side == Side::Buy {
+                                    let cost = volume as f64 * (mid_price as f64 / 100.0);
+                                    let current_cash = *cash.read().unwrap();
+                                    let current_margin = *margin.read().unwrap();
+                                    if cost > current_cash + current_margin {
+                                        continue;
+                                    }
+                                }
+
+                                let order_req = OrderRequest::MarketOrder {
+                                    agent_id: id,
+                                    stock_id,
+                                    side,
+                                    volume,
+                                };
+                                order_channel
+                                    .send(order_req)
+                                    .expect("Failed to send order request");
                             }
                         }
-                    }
-
-                    let order_req = OrderRequest::MarketOrder {
-                        agent_id: id,
-                        stock_id,
-                        side,
-                        volume,
-                    };
-                    //std::thread::sleep(std::time::Duration::from_millis(NORMAL_PROCESSING_LATENCY as u64));
-                    order_channel
-                        .send(order_req)
-                        .expect("Failed to send order request");
+                    });
+                    handles.push(handle);
                 }
             }
-        }
+
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
     }
 }
 

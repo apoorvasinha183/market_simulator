@@ -68,6 +68,7 @@ impl Orchestra {
 
         // === 1. Create Infrastructure ===
         let stock_market = StockMarket::new();
+
         // The shadow book is created empty. The Market is responsible for its initial state.
         let normal_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
             order_books: HashMap::new(),
@@ -205,12 +206,5 @@ impl Orchestra {
             handles.push(agent_handle);
         }
         println!("[Orchestra] {} agent threads launched.", handles.len() - 1);
-
-        // --- Wait for all threads to complete ---
-        println!("[Orchestra] All actors running. Waiting for completion...");
-        for handle in handles {
-            handle.join().unwrap();
-        }
-        println!("[Orchestra] All threads have completed. Simulation finished.");
     }
 }

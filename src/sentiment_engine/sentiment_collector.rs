@@ -1,23 +1,21 @@
 use crate::stocks::definitions::StockMarket;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     net::UdpSocket,
-    sync::mpsc,
     thread,
-    //time::{Duration, Instant},
+    sync::{Arc, RwLock},
 };
+use socket2::{Socket, SockAddr};
 
 #[derive(Debug)]
 pub struct SentimentEngine {
-    history: HashMap<u64, VecDeque<f64>>,
-    rx: mpsc::Receiver<(u64, f64)>, // Receiver to get updates from threads
-    storage_duration: usize,
+    current_sentiment: Arc<RwLock<HashMap<u64, f64>>>,
 }
 
 impl SentimentEngine {
     /// Creates a new SentimentEngine and spawns listener threads for each stock.
     pub fn new(stock_market: &StockMarket, storage_duration: u64) -> Self {
-        let (tx, rx) = mpsc::channel();
+        let (tx, rx) = unbounded();
         let mut history = HashMap::new();
 
         for stock in &stock_market.stocks {

@@ -45,5 +45,5 @@ pub use stocks::{Stock, StockMarket, Symbol, default_stock_universe};
 
 // --- From 'sentiment' ---
 //pub use sentiment::{SentimentConfig, get as get_sentiment, init as init_sentiment};
-pub use sentiment_engine::SentimentEngine;
+//pub use sentiment_engine::SentimentEngine;
 // -- From the orchestra agent ---
