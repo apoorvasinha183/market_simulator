@@ -452,10 +452,9 @@ impl AgentVisualizer {
                             );
 
                             // Calculate mid-price for centering the x-axis
-                            let mid_price = if let (Some(&best_bid), Some(&best_ask)) = (
-                                order_book.bids.keys().last(),
-                                order_book.asks.keys().next(),
-                            ) {
+                            let mid_price = if let (Some(&best_bid), Some(&best_ask)) =
+                                (order_book.bids.keys().last(), order_book.asks.keys().next())
+                            {
                                 (best_bid as f64 / 100.0 + best_ask as f64 / 100.0) / 2.0
                             } else {
                                 *market_state
@@ -680,7 +679,7 @@ fn main() -> Result<(), eframe::Error> {
     // Print the number of available cores
     let cores = core_affinity::get_core_ids().unwrap_or_default();
     println!("Available cores: {}", cores.len());
-    
+
     let participants = vec![
         AgentType::MarketMaker,
         AgentType::DumbMarket,
@@ -688,7 +687,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::WhaleAgent,
         AgentType::CustomerAgent,
     ];
-    
+
     /*let participants = vec![
         AgentType::IPO,
     ];*/

@@ -1,20 +1,20 @@
 // src/orchestra.rs
 
 use std::collections::HashMap;
+//use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
-use std::sync::atomic::{AtomicBool, Ordering};
 
 // --- Crate-level imports ---
 use crate::OrderBook; // Assuming order_book.rs is in simulators
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
+use crate::agents::customer_agent::CustomerAgent;
 use crate::agents::dumb_agent::DumbAgent;
 use crate::agents::dumb_limit_agent::DumbLimitAgent;
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
 use crate::agents::whale_agent::WhaleAgent;
-use crate::agents::customer_agent::CustomerAgent;
 use crate::market::Market;
 use crate::simulators::market_trait::Marketable;
 use crate::stocks::StockMarket;

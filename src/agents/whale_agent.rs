@@ -1,6 +1,6 @@
 // src/agents/whale_agent.rs
 use crossbeam_channel::{Receiver, Sender};
-use rand::{Rng, seq::SliceRandom};
+use rand::Rng;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
@@ -8,8 +8,8 @@ use std::thread;
 use super::{
     agent_trait::{Agent, MarketView},
     config::{
-        CRAZY_WHALE, WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX,
-        WHALE_PRICE_OFFSET_MIN, WHALE_REFRESH_THRESHOLD_BPS,
+        WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX, WHALE_PRICE_OFFSET_MIN,
+        WHALE_REFRESH_THRESHOLD_BPS,
     },
     latency::WHALE_TICKS_UNTIL_ACTIVE,
 };
@@ -160,7 +160,10 @@ impl WhaleAgent {
                         let mut last_prices = last_mid_prices.write().unwrap();
                         let last_price = last_prices.entry(stock_id).or_insert(current_mid_price);
 
-                        let price_diff_bps = (current_mid_price as i64 - *last_price as i64).abs() as f64 / *last_price as f64 * 10000.0;
+                        let price_diff_bps = (current_mid_price as i64 - *last_price as i64).abs()
+                            as f64
+                            / *last_price as f64
+                            * 10000.0;
 
                         if price_diff_bps > WHALE_REFRESH_THRESHOLD_BPS as f64 {
                             // Full reset
@@ -170,7 +173,7 @@ impl WhaleAgent {
                                 .filter(|o| o.stock_id == stock_id)
                                 .map(|o| o.id)
                                 .collect();
-                            
+
                             for order_id in orders_to_cancel {
                                 order_channel
                                     .send(OrderRequest::CancelOrder {
@@ -182,10 +185,16 @@ impl WhaleAgent {
                             }
 
                             // Place new orders
-                            let buy_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
-                            let sell_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
-                            let bid_px = crate::agents::quantize_price(current_mid_price.saturating_sub(buy_bias));
-                            let ask_px = crate::agents::quantize_price(current_mid_price.saturating_add(sell_bias));
+                            let buy_bias =
+                                rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
+                            let sell_bias =
+                                rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
+                            let bid_px = crate::agents::quantize_price(
+                                current_mid_price.saturating_sub(buy_bias),
+                            );
+                            let ask_px = crate::agents::quantize_price(
+                                current_mid_price.saturating_add(sell_bias),
+                            );
 
                             order_channel
                                 .send(OrderRequest::LimitOrder {
@@ -211,12 +220,19 @@ impl WhaleAgent {
                         } else {
                             // Partial refresh
                             let open_orders_lock = open_orders.read().unwrap();
-                            let has_bids = open_orders_lock.values().any(|o| o.stock_id == stock_id && o.side == Side::Buy);
-                            let has_asks = open_orders_lock.values().any(|o| o.stock_id == stock_id && o.side == Side::Sell);
+                            let has_bids = open_orders_lock
+                                .values()
+                                .any(|o| o.stock_id == stock_id && o.side == Side::Buy);
+                            let has_asks = open_orders_lock
+                                .values()
+                                .any(|o| o.stock_id == stock_id && o.side == Side::Sell);
 
                             if !has_bids {
-                                let buy_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
-                                let bid_px = crate::agents::quantize_price(current_mid_price.saturating_sub(buy_bias));
+                                let buy_bias =
+                                    rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
+                                let bid_px = crate::agents::quantize_price(
+                                    current_mid_price.saturating_sub(buy_bias),
+                                );
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
                                         agent_id: id,
@@ -229,8 +245,11 @@ impl WhaleAgent {
                             }
 
                             if !has_asks {
-                                let sell_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
-                                let ask_px = crate::agents::quantize_price(current_mid_price.saturating_add(sell_bias));
+                                let sell_bias =
+                                    rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
+                                let ask_px = crate::agents::quantize_price(
+                                    current_mid_price.saturating_add(sell_bias),
+                                );
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
                                         agent_id: id,

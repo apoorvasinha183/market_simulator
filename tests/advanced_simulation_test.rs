@@ -1,7 +1,4 @@
-use market_simulator::{
-    agents::agent_type::AgentType,
-    simulation::orchestra::Orchestra,
-};
+use market_simulator::{agents::agent_type::AgentType, simulation::orchestra::Orchestra};
 use std::{thread, time::Duration};
 
 /// This test verifies that with only a MarketMaker, liquidity is provided but no trades occur.
@@ -17,7 +14,10 @@ fn test_market_maker_only_scenario() {
     let (initial_volume, initial_book_empty) = {
         let state = shadow_handle.read().unwrap();
         let book = state.order_books.get(&1).unwrap();
-        (*state.cumulative_volume.get(&1).unwrap_or(&0), book.bids.is_empty() && book.asks.is_empty())
+        (
+            *state.cumulative_volume.get(&1).unwrap_or(&0),
+            book.bids.is_empty() && book.asks.is_empty(),
+        )
     };
     assert!(initial_book_empty, "Book should be empty at genesis.");
 
@@ -32,17 +32,26 @@ fn test_market_maker_only_scenario() {
     let (final_volume, final_book_empty) = {
         let state = shadow_handle.read().unwrap();
         let book = state.order_books.get(&1).unwrap();
-        (*state.cumulative_volume.get(&1).unwrap_or(&0), book.bids.is_empty() && book.asks.is_empty())
+        (
+            *state.cumulative_volume.get(&1).unwrap_or(&0),
+            book.bids.is_empty() && book.asks.is_empty(),
+        )
     };
 
     // 4. Assertions.
-    println!("Initial Volume: {}, Final Volume: {}", initial_volume, final_volume);
+    println!(
+        "Initial Volume: {}, Final Volume: {}",
+        initial_volume, final_volume
+    );
     assert_eq!(
         final_volume, initial_volume,
         "Assertion Failed: Cumulative volume should be 0 as no trades should have occurred."
     );
 
-    println!("Initial Book Empty: {}, Final Book Empty: {}", initial_book_empty, final_book_empty);
+    println!(
+        "Initial Book Empty: {}, Final Book Empty: {}",
+        initial_book_empty, final_book_empty
+    );
     assert!(
         !final_book_empty,
         "Assertion Failed: The order book should not be empty; the MarketMaker should have placed orders."
@@ -79,7 +88,10 @@ fn test_ipo_vs_dumb_agent_scenario() {
     };
 
     // 4. Assertions.
-    println!("Initial Volume: {}, Final Volume: {}", initial_volume, final_volume);
+    println!(
+        "Initial Volume: {}, Final Volume: {}",
+        initial_volume, final_volume
+    );
     assert!(
         final_volume > initial_volume,
         "Assertion Failed: Cumulative volume should increase as the DumbAgent buys from the IPOAgent."

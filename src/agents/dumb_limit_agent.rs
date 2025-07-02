@@ -141,7 +141,7 @@ impl DumbLimitAgent {
                 // Use last traded price as the reference for placing orders.
                 let last_price = match view.last_traded_price.get(&stock_id) {
                     Some(&price) => (price * 100.0) as u64, // Convert to cents
-                    None => continue, // Skip if no trade has occurred yet
+                    None => continue,                       // Skip if no trade has occurred yet
                 };
 
                 s.spawn(move || {
@@ -151,18 +151,23 @@ impl DumbLimitAgent {
                             continue;
                         }
 
-                        let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
+                        let side = if rng.gen_bool(0.5) {
+                            Side::Buy
+                        } else {
+                            Side::Sell
+                        };
                         let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
-                        
+
                         let price = match side {
                             Side::Buy => last_price.saturating_sub(offset),
                             Side::Sell => last_price.saturating_add(offset),
                         };
                         let price = crate::agents::quantize_price(price);
-                        
+
                         let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
 
-                        if rng.gen_bool(0.01) { // Chance to submit a market order
+                        if rng.gen_bool(0.01) {
+                            // Chance to submit a market order
                             order_channel
                                 .send(OrderRequest::MarketOrder {
                                     agent_id: id,
@@ -304,7 +309,7 @@ impl Agent for DumbLimitAgent {
 
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
                 *cash_lock -= vol_delta as f64 * (tr.price as f64 / 100.0);
-                
+
                 if tr.maker_agent_id == self.id {
                     if let Some(o) = open_orders_lock.get_mut(&tr.maker_order_id) {
                         o.filled += tr.volume;

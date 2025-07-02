@@ -145,7 +145,10 @@ impl MarketMakerAgent {
         }
 
         // Extract all necessary data from the view *before* spawning threads.
-        let last_traded_prices: HashMap<u64, f64> = ids.iter().map(|id| (*id, view.last_traded_price.get(id).copied().unwrap_or(0.0))).collect();
+        let last_traded_prices: HashMap<u64, f64> = ids
+            .iter()
+            .map(|id| (*id, view.last_traded_price.get(id).copied().unwrap_or(0.0)))
+            .collect();
 
         let mut handles = Vec::new();
 
@@ -251,7 +254,8 @@ impl MarketMakerAgent {
                         let center = if last_traded_price > 0.0 {
                             (last_traded_price * 100.0) as u64
                         } else {
-                            match (best_bid, best_ask) { // Fallback to mid-price
+                            match (best_bid, best_ask) {
+                                // Fallback to mid-price
                                 (Some(b), Some(a)) if a > b => ((b as u128 + a as u128) / 2) as u64,
                                 _ => initial_price, // Fallback to initial price
                             }
@@ -261,8 +265,12 @@ impl MarketMakerAgent {
                             *inventory_clone.read().unwrap().get(&stock_id).unwrap_or(&0);
                         let inventory_skew = (current_inventory as f64 * MM_SKEW_FACTOR) as i64;
                         let our_center = clamp(center as i128 - inventory_skew as i128);
-                        let bid_px = crate::agents::quantize_price(clamp(our_center as i128 - (MM_DESIRED_SPREAD / 2) as i128));
-                        let ask_px = crate::agents::quantize_price(clamp(our_center as i128 + (MM_DESIRED_SPREAD / 2) as i128));
+                        let bid_px = crate::agents::quantize_price(clamp(
+                            our_center as i128 - (MM_DESIRED_SPREAD / 2) as i128,
+                        ));
+                        let ask_px = crate::agents::quantize_price(clamp(
+                            our_center as i128 + (MM_DESIRED_SPREAD / 2) as i128,
+                        ));
 
                         if ask_px > bid_px
                             && !best_ask.map_or(false, |a| bid_px >= a)

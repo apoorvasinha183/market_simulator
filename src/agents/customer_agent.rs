@@ -1,12 +1,12 @@
 // src/agents/customer_agent.rs
 
+use crossbeam_channel::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use crossbeam_channel::{Receiver, Sender};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc as tokio_mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::{transport::Server, Request, Response, Status, Streaming};
+use tonic::{Request, Response, Status, Streaming, transport::Server};
 
 use crate::agents::agent_trait::{Agent, MarketView};
 use crate::simulation::orchestra::ShadowBookHandle;
@@ -18,7 +18,7 @@ pub mod market_gateway {
 }
 
 use market_gateway::market_gateway_server::{MarketGateway, MarketGatewayServer};
-use market_gateway::{FromPython, ToPython, OrderAck, TradeUpdate};
+use market_gateway::{FromPython, OrderAck, ToPython};
 
 // The gRPC server implementation.
 // It holds a sender to pass incoming orders to the agent's main logic.
@@ -57,17 +57,28 @@ impl MarketGateway for CustomerAgentServer {
                                     "Buy" => Side::Buy,
                                     "Sell" => Side::Sell,
                                     _ => {
-                                        eprintln!("[CustomerAgent {}] Invalid side received: {}", agent_id_clone, req.side);
-                                        tx_clone.send(Ok(ToPython {
-                                            event: Some(market_gateway::to_python::Event::OrderAck(OrderAck {
-                                                client_id: req.client_id,
-                                                order_id: 0,
-                                                status: "Rejected".to_string(),
-                                                details: format!("Invalid side: {}", req.side),
-                                            })),
-                                        }))
-                                        .await
-                                        .unwrap();
+                                        eprintln!(
+                                            "[CustomerAgent {}] Invalid side received: {}",
+                                            agent_id_clone, req.side
+                                        );
+                                        tx_clone
+                                            .send(Ok(ToPython {
+                                                event: Some(
+                                                    market_gateway::to_python::Event::OrderAck(
+                                                        OrderAck {
+                                                            client_id: req.client_id,
+                                                            order_id: 0,
+                                                            status: "Rejected".to_string(),
+                                                            details: format!(
+                                                                "Invalid side: {}",
+                                                                req.side
+                                                            ),
+                                                        },
+                                                    ),
+                                                ),
+                                            }))
+                                            .await
+                                            .unwrap();
                                         return;
                                     }
                                 };
@@ -81,7 +92,8 @@ impl MarketGateway for CustomerAgentServer {
                                     },
                                     "Limit" => {
                                         let price_in_cents = (req.price * 100.0).round() as u64;
-                                        let price_in_cents = crate::agents::quantize_price(price_in_cents);
+                                        let price_in_cents =
+                                            crate::agents::quantize_price(price_in_cents);
                                         OrderRequest::LimitOrder {
                                             agent_id: agent_id_clone,
                                             stock_id: req.stock_id,
@@ -89,19 +101,30 @@ impl MarketGateway for CustomerAgentServer {
                                             price: price_in_cents,
                                             volume: req.volume,
                                         }
-                                    },
+                                    }
                                     _ => {
-                                        eprintln!("[CustomerAgent {}] Invalid order type received: {}", agent_id_clone, req.order_type);
-                                        tx_clone.send(Ok(ToPython {
-                                            event: Some(market_gateway::to_python::Event::OrderAck(OrderAck {
-                                                client_id: req.client_id,
-                                                order_id: 0,
-                                                status: "Rejected".to_string(),
-                                                details: format!("Invalid order type: {}", req.order_type),
-                                            })),
-                                        }))
-                                        .await
-                                        .unwrap();
+                                        eprintln!(
+                                            "[CustomerAgent {}] Invalid order type received: {}",
+                                            agent_id_clone, req.order_type
+                                        );
+                                        tx_clone
+                                            .send(Ok(ToPython {
+                                                event: Some(
+                                                    market_gateway::to_python::Event::OrderAck(
+                                                        OrderAck {
+                                                            client_id: req.client_id,
+                                                            order_id: 0,
+                                                            status: "Rejected".to_string(),
+                                                            details: format!(
+                                                                "Invalid order type: {}",
+                                                                req.order_type
+                                                            ),
+                                                        },
+                                                    ),
+                                                ),
+                                            }))
+                                            .await
+                                            .unwrap();
                                         return;
                                     }
                                 };
@@ -109,16 +132,19 @@ impl MarketGateway for CustomerAgentServer {
                                 sender_clone.send(order_request.clone()).unwrap();
                                 //println!("[CustomerAgent {}] Forwarded order to market: {:?}", agent_id_clone, order_request);
 
-                                tx_clone.send(Ok(ToPython {
-                                    event: Some(market_gateway::to_python::Event::OrderAck(OrderAck {
-                                        client_id: req.client_id,
-                                        order_id: 0,
-                                        status: "Accepted".to_string(),
-                                        details: "Order sent to market".to_string(),
-                                    })),
-                                }))
-                                .await
-                                .unwrap();
+                                tx_clone
+                                    .send(Ok(ToPython {
+                                        event: Some(market_gateway::to_python::Event::OrderAck(
+                                            OrderAck {
+                                                client_id: req.client_id,
+                                                order_id: 0,
+                                                status: "Accepted".to_string(),
+                                                details: "Order sent to market".to_string(),
+                                            },
+                                        )),
+                                    }))
+                                    .await
+                                    .unwrap();
                             }
                         }
                     }
@@ -137,10 +163,14 @@ impl MarketGateway for CustomerAgentServer {
 pub struct CustomerAgent {
     id: usize,
     order_channel: Sender<OrderRequest>,
+    #[allow(dead_code)]
     ack_channel: Arc<Mutex<Receiver<Order>>>,
+    #[allow(dead_code)]
     port_channel: Arc<Mutex<Receiver<Trade>>>,
     // These fields are not used by this agent but are required by the trait.
+    #[allow(dead_code)]
     view_handle: ShadowBookHandle,
+    #[allow(dead_code)]
     open_orders: Arc<Mutex<Vec<Order>>>,
 }
 
@@ -179,7 +209,10 @@ impl Agent for CustomerAgent {
                 agent_id: self.id,
             };
 
-            println!("[CustomerAgent {}] gRPC server listening on {}", self.id, addr);
+            println!(
+                "[CustomerAgent {}] gRPC server listening on {}",
+                self.id, addr
+            );
 
             // Start the gRPC server.
             // This will block the async task, but the `run` method will return,
@@ -190,7 +223,10 @@ impl Agent for CustomerAgent {
                 .serve(addr)
                 .await
             {
-                eprintln!("[CustomerAgent {}] Error running gRPC server: {}", self.id, e);
+                eprintln!(
+                    "[CustomerAgent {}] Error running gRPC server: {}",
+                    self.id, e
+                );
             }
         });
     }
@@ -204,15 +240,31 @@ impl Agent for CustomerAgent {
         thread::sleep(std::time::Duration::from_millis(100));
     }
 
-    fn buy_stock(&mut self, _stock_id: u64, _volume: u64) { /* No-op */ }
-    fn sell_stock(&mut self, _stock_id: u64, _volume: u64) { /* No-op */ }
-    fn acknowledge_order(&mut self) { /* No-op */ }
-    fn margin_call(&mut self) { /* No-op */ }
-    fn update_portfolio(&mut self) { /* No-op */ }
-    fn evaluate_port(&mut self, _market_view: &MarketView) -> f64 { 0.0 }
-    fn get_pending_orders(&self) -> Vec<Order> { vec![] }
-    fn cancel_open_order(&mut self, _order_id: u64) { /* No-op */ }
-    fn get_id(&self) -> usize { self.id }
-    fn get_inventory(&self) -> i64 { 0 }
-    fn clone_agent(&self) -> Box<dyn Agent> { Box::new(self.clone()) }
+    fn buy_stock(&mut self, _stock_id: u64, _volume: u64) { /* No-op */
+    }
+    fn sell_stock(&mut self, _stock_id: u64, _volume: u64) { /* No-op */
+    }
+    fn acknowledge_order(&mut self) { /* No-op */
+    }
+    fn margin_call(&mut self) { /* No-op */
+    }
+    fn update_portfolio(&mut self) { /* No-op */
+    }
+    fn evaluate_port(&mut self, _market_view: &MarketView) -> f64 {
+        0.0
+    }
+    fn get_pending_orders(&self) -> Vec<Order> {
+        vec![]
+    }
+    fn cancel_open_order(&mut self, _order_id: u64) { /* No-op */
+    }
+    fn get_id(&self) -> usize {
+        self.id
+    }
+    fn get_inventory(&self) -> i64 {
+        0
+    }
+    fn clone_agent(&self) -> Box<dyn Agent> {
+        Box::new(self.clone())
+    }
 }

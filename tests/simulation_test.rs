@@ -1,7 +1,4 @@
-use market_simulator::{
-    agents::agent_type::AgentType,
-    simulation::orchestra::Orchestra,
-};
+use market_simulator::{agents::agent_type::AgentType, simulation::orchestra::Orchestra};
 use std::{thread, time::Duration};
 
 #[test]
@@ -35,7 +32,7 @@ fn test_market_and_agents_interaction() {
     // verification below is the main point. The OS will clean up the threads
     // when the test process exits.
     // In the future, we could add a `shutdown` channel to the Orchestra.
-    
+
     // 3. Verify: Check the final state of the shadow book.
     let final_volume = {
         let state = shadow_handle.read().unwrap();
@@ -43,7 +40,10 @@ fn test_market_and_agents_interaction() {
     };
 
     // 4. Assert: The cumulative volume should have increased, proving trades occurred.
-    println!("Initial Volume: {}, Final Volume: {}", initial_volume, final_volume);
+    println!(
+        "Initial Volume: {}, Final Volume: {}",
+        initial_volume, final_volume
+    );
     assert!(
         final_volume > initial_volume,
         "Assertion Failed: The cumulative volume should increase after trades."
