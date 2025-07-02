@@ -130,7 +130,7 @@ impl IpoAgent {
                 agent_id: id,
                 stock_id,
                 side: Side::Sell,
-                price: start_px + (i as u64) * tick,
+                price: crate::agents::quantize_price(start_px + (i as u64) * tick),
                 volume: vol_per,
             };
             order_channel

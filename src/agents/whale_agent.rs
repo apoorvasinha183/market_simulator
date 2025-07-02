@@ -9,7 +9,7 @@ use super::{
     agent_trait::{Agent, MarketView},
     config::{
         CRAZY_WHALE, WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX,
-        WHALE_PRICE_OFFSET_MIN,
+        WHALE_PRICE_OFFSET_MIN, WHALE_REFRESH_THRESHOLD_BPS,
     },
     latency::WHALE_TICKS_UNTIL_ACTIVE,
 };
@@ -36,6 +36,7 @@ pub struct WhaleAgent {
     cash: Arc<RwLock<f64>>,
     margin: Arc<RwLock<f64>>,
     port_value: Arc<RwLock<f64>>,
+    last_mid_prices: Arc<RwLock<HashMap<u64, u64>>>,
 }
 
 impl WhaleAgent {
@@ -58,6 +59,7 @@ impl WhaleAgent {
             cash: Arc::new(RwLock::new(1_000_000_000_000.0)),
             margin: Arc::new(RwLock::new(10_000_000_000_000.0)),
             port_value: Arc::new(RwLock::new(0.0)),
+            last_mid_prices: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -120,6 +122,7 @@ impl WhaleAgent {
         open_orders: &Arc<RwLock<HashMap<u64, Order>>>,
         view_handle: &ShadowBookHandle,
         order_channel: &Sender<OrderRequest>,
+        last_mid_prices: &Arc<RwLock<HashMap<u64, u64>>>,
     ) {
         {
             let mut ticks = ticks_until_active.lock().unwrap();
@@ -129,85 +132,120 @@ impl WhaleAgent {
             }
         }
 
-        let mut rng = rand::thread_rng();
-        if !rng.gen_bool(WHALE_ACTION_PROB) {
-            return;
-        }
-
         let view = view_handle.read().unwrap();
         let ids: Vec<u64> = view.stocks.get_all_ids();
         if ids.is_empty() {
             return;
         }
-        let stock_id = *ids.choose(&mut rng).unwrap();
 
-        
-        
-        // --- 2. Place fresh orders ---
-        if rng.gen_bool(CRAZY_WHALE) {
-            // --- 1. Atomically cancel all existing orders and clear internal map ---
-        
-        {
-            // Acquire a WRITE lock to prevent other threads from modifying open_orders.
-            /* */
-            let mut open_orders_lock = open_orders.write().unwrap();
-            for order_id in open_orders_lock.keys() {
-                order_channel
-                    .send(OrderRequest::CancelOrder {
-                        agent_id: id,
-                        order_id: *order_id,
-                    })
-                    .expect("Failed to send cancel order");
+        let mid_prices: HashMap<u64, u64> = ids
+            .iter()
+            .filter_map(|id| view.get_mid_price(*id).map(|price| (*id, price)))
+            .collect();
+
+        thread::scope(|s| {
+            for &stock_id in &ids {
+                let order_channel = order_channel.clone();
+                let open_orders = open_orders.clone();
+                let last_mid_prices = last_mid_prices.clone();
+                let current_mid_price = *mid_prices.get(&stock_id).unwrap_or(&0);
+
+                s.spawn(move || {
+                    let mut rng = rand::thread_rng();
+                    if !rng.gen_bool(WHALE_ACTION_PROB) {
+                        return;
+                    }
+
+                    if current_mid_price > 0 {
+                        let mut last_prices = last_mid_prices.write().unwrap();
+                        let last_price = last_prices.entry(stock_id).or_insert(current_mid_price);
+
+                        let price_diff_bps = (current_mid_price as i64 - *last_price as i64).abs() as f64 / *last_price as f64 * 10000.0;
+
+                        if price_diff_bps > WHALE_REFRESH_THRESHOLD_BPS as f64 {
+                            // Full reset
+                            let mut open_orders_lock = open_orders.write().unwrap();
+                            let orders_to_cancel: Vec<u64> = open_orders_lock
+                                .values()
+                                .filter(|o| o.stock_id == stock_id)
+                                .map(|o| o.id)
+                                .collect();
+                            
+                            for order_id in orders_to_cancel {
+                                order_channel
+                                    .send(OrderRequest::CancelOrder {
+                                        agent_id: id,
+                                        order_id,
+                                    })
+                                    .expect("Failed to send cancel order");
+                                open_orders_lock.remove(&order_id);
+                            }
+
+                            // Place new orders
+                            let buy_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
+                            let sell_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
+                            let bid_px = crate::agents::quantize_price(current_mid_price.saturating_sub(buy_bias));
+                            let ask_px = crate::agents::quantize_price(current_mid_price.saturating_add(sell_bias));
+
+                            order_channel
+                                .send(OrderRequest::LimitOrder {
+                                    agent_id: id,
+                                    stock_id,
+                                    side: Side::Buy,
+                                    price: bid_px,
+                                    volume: WHALE_ORDER_VOLUME,
+                                })
+                                .expect("Failed to send whale limit order");
+
+                            order_channel
+                                .send(OrderRequest::LimitOrder {
+                                    agent_id: id,
+                                    stock_id,
+                                    side: Side::Sell,
+                                    price: ask_px,
+                                    volume: WHALE_ORDER_VOLUME,
+                                })
+                                .expect("Failed to send whale limit order");
+
+                            *last_price = current_mid_price;
+                        } else {
+                            // Partial refresh
+                            let open_orders_lock = open_orders.read().unwrap();
+                            let has_bids = open_orders_lock.values().any(|o| o.stock_id == stock_id && o.side == Side::Buy);
+                            let has_asks = open_orders_lock.values().any(|o| o.stock_id == stock_id && o.side == Side::Sell);
+
+                            if !has_bids {
+                                let buy_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
+                                let bid_px = crate::agents::quantize_price(current_mid_price.saturating_sub(buy_bias));
+                                order_channel
+                                    .send(OrderRequest::LimitOrder {
+                                        agent_id: id,
+                                        stock_id,
+                                        side: Side::Buy,
+                                        price: bid_px,
+                                        volume: WHALE_ORDER_VOLUME,
+                                    })
+                                    .expect("Failed to send whale limit order");
+                            }
+
+                            if !has_asks {
+                                let sell_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
+                                let ask_px = crate::agents::quantize_price(current_mid_price.saturating_add(sell_bias));
+                                order_channel
+                                    .send(OrderRequest::LimitOrder {
+                                        agent_id: id,
+                                        stock_id,
+                                        side: Side::Sell,
+                                        price: ask_px,
+                                        volume: WHALE_ORDER_VOLUME,
+                                    })
+                                    .expect("Failed to send whale limit order");
+                            }
+                        }
+                    }
+                });
             }
-            open_orders_lock.clear();
-        } // Write lock is released here.clear
-
-
-
-
-
-            let vol = rng.gen_range(WHALE_ORDER_VOLUME / 2..=WHALE_ORDER_VOLUME);
-            let side = if rng.gen_bool(0.5) {
-                Side::Buy
-            } else {
-                Side::Sell
-            };
-            order_channel
-                .send(OrderRequest::MarketOrder {
-                    agent_id: id,
-                    stock_id,
-                    side,
-                    volume: vol,
-                })
-                .expect("Failed to send whale market order");
-        } else {
-            if let Some(mid) = view.get_mid_price(stock_id) {
-                let buy_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
-                let sell_bias = rng.gen_range(WHALE_PRICE_OFFSET_MIN..=WHALE_PRICE_OFFSET_MAX);
-                let bid_px = mid.saturating_sub(buy_bias);
-                let ask_px = mid.saturating_add(sell_bias);
-
-                order_channel
-                    .send(OrderRequest::LimitOrder {
-                        agent_id: id,
-                        stock_id,
-                        side: Side::Buy,
-                        price: bid_px,
-                        volume: WHALE_ORDER_VOLUME,
-                    })
-                    .expect("Failed to send whale limit order");
-
-                order_channel
-                    .send(OrderRequest::LimitOrder {
-                        agent_id: id,
-                        stock_id,
-                        side: Side::Sell,
-                        price: ask_px,
-                        volume: WHALE_ORDER_VOLUME,
-                    })
-                    .expect("Failed to send whale limit order");
-            }
-        }
+        });
     }
 }
 
@@ -253,6 +291,7 @@ impl Agent for WhaleAgent {
             &self.open_orders,
             &self.view_handle,
             &self.order_channel,
+            &self.last_mid_prices,
         );
     }
 

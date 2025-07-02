@@ -135,76 +135,55 @@ impl DumbLimitAgent {
             return;
         }
 
-        let book_data: HashMap<u64, (Option<u64>, Option<u64>)> = ids
-            .iter()
-            .map(|&stock_id| {
-                let book = view.book(stock_id);
-                let best_bid = book.and_then(|b| b.bids.keys().next_back().copied());
-                let best_ask = book.and_then(|b| b.asks.keys().next().copied());
-                (stock_id, (best_bid, best_ask))
-            })
-            .collect();
-
         thread::scope(|s| {
-            let mut handles: Vec<std::thread::ScopedJoinHandle<()>> = Vec::new();
-            for stock_id in ids {
-                if let Some(&(best_bid, best_ask)) = book_data.get(&stock_id) {
-                    let order_channel = order_channel.clone();
-                    let handle = s.spawn(move || {
-                        let mut rng = rand::thread_rng();
-                        for _ in 0..LIMIT_AGENT_NUM_TRADERS {
-                            if !rng.gen_bool(LIMIT_AGENT_ACTION_PROB) {
-                                continue;
-                            }
+            for &stock_id in &ids {
+                let order_channel = order_channel.clone();
+                // Use last traded price as the reference for placing orders.
+                let last_price = match view.last_traded_price.get(&stock_id) {
+                    Some(&price) => (price * 100.0) as u64, // Convert to cents
+                    None => continue, // Skip if no trade has occurred yet
+                };
 
-                            if let (Some(bid), Some(ask)) = (best_bid, best_ask) {
-                                if bid >= ask {
-                                    continue;
-                                }
-
-                                let side = if rng.gen_bool(0.5) {
-                                    Side::Buy
-                                } else {
-                                    Side::Sell
-                                };
-                                let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
-                                let price = match side {
-                                    Side::Buy => bid.saturating_sub(offset),
-                                    Side::Sell => ask.saturating_add(offset),
-                                };
-                                let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
-
-                                // There's a small chance the agent will become impatient and cross the spread
-                                // This introduces more aggressive buying and selling behavior
-                                if rng.gen_bool(0.1) {
-                                    order_channel
-                                        .send(OrderRequest::MarketOrder {
-                                            agent_id: id,
-                                            stock_id,
-                                            side,
-                                            volume,
-                                        })
-                                        .expect("Failed to send market order");
-                                } else {
-                                    order_channel
-                                        .send(OrderRequest::LimitOrder {
-                                            agent_id: id,
-                                            stock_id,
-                                            side,
-                                            price,
-                                            volume,
-                                        })
-                                        .expect("Failed to send limit order");
-                                }
-                            }
+                s.spawn(move || {
+                    let mut rng = rand::thread_rng();
+                    for _ in 0..LIMIT_AGENT_NUM_TRADERS {
+                        if !rng.gen_bool(LIMIT_AGENT_ACTION_PROB) {
+                            continue;
                         }
-                    });
-                    handles.push(handle);
-                }
-            }
 
-            for handle in handles {
-                handle.join().unwrap();
+                        let side = if rng.gen_bool(0.5) { Side::Buy } else { Side::Sell };
+                        let offset = rng.gen_range(1..=LIMIT_AGENT_MAX_OFFSET);
+                        
+                        let price = match side {
+                            Side::Buy => last_price.saturating_sub(offset),
+                            Side::Sell => last_price.saturating_add(offset),
+                        };
+                        let price = crate::agents::quantize_price(price);
+                        
+                        let volume = rng.gen_range(LIMIT_AGENT_VOL_MIN..=LIMIT_AGENT_VOL_MAX);
+
+                        if rng.gen_bool(0.01) { // Chance to submit a market order
+                            order_channel
+                                .send(OrderRequest::MarketOrder {
+                                    agent_id: id,
+                                    stock_id,
+                                    side,
+                                    volume,
+                                })
+                                .expect("Failed to send market order");
+                        } else {
+                            order_channel
+                                .send(OrderRequest::LimitOrder {
+                                    agent_id: id,
+                                    stock_id,
+                                    side,
+                                    price,
+                                    volume,
+                                })
+                                .expect("Failed to send limit order");
+                        }
+                    }
+                });
             }
         });
     }

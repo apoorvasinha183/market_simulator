@@ -14,6 +14,13 @@ This project provides a high-performance, distributed financial market simulator
 *   **Sentiment Analysis Integration:** Features a sentiment analysis engine that can influence agent behavior, adding an additional layer of market realism.
 *   **Docker Support:** Comprehensive Docker configurations are provided for streamlined setup and deployment of the entire simulation environment.
 
+## Planned Features
+
+*   **Live Candle Generation:**
+    *   **`Candle` Struct:** A new struct will be created to hold OHLC (Open, High, Low, Close) prices and total volume.
+    *   **Live `MarketState` Integration:** The `MarketState` will be updated to include a `HashMap` of `Candle`s for each stock, making live candle data accessible to all agents and observers.
+    *   **`ShadowWorker` Updates:** The `ShadowWorker` will be enhanced to update the `Candle` for each trade it processes, building the candles in real-time.
+
 ## Architecture
 
 The platform employs a client-server architecture with a clear separation of concerns:

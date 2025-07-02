@@ -202,7 +202,7 @@ impl Market {
                     }
                     ShadowEvent::MarketOrder(order) => {
                         if order.volume > 1_000_000 {
-                            println!("[ShadowWorker] ALERT: Processing large market order: Agent {}, Side {:?}, Volume {}", order.agent_id, order.side, order.volume);
+                           // println!("[ShadowWorker] ALERT: Processing large market order: Agent {}, Side {:?}, Volume {}", order.agent_id, order.side, order.volume);
                         }
                         if let Some(book) = back_buffer.order_books.get_mut(&order.stock_id) {
                             book.process_market_order(order.agent_id, order.side, order.volume)

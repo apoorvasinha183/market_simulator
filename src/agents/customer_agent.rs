@@ -53,7 +53,6 @@ impl MarketGateway for CustomerAgentServer {
                     if let Some(event) = result.event {
                         match event {
                             market_gateway::from_python::Event::SubmitOrder(req) => {
-                                //println!("[CustomerAgent {}] Received order from Python client: {:?}", agent_id_clone, req);
                                 let side = match req.side.as_str() {
                                     "Buy" => Side::Buy,
                                     "Sell" => Side::Sell,
@@ -82,6 +81,7 @@ impl MarketGateway for CustomerAgentServer {
                                     },
                                     "Limit" => {
                                         let price_in_cents = (req.price * 100.0).round() as u64;
+                                        let price_in_cents = crate::agents::quantize_price(price_in_cents);
                                         OrderRequest::LimitOrder {
                                             agent_id: agent_id_clone,
                                             stock_id: req.stock_id,

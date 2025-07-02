@@ -56,7 +56,7 @@ pub const DUMB_AGENT_TYPICAL_VOL_MAX: u64 = 50; // Increased typical volume
 
 // A "burn" event is rare but represents a correlated, high-impact market order.
 // These volumes are large relative to typical retail, but not market-breaking.
-pub const DUMB_AGENT_LARGE_VOL_CHANCE: f64 = 0.005; // 0.5% chance
+pub const DUMB_AGENT_LARGE_VOL_CHANCE: f64 = 0.0001; // 0.5% chance
 
 pub const DUMB_AGENT_LARGE_VOL_MIN: u64 = 10_000;
 
@@ -66,13 +66,13 @@ pub const DUMB_AGENT_LARGE_VOL_MAX: u64 = 50_000;
 
 // This ensemble represents a smaller group of more sophisticated retail traders.
 
-pub const LIMIT_AGENT_ACTION_PROB: f64 = 0.75;
+pub const LIMIT_AGENT_ACTION_PROB: f64 = 0.3;
 
 // Their order sizes are more substantial, able to absorb some of the "noise".
 
-pub const LIMIT_AGENT_VOL_MIN: u64 = 100;
+pub const LIMIT_AGENT_VOL_MIN: u64 = 10000;
 
-pub const LIMIT_AGENT_VOL_MAX: u64 = 1_000;
+pub const LIMIT_AGENT_VOL_MAX: u64 = 100000;
 
 // A smaller offset for placing limit orders, more realistic.
 pub const LIMIT_AGENT_MAX_OFFSET: u64 = 50; // $0.50 in cents
@@ -86,13 +86,15 @@ pub const LIMIT_AGENT_NUM_TRADERS: u32 = 100;
 pub const WHALE_INITIAL_INVENTORY: i64 = 50_000_000;
 
 // Acts more frequently to have a noticeable impact on the simulation
-pub const WHALE_ACTION_PROB: f64 = 0.1;
+pub const WHALE_ACTION_PROB: f64 = 0.8;
 
-pub const WHALE_ORDER_VOLUME: u64 = 50_000_000; // Places massive orders
+pub const WHALE_ORDER_VOLUME: u64 = 5_000_000; // Places massive orders
 
 // Reduced price offset to be aggressive but not completely unrealistic.
-pub const WHALE_PRICE_OFFSET_MAX: u64 = 500; // $5.00
+pub const WHALE_PRICE_OFFSET_MAX: u64 = 2000; // $20.00
 pub const WHALE_PRICE_OFFSET_MIN: u64 = 100; // $1.00
+
+pub const WHALE_REFRESH_THRESHOLD_BPS: u64 = 20; // 0.20%
 
 pub const CRAZY_WHALE: f64 = 0.001;
 

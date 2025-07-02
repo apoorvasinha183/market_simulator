@@ -144,6 +144,9 @@ impl MarketMakerAgent {
             return;
         }
 
+        // Extract all necessary data from the view *before* spawning threads.
+        let last_traded_prices: HashMap<u64, f64> = ids.iter().map(|id| (*id, view.last_traded_price.get(id).copied().unwrap_or(0.0))).collect();
+
         let mut handles = Vec::new();
 
         for &stock_id in &ids {
@@ -156,6 +159,7 @@ impl MarketMakerAgent {
                 .get_stock_by_id(stock_id)
                 .map(|s| (s.initial_price * 100.0) as u64)
                 .unwrap_or(MM_INITIAL_CENTER_PRICE);
+            let last_traded_price = last_traded_prices.get(&stock_id).copied().unwrap_or(0.0);
 
             let handle = thread::spawn(move || {
                 let book = match book_clone {
@@ -244,18 +248,21 @@ impl MarketMakerAgent {
                             })
                             .unwrap();
                     } else {
-                        let center = match (best_bid, best_ask) {
-                            (Some(b), Some(a)) if a > b => ((b as u128 + a as u128) / 2) as u64,
-                            (None, None) => MM_INITIAL_CENTER_PRICE,
-                            _ => return,
+                        let center = if last_traded_price > 0.0 {
+                            (last_traded_price * 100.0) as u64
+                        } else {
+                            match (best_bid, best_ask) { // Fallback to mid-price
+                                (Some(b), Some(a)) if a > b => ((b as u128 + a as u128) / 2) as u64,
+                                _ => initial_price, // Fallback to initial price
+                            }
                         };
 
                         let current_inventory =
                             *inventory_clone.read().unwrap().get(&stock_id).unwrap_or(&0);
                         let inventory_skew = (current_inventory as f64 * MM_SKEW_FACTOR) as i64;
                         let our_center = clamp(center as i128 - inventory_skew as i128);
-                        let bid_px = clamp(our_center as i128 - (MM_DESIRED_SPREAD / 2) as i128);
-                        let ask_px = clamp(our_center as i128 + (MM_DESIRED_SPREAD / 2) as i128);
+                        let bid_px = crate::agents::quantize_price(clamp(our_center as i128 - (MM_DESIRED_SPREAD / 2) as i128));
+                        let ask_px = crate::agents::quantize_price(clamp(our_center as i128 + (MM_DESIRED_SPREAD / 2) as i128));
 
                         if ask_px > bid_px
                             && !best_ask.map_or(false, |a| bid_px >= a)
