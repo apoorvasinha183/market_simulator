@@ -14,6 +14,10 @@ This project provides a high-performance, distributed financial market simulator
 *   **External Sentiment Integration:** Features a dedicated `SentimentEngine` that consumes real-time sentiment data from an external UDP source, influencing the behavior of Thermodynamic Agents and adding an additional layer of market realism.
 *   **Docker Support:** Comprehensive Docker configurations are provided for streamlined setup and deployment of the entire simulation environment.
 
+## Demo
+
+![Market Simulator Demo](output.gif)
+
 ## Planned Features
 
 *   **Live Candle Generation:**
