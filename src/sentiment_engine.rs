@@ -28,6 +28,13 @@ impl SentimentEngine {
                 let addr = format!("127.0.0.1:{}", port);
                 let socket = match UdpSocket::bind(&addr) {
                     Ok(s) => s,
+                    Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+                        println!(
+                            "[SentimentEngine] Warning: Address {} already in use. Skipping listener for {}.",
+                            addr, stock_ticker
+                        );
+                        return;
+                    }
                     Err(e) => {
                         eprintln!(
                             "[SentimentEngine] Failed to bind UDP socket for {} on port {}: {}",

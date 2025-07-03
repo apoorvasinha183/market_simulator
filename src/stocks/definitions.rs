@@ -83,6 +83,12 @@ pub fn stock_ticker_to_stock_map(stocks: &[Stock]) -> std::collections::HashMap<
         .collect()
 }
 
+impl Default for StockMarket {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StockMarket {
     pub fn new() -> Self {
         Self::from_universe(default_stock_universe())

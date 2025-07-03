@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn unknown_ticker_returns_zero() {
-        let _ = init(vec![100], cfg());
+        init(vec![100], cfg());
         // 9999 was never inserted
         assert_eq!(get(9999), 0.0);
     }
@@ -141,7 +141,7 @@ mod tests {
         sleep(Duration::from_millis(35));
         for &id in &ids {
             let v = get(id);
-            assert!(v >= -1.0 && v <= 1.0, "spike out of [-1,1]: {}", v);
+            assert!((-1.0..=1.0).contains(&v), "spike out of [-1,1]: {}", v);
         }
     }
 
@@ -165,6 +165,10 @@ mod tests {
         // run for a few hundred ms
         sleep(Duration::from_millis(500));
         let v = get(7);
-        assert!(v >= -1.0 && v <= 1.0, "long‐run value out of [-1,1]: {}", v);
+        assert!(
+            (-1.0..=1.0).contains(&v),
+            "long‐run value out of [-1,1]: {}",
+            v
+        );
     }
 }

@@ -92,10 +92,10 @@ impl OrderBook {
                         Side::Sell => (maker_order.id, 0),
                     };
                     trades.push(Trade {
-                        stock_id: maker_order.stock_id.clone(),
+                        stock_id: maker_order.stock_id,
                         price,
                         volume: trade_volume,
-                        taker_agent_id: taker_agent_id,
+                        taker_agent_id,
                         maker_agent_id: maker_order.agent_id,
                         taker_side: side,
                         maker_order_id: maker_order.id,
@@ -165,7 +165,7 @@ impl OrderBook {
                             Side::Sell => (maker_order.id, order.id),
                         };
                         trades.push(Trade {
-                            stock_id: maker_order.stock_id.clone(),
+                            stock_id: maker_order.stock_id,
                             price,
                             volume: trade_volume,
                             taker_agent_id: order.agent_id,
@@ -246,7 +246,7 @@ mod tests {
         Order {
             id,
             agent_id,
-            stock_id: stock_id,
+            stock_id,
             side,
             price,
             volume,

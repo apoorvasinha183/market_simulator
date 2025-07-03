@@ -369,7 +369,7 @@ pub fn bench_limit_order_insertion(c: &mut Criterion) {
                                 agent_id: (i % 10) as usize,
                                 stock_id: 0,
                                 side: Side::Sell,
-                                price: 110 + (i % 20) as u64, // New price levels
+                                price: 110 + (i % 20), // New price levels
                                 volume: rng.gen_range(1..=100),
                                 filled: 0,
                             }
@@ -405,7 +405,7 @@ pub fn bench_limit_order_insertion(c: &mut Criterion) {
                         agent_id: (i % 10) as usize,
                         stock_id: 0,
                         side: Side::Sell,
-                        price: 110 + (i % 20) as u64,
+                        price: 110 + (i % 20),
                         volume: rng.gen_range(1..=100),
                         filled: 0,
                     })

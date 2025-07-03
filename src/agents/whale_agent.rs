@@ -84,12 +84,10 @@ impl WhaleAgent {
                     } else {
                         -(tr.volume as i64)
                     }
+                } else if tr.taker_side == Side::Sell {
+                    tr.volume as i64
                 } else {
-                    if tr.taker_side == Side::Sell {
-                        tr.volume as i64
-                    } else {
-                        -(tr.volume as i64)
-                    }
+                    -(tr.volume as i64)
                 };
 
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
@@ -401,12 +399,10 @@ impl Agent for WhaleAgent {
                     } else {
                         -(tr.volume as i64)
                     }
+                } else if tr.taker_side == Side::Sell {
+                    tr.volume as i64
                 } else {
-                    if tr.taker_side == Side::Sell {
-                        tr.volume as i64
-                    } else {
-                        -(tr.volume as i64)
-                    }
+                    -(tr.volume as i64)
                 };
 
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;

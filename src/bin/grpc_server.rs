@@ -20,7 +20,7 @@ fn main() {
         AgentType::WhaleAgent,
     ];
 
-    let orchestra = Orchestra::new(participants, 1000, 100);
+    let orchestra = Orchestra::new(participants, 10, 1);
 
     // Run the orchestra (market simulation and other agents) in a separate thread
     thread::spawn(move || {

@@ -5,7 +5,7 @@ use super::{
         MM_DESIRED_SPREAD, MM_INITIAL_CENTER_PRICE, MM_INITIAL_INVENTORY, MM_QUOTE_VOL_MAX,
         MM_QUOTE_VOL_MIN, MM_REQUOTE_THRESHOLD_BPS, MM_SEED_DECAY, MM_SEED_DEPTH_PCT,
         MM_SEED_LEVELS, MM_SEED_TICK_SPACING, MM_SKEW_FACTOR, MM_UNSTICK_VOL_MAX,
-        MM_UNSTICK_VOL_MIN, PREMIUM_PROCESSING_LATENCY,
+        MM_UNSTICK_VOL_MIN,
     },
 };
 use crate::{
@@ -19,9 +19,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
+//type StockOrderMap = HashMap<u64, Order>;
+//type AgentOpenOrders = Arc<RwLock<HashMap<u64, Arc<RwLock<StockOrderMap>>>>>;
+
 /* guard-rails */
 const MIN_PRICE: u64 = 1_00; // $1.00
-const MAX_PRICE: u64 = 3_000_00; // $3,000.00
+const MAX_PRICE: u64 = 300_000; // $3,000.00
 #[inline]
 fn clamp(p: i128) -> u64 {
     p.max(MIN_PRICE as i128).min(MAX_PRICE as i128) as u64
@@ -212,9 +215,10 @@ impl MarketMakerAgent {
                                 + (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING)
                                     as i128,
                         );
+                        /*
                         std::thread::sleep(std::time::Duration::from_millis(
                             PREMIUM_PROCESSING_LATENCY as u64,
-                        ));
+                        )); */
                         order_channel_clone
                             .send(OrderRequest::LimitOrder {
                                 agent_id,
@@ -233,10 +237,12 @@ impl MarketMakerAgent {
                                 volume: vol,
                             })
                             .unwrap();
-                        last_quoted_prices_clone
-                            .write()
-                            .unwrap()
-                            .insert(stock_id, (bid_px, ask_px));
+                        if lvl == 0 {
+                            last_quoted_prices_clone
+                                .write()
+                                .unwrap()
+                                .insert(stock_id, (bid_px, ask_px));
+                        }
                     }
                     bootstrapped_clone.write().unwrap().insert(stock_id, true);
                 } else {
@@ -273,11 +279,7 @@ impl MarketMakerAgent {
                         let center = if last_traded_price > 0.0 {
                             (last_traded_price * 100.0) as u64
                         } else {
-                            match (best_bid, best_ask) {
-                                // Fallback to mid-price
-                                (Some(b), Some(a)) if a > b => ((b as u128 + a as u128) / 2) as u64,
-                                _ => initial_price, // Fallback to initial price
-                            }
+                            initial_price
                         };
 
                         let current_inventory =
@@ -324,8 +326,8 @@ impl MarketMakerAgent {
                         }
 
                         if ask_px > bid_px
-                            && !best_ask.map_or(false, |a| bid_px >= a)
-                            && !best_bid.map_or(false, |b| ask_px <= b)
+                            && best_ask.is_none_or(|a| bid_px < a)
+                            && best_bid.is_none_or(|b| ask_px > b)
                         {
                             let vol =
                                 rand::thread_rng().gen_range(MM_QUOTE_VOL_MIN..=MM_QUOTE_VOL_MAX);
@@ -488,12 +490,10 @@ impl Agent for MarketMakerAgent {
                     } else {
                         -(tr.volume as i64)
                     }
+                } else if tr.taker_side == Side::Sell {
+                    tr.volume as i64
                 } else {
-                    if tr.taker_side == Side::Sell {
-                        tr.volume as i64
-                    } else {
-                        -(tr.volume as i64)
-                    }
+                    -(tr.volume as i64)
                 };
                 *inventory_lock.entry(tr.stock_id).or_insert(0) += vol_delta;
                 *cash_lock -= vol_delta as f64 * (tr.price as f64 / 100.0);

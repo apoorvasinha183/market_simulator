@@ -1,6 +1,10 @@
 // src/agents/thermo_agent.rs
 
 use crate::agents::agent_trait::{Agent, MarketView};
+use crate::agents::config::{
+    THERMO_AGENT_BASE_VOLUME_MAX, THERMO_AGENT_BASE_VOLUME_MIN, THERMO_AGENT_INITIAL_CASH,
+    THERMO_AGENT_MIN_TEMP,
+};
 use crate::events::MarketEvent;
 use crate::simulation::orchestra::ShadowBookHandle;
 use crate::stocks::StockMarket;
@@ -75,7 +79,7 @@ impl ThermoAgent {
             temperature: temperature_map, // Will be populated per stock
             chemical_potential: chemical_potential_map, // Will be populated per stock
             specific_heat: specific_heat.max(0.1),
-            cash: 1_000_000.0, // Starting cash
+            cash: THERMO_AGENT_INITIAL_CASH, // Starting cash
             inventory: HashMap::new(),
             open_orders: HashMap::new(),
             last_price,
@@ -149,7 +153,8 @@ impl ThermoAgent {
 
                 // Determine volume based on cash/inventory and price
                 if let Some(&current_price) = self.last_price.get(&stock_id) {
-                    let mut volume = rng.gen_range(100..=500); // Base volume
+                    let mut volume =
+                        rng.gen_range(THERMO_AGENT_BASE_VOLUME_MIN..=THERMO_AGENT_BASE_VOLUME_MAX); // Base volume
                     let cost = volume as f64 * current_price;
 
                     match side {
@@ -158,6 +163,10 @@ impl ThermoAgent {
                             if self.cash < cost {
                                 volume = (self.cash / current_price).floor() as u64;
                                 if volume == 0 {
+                                    println!(
+                                        "Chapter 11 Bankruptcy! Not enough cash to buy stock {}",
+                                        stock_id
+                                    );
                                     continue;
                                 } // Cannot afford
                             }
@@ -192,7 +201,8 @@ impl ThermoAgent {
 
             // Apply thermodynamic cooling for this stock
             let new_temp = current_temp * 0.995;
-            self.temperature.insert(stock_id, new_temp);
+            self.temperature
+                .insert(stock_id, new_temp.max(THERMO_AGENT_MIN_TEMP));
             let new_chem_pot = current_chem_pot * 0.95;
             self.chemical_potential.insert(stock_id, new_chem_pot);
         }
@@ -210,26 +220,36 @@ impl ThermoAgent {
     fn process_portfolio_updates(&mut self) {
         let rx = self.port_channel.lock().unwrap();
         while let Ok(tr) = rx.try_recv() {
-            // Update cash
-            let trade_value = (tr.volume as f64 * tr.price as f64) / 100.0;
-            match tr.taker_side {
-                Side::Buy => self.cash -= trade_value,
-                Side::Sell => self.cash += trade_value,
-            }
+            if tr.taker_agent_id == self.id || tr.maker_agent_id == self.id {
+                let trade_value = (tr.volume as f64 * tr.price as f64) / 100.0;
+                let vol_delta = if tr.taker_agent_id == self.id {
+                    if tr.taker_side == Side::Buy {
+                        self.cash -= trade_value;
+                        tr.volume as i64
+                    } else {
+                        self.cash += trade_value;
+                        -(tr.volume as i64)
+                    }
+                } else {
+                    // This agent was the maker
+                    if tr.taker_side == Side::Sell {
+                        self.cash -= trade_value;
+                        tr.volume as i64
+                    } else {
+                        self.cash += trade_value;
+                        -(tr.volume as i64)
+                    }
+                };
 
-            // Update inventory for the specific stock
-            let vol_delta = if tr.taker_side == Side::Buy {
-                tr.volume as i64
-            } else {
-                -(tr.volume as i64)
-            };
-            *self.inventory.entry(tr.stock_id).or_insert(0) += vol_delta;
+                *self.inventory.entry(tr.stock_id).or_insert(0) += vol_delta;
 
-            // Update open orders (if this trade fills one of our orders)
-            if let Some(order) = self.open_orders.get_mut(&tr.maker_order_id) {
-                order.filled += tr.volume;
-                if order.filled >= order.volume {
-                    self.open_orders.remove(&tr.maker_order_id);
+                if tr.maker_agent_id == self.id {
+                    if let Some(order) = self.open_orders.get_mut(&tr.maker_order_id) {
+                        order.filled += tr.volume;
+                        if order.filled >= order.volume {
+                            self.open_orders.remove(&tr.maker_order_id);
+                        }
+                    }
                 }
             }
         }
@@ -239,6 +259,8 @@ impl ThermoAgent {
 impl Agent for ThermoAgent {
     fn run(&mut self) {
         // The new event-driven core loop.
+        //sleep for 10 seconds before joining
+        std::thread::sleep(std::time::Duration::from_secs(10));
         while let Ok(event) = self.event_receiver.recv() {
             match event {
                 MarketEvent::SentimentUpdate { stock_id, score } => {

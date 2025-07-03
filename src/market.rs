@@ -154,7 +154,7 @@ impl Market {
                             ShadowEvent::LimitOrder(order) => {
                                 if let Some(book) = back_buffer.order_books.get_mut(&order.stock_id)
                                 {
-                                    let mut o = order.clone();
+                                    let mut o = *order;
                                     book.process_limit_order(&mut o)
                                 } else {
                                     Vec::new()
@@ -229,13 +229,13 @@ impl Market {
                     filled: 0,
                 };
                 if let Some(ch) = self.agent_channels.get(&agent_id) {
-                    ch.ack_tx.send(order.clone()).unwrap();
+                    ch.ack_tx.send(order).unwrap();
                 }
                 if let Some(book) = self.order_books.get_mut(&stock_id) {
                     trades.extend(book.process_limit_order(&mut order));
                 }
                 self.shadow_update_tx
-                    .send(ShadowEvent::LimitOrder(order.clone()))
+                    .send(ShadowEvent::LimitOrder(order))
                     .unwrap();
                 self.vip_shadow_update_tx
                     .send(ShadowEvent::LimitOrder(order))
@@ -265,13 +265,13 @@ impl Market {
                 };
 
                 if let Some(ch) = self.agent_channels.get(&agent_id) {
-                    ch.ack_tx.send(order.clone()).unwrap();
+                    ch.ack_tx.send(order).unwrap();
                 }
                 if let Some(book) = self.order_books.get_mut(&stock_id) {
                     trades.extend(book.process_market_order(agent_id, side, volume));
                 }
                 self.shadow_update_tx
-                    .send(ShadowEvent::MarketOrder(order.clone()))
+                    .send(ShadowEvent::MarketOrder(order))
                     .unwrap();
                 self.vip_shadow_update_tx
                     .send(ShadowEvent::MarketOrder(order))
@@ -294,16 +294,16 @@ impl Market {
 
         for tr in &trades {
             self.event_tx
-                .send(MarketEvent::TradeOccurred(tr.clone()))
+                .send(MarketEvent::TradeOccurred(*tr))
                 .unwrap_or_else(|e| {
                     eprintln!("[Market] Failed to broadcast trade event: {}", e);
                 });
 
             if let Some(taker_ch) = self.agent_channels.get(&tr.taker_agent_id) {
-                taker_ch.trade_tx.send(tr.clone()).unwrap();
+                taker_ch.trade_tx.send(*tr).unwrap();
             }
             if let Some(maker_ch) = self.agent_channels.get(&tr.maker_agent_id) {
-                maker_ch.trade_tx.send(tr.clone()).unwrap();
+                maker_ch.trade_tx.send(*tr).unwrap();
             }
         }
 
