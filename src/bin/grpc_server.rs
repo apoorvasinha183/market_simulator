@@ -7,8 +7,8 @@ fn main() {
     let participants = vec![
         AgentType::CustomerAgent, // This agent will host the gRPC server
         AgentType::MarketMaker,
-        AgentType::DumbMarket,
-        AgentType::DumbLimit,
+        AgentType::Thermodynamic, // Replaces DumbMarket
+        AgentType::Thermodynamic, // Replaces DumbLimit
         AgentType::WhaleAgent,
     ];
 

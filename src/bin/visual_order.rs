@@ -682,8 +682,8 @@ fn main() -> Result<(), eframe::Error> {
 
     let participants = vec![
         AgentType::MarketMaker,
-        AgentType::DumbMarket,
-        AgentType::DumbLimit,
+        AgentType::Thermodynamic, // Replaces DumbMarket
+        AgentType::Thermodynamic, // Replaces DumbLimit
         AgentType::WhaleAgent,
         AgentType::CustomerAgent,
     ];

@@ -8,4 +8,5 @@ pub enum AgentType {
     IPO,
     WhaleAgent,
     CustomerAgent, // We can add more here later, like MarketMaker, Institutional, etc.
+    Thermodynamic,
 }
