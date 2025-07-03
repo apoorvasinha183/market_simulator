@@ -97,7 +97,7 @@ impl ThermoAgent {
         // Inject heat: sentiment score raises temperature for the specific stock.
         // High specific heat means less change in temperature.
         let current_temp = *self.temperature.entry(stock_id).or_insert(0.0);
-        let new_temp = current_temp + (score / self.specific_heat);
+        let new_temp = current_temp + (score.abs() / self.specific_heat);
         self.temperature
             .insert(stock_id, new_temp.max(0.0).min(1.0));
     }

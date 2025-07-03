@@ -322,7 +322,7 @@ impl MarketMakerAgent {
                             }
                             stock_orders_write_lock.clear();
                             // We need to give the market time to process the cancellations
-                            std::thread::sleep(std::time::Duration::from_micros(50));
+                            std::thread::sleep(std::time::Duration::from_micros(1));
                         }
 
                         if ask_px > bid_px
@@ -397,7 +397,7 @@ impl Agent for MarketMakerAgent {
 
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_micros(10));
+            thread::sleep(std::time::Duration::from_micros(1));
         }
     }
 
