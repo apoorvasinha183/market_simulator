@@ -293,9 +293,11 @@ impl Market {
         }
 
         for tr in &trades {
-            self.event_tx.send(MarketEvent::TradeOccurred(tr.clone())).unwrap_or_else(|e| {
-                eprintln!("[Market] Failed to broadcast trade event: {}", e);
-            });
+            self.event_tx
+                .send(MarketEvent::TradeOccurred(tr.clone()))
+                .unwrap_or_else(|e| {
+                    eprintln!("[Market] Failed to broadcast trade event: {}", e);
+                });
 
             if let Some(taker_ch) = self.agent_channels.get(&tr.taker_agent_id) {
                 taker_ch.trade_tx.send(tr.clone()).unwrap();

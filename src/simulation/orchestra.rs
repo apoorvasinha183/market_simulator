@@ -9,12 +9,12 @@ use std::time::Duration;
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
 use crate::agents::customer_agent::CustomerAgent;
-use crate::agents::dumb_agent::DumbAgent;
-use crate::agents::dumb_limit_agent::DumbLimitAgent;
+
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
 use crate::agents::thermo_agent::ThermoAgent;
 use crate::agents::whale_agent::WhaleAgent;
+use crate::default_stock_universe;
 use crate::events::MarketEvent;
 use crate::market::Market;
 use crate::sentiment_engine::SentimentEngine;
@@ -22,7 +22,7 @@ use crate::simulators::market_trait::Marketable;
 use crate::simulators::order_book::OrderBook;
 use crate::stocks::StockMarket;
 use crate::types::order::{Order, OrderRequest, Trade};
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use crossbeam_channel::{Sender, unbounded};
 
 // --- This is the shared state agents will read from. ---
 #[derive(Debug, Clone)]
@@ -69,7 +69,7 @@ impl Orchestra {
         println!("[Orchestra] Initializing simulation...");
 
         // === 1. Create Infrastructure ===
-        let stock_market = StockMarket::new();
+        let stock_market = StockMarket::from_universe(default_stock_universe());
 
         let normal_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
             order_books: HashMap::new(),
@@ -101,7 +101,13 @@ impl Orchestra {
             let (tx_ack, rx_ack) = unbounded::<Order>();
             let (tx_trade, rx_trade) = unbounded::<Trade>();
 
-            registration_data.insert(id, AgentResponseChannels { ack_tx: tx_ack, trade_tx: tx_trade });
+            registration_data.insert(
+                id,
+                AgentResponseChannels {
+                    ack_tx: tx_ack,
+                    trade_tx: tx_trade,
+                },
+            );
 
             let view_handle = match agent_type {
                 AgentType::MarketMaker => premium_shadow_book.clone(),
@@ -111,20 +117,80 @@ impl Orchestra {
             let new_agent: Box<dyn Agent> = match agent_type {
                 AgentType::DumbMarket => {
                     let event_rx_clone = event_rx.clone();
-                    Box::new(ThermoAgent::new(id, order_tx.clone(), rx_ack, rx_trade, event_rx_clone, view_handle, 0.1)) // Low specific heat for meme traders
+                    Box::new(ThermoAgent::new(
+                        id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        event_rx_clone,
+                        view_handle,
+                        stock_market.clone(),
+                        0.2,
+                        0.1,
+                        0.0,
+                    )) // Meme Trader: Starts active, low specific heat
                 }
                 AgentType::DumbLimit => {
                     let event_rx_clone = event_rx.clone();
-                    Box::new(ThermoAgent::new(id, order_tx.clone(), rx_ack, rx_trade, event_rx_clone, view_handle, 1.0)) // High specific heat for value traders
+                    Box::new(ThermoAgent::new(
+                        id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        event_rx_clone,
+                        view_handle,
+                        stock_market.clone(),
+                        crate::agents::config::THERMO_AGENT_DUMB_LIMIT_INITIAL_TEMP,
+                        crate::agents::config::THERMO_AGENT_DUMB_LIMIT_SPECIFIC_HEAT,
+                        crate::agents::config::THERMO_AGENT_DUMB_LIMIT_INITIAL_CHEM_POT,
+                    ))
                 }
-                AgentType::MarketMaker => Box::new(MarketMakerAgent::new(id, order_tx.clone(), rx_ack, rx_trade, view_handle)),
-                AgentType::IPO => Box::new(IpoAgent::new(id, order_tx.clone(), rx_ack, rx_trade, view_handle)),
-                AgentType::WhaleAgent => Box::new(WhaleAgent::new(id, order_tx.clone(), rx_ack, rx_trade, view_handle)),
-                AgentType::CustomerAgent => Box::new(CustomerAgent::new(id, order_tx.clone(), rx_ack, rx_trade, view_handle)),
-                AgentType::Thermodynamic => {
-                    // Thermodynamic agents get a receiver for the event bus
+                AgentType::MarketMaker => Box::new(MarketMakerAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                AgentType::IPO => Box::new(IpoAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                AgentType::WhaleAgent => Box::new(WhaleAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                AgentType::CustomerAgent => Box::new(CustomerAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                AgentType::Thermodynamic {
+                    initial_temperature,
+                    specific_heat,
+                    initial_chemical_potential,
+                } => {
                     let event_rx_clone = event_rx.clone();
-                    Box::new(ThermoAgent::new(id, order_tx.clone(), rx_ack, rx_trade, event_rx_clone, view_handle, 0.5))
+                    Box::new(ThermoAgent::new(
+                        id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        event_rx_clone,
+                        view_handle,
+                        stock_market.clone(),
+                        initial_temperature,
+                        specific_heat,
+                        initial_chemical_potential,
+                    ))
                 }
             };
             agents.push(new_agent);
@@ -185,7 +251,6 @@ impl Orchestra {
         });
         handles.push(sentiment_handle);
         println!("[Orchestra] SentimentEngine thread launched.");
-
 
         // First, move the market into its own thread.
         let mut market = self.market;

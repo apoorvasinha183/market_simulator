@@ -29,11 +29,17 @@ impl SentimentEngine {
                 let socket = match UdpSocket::bind(&addr) {
                     Ok(s) => s,
                     Err(e) => {
-                        eprintln!("[SentimentEngine] Failed to bind UDP socket for {} on port {}: {}", stock_ticker, port, e);
+                        eprintln!(
+                            "[SentimentEngine] Failed to bind UDP socket for {} on port {}: {}",
+                            stock_ticker, port, e
+                        );
                         return;
                     }
                 };
-                println!("[SentimentEngine] Listening for {} sentiment on {}", stock_ticker, addr);
+                println!(
+                    "[SentimentEngine] Listening for {} sentiment on {}",
+                    stock_ticker, addr
+                );
 
                 let mut buf = [0; 32]; // Small buffer for a single float string
                 loop {
@@ -50,7 +56,10 @@ impl SentimentEngine {
                             }
                         }
                         Err(e) => {
-                            eprintln!("[SentimentEngine] Error receiving data for {}: {}", stock_ticker, e);
+                            eprintln!(
+                                "[SentimentEngine] Error receiving data for {}: {}",
+                                stock_ticker, e
+                            );
                             break;
                         }
                     }

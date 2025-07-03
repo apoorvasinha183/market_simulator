@@ -13,5 +13,5 @@ pub mod whale_agent;
 /// Quantizes a price to the nearest 5-cent increment.
 #[inline]
 pub fn quantize_price(price: u64) -> u64 {
-    (price / 5) * 5
+    (price / 1) * 1
 }
