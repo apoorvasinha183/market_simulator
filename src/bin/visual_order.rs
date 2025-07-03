@@ -681,11 +681,19 @@ fn main() -> Result<(), eframe::Error> {
     println!("Available cores: {}", cores.len());
 
     let participants = vec![
+        AgentType::CustomerAgent, // This agent will host the gRPC server
         AgentType::MarketMaker,
-        AgentType::DumbMarket,
-        AgentType::DumbLimit,
+        AgentType::Thermodynamic {
+            initial_temperature: 0.2,
+            specific_heat: 0.1,
+            initial_chemical_potential: 0.0,
+        }, // Meme Trader
+        AgentType::Thermodynamic {
+            initial_temperature: 0.1,
+            specific_heat: 1.0,
+            initial_chemical_potential: 0.0,
+        }, // Value Trader
         AgentType::WhaleAgent,
-        AgentType::CustomerAgent,
     ];
 
     /*let participants = vec![

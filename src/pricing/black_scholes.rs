@@ -63,7 +63,7 @@ impl VolatilityEstimator {
             .sum::<f64>()
             / num_returns;
 
-        variance.sqrt() * (252.0 as f64).sqrt()
+        variance.sqrt() * 252.0_f64.sqrt()
     }
 }
 

@@ -78,13 +78,13 @@ class Broker:
         for i in range(num_orders):
             client_id = f"customer_agent_{random.randint(0, 2)}" # Example client IDs
             stock_id = random.choice(stock_ids)
-            #stock_id = 1
+            #stock_id = 3
             #side = random.choice(sides)
             side = "Buy" if random.random() < buy_bias else "Sell"
             #side = sides[0]
-            #order_type = random.choice(order_types)
-            order_type = order_types[0]
-            volume = random.randint(50000, 5000000) # Adjusted volume for more impact
+            order_type = random.choice(order_types)
+            #order_type = order_types[0]
+            volume = random.randint(5000, 50000) # Adjusted volume for more impact
 
             price = 0.0
             if order_type == "Limit":

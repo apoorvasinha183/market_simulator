@@ -33,7 +33,7 @@ impl Marketable for GBMSimulator {
     // This one will generate the new prices for the order book.
     fn step(&mut self) -> f64 {
         let daily_drift = self.drift / 252.0;
-        let daily_volatility = self.volatility / (252.0 as f64).sqrt();
+        let daily_volatility = self.volatility / 252.0_f64.sqrt();
         let dt = 1.0;
         let random_shock = self.normal_dist.sample(&mut self.rng);
         // Code below didn't have mu-sigma^2/2 term

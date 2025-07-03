@@ -28,7 +28,10 @@ impl SentimentEngine {
             // Spawn a thread for each stock to listen for sentiment updates. (Mother of all deadlocks if not careful)
             thread::spawn(move || {
                 let socket = match UdpSocket::bind(format!("127.0.0.1:{}", port)) {
-                    Ok(s) => s,
+                    Ok(s) => {
+                        println!("[SentimentCollector] Listening for sentiment on 127.0.0.1:{}", port);
+                        s
+                    },
                     Err(e) => {
                         eprintln!("Failed to bind UDP socket for stock {}: {}", stock_id, e);
                         return;

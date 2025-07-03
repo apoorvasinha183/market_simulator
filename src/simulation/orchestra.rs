@@ -1,28 +1,31 @@
 // src/orchestra.rs
 
 use std::collections::HashMap;
-//use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 // --- Crate-level imports ---
-use crate::OrderBook; // Assuming order_book.rs is in simulators
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
 use crate::agents::customer_agent::CustomerAgent;
-use crate::agents::dumb_agent::DumbAgent;
-use crate::agents::dumb_limit_agent::DumbLimitAgent;
+
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
+use crate::agents::thermo_agent::ThermoAgent;
 use crate::agents::whale_agent::WhaleAgent;
+use crate::default_stock_universe;
+use crate::events::MarketEvent;
 use crate::market::Market;
+use crate::sentiment_engine::SentimentEngine;
 use crate::simulators::market_trait::Marketable;
+use crate::simulators::order_book::OrderBook;
 use crate::stocks::StockMarket;
 use crate::types::order::{Order, OrderRequest, Trade};
 use crossbeam_channel::{Sender, unbounded};
 
 // --- This is the shared state agents will read from. ---
-#[derive(Debug, Clone)] // Clone is needed for the Market to initialize the shadow book
+#[derive(Debug, Clone)]
 pub struct MarketState {
     pub order_books: HashMap<u64, OrderBook>,
     pub stocks: StockMarket,
@@ -30,7 +33,6 @@ pub struct MarketState {
     pub cumulative_volume: HashMap<u64, u64>,
 }
 
-// This is the "pointer" to the shadow book that agents will hold.
 pub type ShadowBookHandle = Arc<RwLock<MarketState>>;
 
 impl MarketState {
@@ -45,18 +47,17 @@ impl MarketState {
     }
 }
 
-/// A dedicated struct to hold all the outbound channels FROM the market TO a single agent.
 pub struct AgentResponseChannels {
     pub ack_tx: Sender<Order>,
     pub trade_tx: Sender<Trade>,
 }
 
 pub struct Orchestra {
-    // The Orchestra now holds the actors it will manage.
-    // They are boxed to allow for different agent types (trait objects).
     agents: Vec<Box<dyn Agent>>,
     market: Market,
     shadow_handle: ShadowBookHandle,
+    // Keep the sender to spawn the heartbeat thread
+    event_sender: Sender<MarketEvent>,
 }
 
 impl Orchestra {
@@ -68,19 +69,17 @@ impl Orchestra {
         println!("[Orchestra] Initializing simulation...");
 
         // === 1. Create Infrastructure ===
-        let stock_market = StockMarket::new();
+        let stock_market = StockMarket::from_universe(default_stock_universe());
 
-        // The shadow book is created empty. The Market is responsible for its initial state.
         let normal_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
             order_books: HashMap::new(),
-            stocks: stock_market.clone(), // Initial clone, market will overwrite
+            stocks: stock_market.clone(),
             last_traded_price: HashMap::new(),
             cumulative_volume: HashMap::new(),
         }));
-        // For now, premium is just a clone of the normal setup handle.
         let premium_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
             order_books: HashMap::new(),
-            stocks: stock_market.clone(), // Initial clone, market will overwrite
+            stocks: stock_market.clone(),
             last_traded_price: HashMap::new(),
             cumulative_volume: HashMap::new(),
         }));
@@ -88,6 +87,10 @@ impl Orchestra {
 
         let (order_tx, order_rx) = unbounded::<OrderRequest>();
         println!("[Orchestra] Central market order channel created.");
+
+        // === NEW: Create the central event bus ===
+        let (event_tx, event_rx) = unbounded::<MarketEvent>();
+        println!("[Orchestra] Central event bus created.");
 
         // === 2. Instantiate Agents and Register Their Channels ===
         let mut agents: Vec<Box<dyn Agent>> = Vec::new();
@@ -98,38 +101,56 @@ impl Orchestra {
             let (tx_ack, rx_ack) = unbounded::<Order>();
             let (tx_trade, rx_trade) = unbounded::<Trade>();
 
-            let response_channels = AgentResponseChannels {
-                ack_tx: tx_ack,
-                trade_tx: tx_trade,
-            };
-            registration_data.insert(id, response_channels);
+            registration_data.insert(
+                id,
+                AgentResponseChannels {
+                    ack_tx: tx_ack,
+                    trade_tx: tx_trade,
+                },
+            );
 
             let view_handle = match agent_type {
+                AgentType::MarketMaker => premium_shadow_book.clone(),
                 _ => normal_shadow_book.clone(),
             };
 
-            // Create the agent. Note we are only handling DumbMarket for now.
             let new_agent: Box<dyn Agent> = match agent_type {
-                AgentType::DumbMarket => Box::new(DumbAgent::new(
-                    id,
-                    order_tx.clone(),
-                    rx_ack,
-                    rx_trade,
-                    view_handle,
-                )),
-                AgentType::DumbLimit => Box::new(DumbLimitAgent::new(
-                    id,
-                    order_tx.clone(),
-                    rx_ack,
-                    rx_trade,
-                    view_handle,
-                )),
+                AgentType::DumbMarket => {
+                    let event_rx_clone = event_rx.clone();
+                    Box::new(ThermoAgent::new(
+                        id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        event_rx_clone,
+                        view_handle,
+                        stock_market.clone(),
+                        0.2,
+                        0.1,
+                        0.0,
+                    )) // Meme Trader: Starts active, low specific heat
+                }
+                AgentType::DumbLimit => {
+                    let event_rx_clone = event_rx.clone();
+                    Box::new(ThermoAgent::new(
+                        id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        event_rx_clone,
+                        view_handle,
+                        stock_market.clone(),
+                        crate::agents::config::THERMO_AGENT_DUMB_LIMIT_INITIAL_TEMP,
+                        crate::agents::config::THERMO_AGENT_DUMB_LIMIT_SPECIFIC_HEAT,
+                        crate::agents::config::THERMO_AGENT_DUMB_LIMIT_INITIAL_CHEM_POT,
+                    ))
+                }
                 AgentType::MarketMaker => Box::new(MarketMakerAgent::new(
                     id,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
-                    premium_shadow_book.clone(), // Use premium book for MarketMaker
+                    view_handle,
                 )),
                 AgentType::IPO => Box::new(IpoAgent::new(
                     id,
@@ -152,22 +173,40 @@ impl Orchestra {
                     rx_trade,
                     view_handle,
                 )),
+                AgentType::Thermodynamic {
+                    initial_temperature,
+                    specific_heat,
+                    initial_chemical_potential,
+                } => {
+                    let event_rx_clone = event_rx.clone();
+                    Box::new(ThermoAgent::new(
+                        id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        event_rx_clone,
+                        view_handle,
+                        stock_market.clone(),
+                        initial_temperature,
+                        specific_heat,
+                        initial_chemical_potential,
+                    ))
+                }
             };
             agents.push(new_agent);
         }
         println!("[Orchestra] {} agents instantiated.", agents.len());
 
         // === 3. Instantiate Market ===
-        // The Market is given the receiving end of the order channel, the agent address book,
-        // and a handle to the shadow book it must maintain.
         let market = Market::new(
             &stock_market,
             order_rx,
             registration_data,
-            normal_shadow_book.clone(), // Pass the handle for the normal book
+            normal_shadow_book.clone(),
             normal_processing,
-            premium_shadow_book.clone(), // Pass the handle for the premium book
+            premium_shadow_book.clone(),
             premium_processing,
+            event_tx.clone(), // Give the market a sender
         );
         println!("[Orchestra] Market instantiated and initialized.");
 
@@ -176,6 +215,7 @@ impl Orchestra {
             agents,
             market,
             shadow_handle: normal_shadow_book.clone(),
+            event_sender: event_tx,
         }
     }
 
@@ -184,14 +224,35 @@ impl Orchestra {
     }
 
     /// This method consumes the Orchestra and launches all actors in their own threads.
-    /// It blocks until all simulation threads have completed.
     pub fn run(self) {
         println!("[Orchestra] Launching all actors...");
 
         let mut handles: Vec<JoinHandle<()>> = vec![];
 
+        // --- NEW: Launch the Heartbeat Thread ---
+        let event_sender = self.event_sender.clone();
+        let heartbeat_handle = thread::spawn(move || {
+            loop {
+                thread::sleep(Duration::from_millis(100));
+                if event_sender.send(MarketEvent::Heartbeat).is_err() {
+                    // Main channel closed, exit
+                    break;
+                }
+            }
+        });
+        handles.push(heartbeat_handle);
+        println!("[Orchestra] Heartbeat thread launched.");
+
+        // --- NEW: Launch the Sentiment Engine ---
+        let stock_market = self.market.get_stock_market_clone(); // Need a way to get this
+        let sentiment_sender = self.event_sender.clone();
+        let sentiment_handle = thread::spawn(move || {
+            SentimentEngine::run(&stock_market, sentiment_sender);
+        });
+        handles.push(sentiment_handle);
+        println!("[Orchestra] SentimentEngine thread launched.");
+
         // First, move the market into its own thread.
-        // We must use a mutable variable to move out of the struct.
         let mut market = self.market;
         let market_handle = thread::spawn(move || {
             market.run();
@@ -206,6 +267,8 @@ impl Orchestra {
             });
             handles.push(agent_handle);
         }
-        println!("[Orchestra] {} agent threads launched.", handles.len() - 1);
+        println!("[Orchestra] {} agent threads launched.", handles.len() - 2); // -2 for market and heartbeat
+
+        // In a real app, you'd join these handles. For the sim, we let them run.
     }
 }

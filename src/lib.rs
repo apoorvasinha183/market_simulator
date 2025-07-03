@@ -2,6 +2,7 @@
 
 // === 1. Declare all the top-level modules ===
 pub mod agents;
+pub mod events;
 pub mod market;
 pub mod pricing;
 pub mod sentiment;
