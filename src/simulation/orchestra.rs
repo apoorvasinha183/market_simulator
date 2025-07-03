@@ -9,7 +9,8 @@ use std::time::Duration;
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
 use crate::agents::customer_agent::CustomerAgent;
-
+use crate::agents::dumb_agent::DumbAgent;
+use crate::agents::dumb_limit_agent::DumbLimitAgent;
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
 use crate::agents::thermo_agent::ThermoAgent;
@@ -115,36 +116,20 @@ impl Orchestra {
             };
 
             let new_agent: Box<dyn Agent> = match agent_type {
-                AgentType::DumbMarket => {
-                    let event_rx_clone = event_rx.clone();
-                    Box::new(ThermoAgent::new(
-                        id,
-                        order_tx.clone(),
-                        rx_ack,
-                        rx_trade,
-                        event_rx_clone,
-                        view_handle,
-                        stock_market.clone(),
-                        0.2,
-                        0.1,
-                        0.0,
-                    )) // Meme Trader: Starts active, low specific heat
-                }
-                AgentType::DumbLimit => {
-                    let event_rx_clone = event_rx.clone();
-                    Box::new(ThermoAgent::new(
-                        id,
-                        order_tx.clone(),
-                        rx_ack,
-                        rx_trade,
-                        event_rx_clone,
-                        view_handle,
-                        stock_market.clone(),
-                        crate::agents::config::THERMO_AGENT_DUMB_LIMIT_INITIAL_TEMP,
-                        crate::agents::config::THERMO_AGENT_DUMB_LIMIT_SPECIFIC_HEAT,
-                        crate::agents::config::THERMO_AGENT_DUMB_LIMIT_INITIAL_CHEM_POT,
-                    ))
-                }
+                AgentType::DumbMarket => Box::new(DumbAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
+                AgentType::DumbLimit => Box::new(DumbLimitAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
                 AgentType::MarketMaker => Box::new(MarketMakerAgent::new(
                     id,
                     order_tx.clone(),
