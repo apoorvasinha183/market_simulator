@@ -56,7 +56,7 @@ pub const DUMB_AGENT_TYPICAL_VOL_MAX: u64 = 50; // Increased typical volume
 
 // A "burn" event is rare but represents a correlated, high-impact market order.
 // These volumes are large relative to typical retail, but not market-breaking.
-pub const DUMB_AGENT_LARGE_VOL_CHANCE: f64 = 0.0001; // 0.5% chance
+pub const DUMB_AGENT_LARGE_VOL_CHANCE: f64 = 0.001; // 0.5% chance
 
 pub const DUMB_AGENT_LARGE_VOL_MIN: u64 = 10_000;
 
@@ -83,9 +83,8 @@ pub const LIMIT_AGENT_NUM_TRADERS: u32 = 100;
 
 // The whale acts infrequently but with significant size.
 
-pub const WHALE_INITIAL_INVENTORY: i64 = 50_000_000;
+pub const WHALE_INITIAL_INVENTORY: i64 = 500_000;
 
-// Acts more frequently to have a noticeable impact on the simulation
 pub const WHALE_ACTION_PROB: f64 = 0.8;
 
 pub const WHALE_ORDER_VOLUME: u64 = 5_000_000; // Places massive orders

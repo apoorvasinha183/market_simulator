@@ -71,19 +71,20 @@ class Broker:
         Background thread: generates and enqueues various types of orders.
         """
         print(f"[Broker] 🔫  Order generator thread started (generating {num_orders} orders).")
-        stock_ids = [1, 2, 3] # Example stock IDs
+        stock_ids = [1, 2, 3,4] # Example stock IDs
         sides = ["Buy", "Sell"]
         order_types = ["Market", "Limit"]
-
+        buy_bias = 0.6
         for i in range(num_orders):
             client_id = f"customer_agent_{random.randint(0, 2)}" # Example client IDs
             stock_id = random.choice(stock_ids)
             #stock_id = 1
-            side = random.choice(sides)
+            #side = random.choice(sides)
+            side = "Buy" if random.random() < buy_bias else "Sell"
             #side = sides[0]
             #order_type = random.choice(order_types)
             order_type = order_types[0]
-            volume = random.randint(5000000, 5000000000) # Adjusted volume for more impact
+            volume = random.randint(50000, 5000000) # Adjusted volume for more impact
 
             price = 0.0
             if order_type == "Limit":
