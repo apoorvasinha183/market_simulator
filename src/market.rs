@@ -7,7 +7,7 @@ use crate::{
     stocks::definitions::StockMarket,
     types::{Order, OrderRequest, Trade},
 };
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -149,7 +149,11 @@ impl Market {
             while let Ok(trade) = trade_rx.recv() {
                 trade_count += 1;
                 if trade_count % 10000 == 0 {
-                    println!("[TradeProcessor] Processed {} trades at {:?}", trade_count, std::time::Instant::now());
+                    println!(
+                        "[TradeProcessor] Processed {} trades at {:?}",
+                        trade_count,
+                        std::time::Instant::now()
+                    );
                 }
                 // 1. Update the global last traded price
                 last_traded_price
@@ -158,7 +162,10 @@ impl Market {
                     .insert(trade.stock_id, trade.price as f64 / 100.0);
 
                 // 2. Remove the maker order from the global map as it's now filled
-                order_id_to_stock_id_map.write().unwrap().remove(&trade.maker_order_id);
+                order_id_to_stock_id_map
+                    .write()
+                    .unwrap()
+                    .remove(&trade.maker_order_id);
 
                 // 3. Broadcast the trade to the central event bus
                 event_tx
@@ -212,11 +219,17 @@ impl Market {
                     filled: 0,
                 };
                 // Store the mapping for future cancellations
-                self.order_id_to_stock_id_map.write().unwrap().insert(order_id, stock_id);
+                self.order_id_to_stock_id_map
+                    .write()
+                    .unwrap()
+                    .insert(order_id, stock_id);
 
                 if let Some(ch) = self.agent_channels.get(&agent_id) {
                     if ch.ack_tx.send(order).is_err() {
-                        eprintln!("[Market] Agent disconnected, cannot send ack for order {}.", order_id);
+                        eprintln!(
+                            "[Market] Agent disconnected, cannot send ack for order {}.",
+                            order_id
+                        );
                         return;
                     }
                 }
@@ -231,8 +244,12 @@ impl Market {
                 }
 
                 // Dispatch to Shadow Book (as before)
-                self.shadow_update_tx.send(ShadowEvent::LimitOrder(order)).unwrap();
-                self.vip_shadow_update_tx.send(ShadowEvent::LimitOrder(order)).unwrap();
+                self.shadow_update_tx
+                    .send(ShadowEvent::LimitOrder(order))
+                    .unwrap();
+                self.vip_shadow_update_tx
+                    .send(ShadowEvent::LimitOrder(order))
+                    .unwrap();
             }
             OrderRequest::MarketOrder {
                 agent_id,
@@ -240,7 +257,15 @@ impl Market {
                 side,
                 volume,
             } => {
-                let price = (self.last_traded_price.read().unwrap().get(&stock_id).copied().unwrap_or(150.0) * 100.0).round() as u64;
+                let price = (self
+                    .last_traded_price
+                    .read()
+                    .unwrap()
+                    .get(&stock_id)
+                    .copied()
+                    .unwrap_or(150.0)
+                    * 100.0)
+                    .round() as u64;
                 let order = Order {
                     id: order_id,
                     agent_id,
@@ -254,7 +279,10 @@ impl Market {
 
                 if let Some(ch) = self.agent_channels.get(&agent_id) {
                     if ch.ack_tx.send(order).is_err() {
-                        eprintln!("[Market] Agent disconnected, cannot send ack for order {}.", order_id);
+                        eprintln!(
+                            "[Market] Agent disconnected, cannot send ack for order {}.",
+                            order_id
+                        );
                         return;
                     }
                 }
@@ -269,12 +297,21 @@ impl Market {
                 }
 
                 // Dispatch to Shadow Book (as before)
-                self.shadow_update_tx.send(ShadowEvent::MarketOrder(order)).unwrap();
-                self.vip_shadow_update_tx.send(ShadowEvent::MarketOrder(order)).unwrap();
+                self.shadow_update_tx
+                    .send(ShadowEvent::MarketOrder(order))
+                    .unwrap();
+                self.vip_shadow_update_tx
+                    .send(ShadowEvent::MarketOrder(order))
+                    .unwrap();
             }
             OrderRequest::CancelOrder { agent_id, order_id } => {
                 // Find the stock_id for the order to be cancelled
-                let stock_id_option = self.order_id_to_stock_id_map.read().unwrap().get(&order_id).copied();
+                let stock_id_option = self
+                    .order_id_to_stock_id_map
+                    .read()
+                    .unwrap()
+                    .get(&order_id)
+                    .copied();
 
                 if let Some(stock_id) = stock_id_option {
                     // Dispatch to Async Order Book
@@ -286,14 +323,24 @@ impl Market {
                         eprintln!("[Market] No order book for stock_id: {}", stock_id);
                     }
                     // Remove from the map as it's being cancelled
-                    self.order_id_to_stock_id_map.write().unwrap().remove(&order_id);
+                    self.order_id_to_stock_id_map
+                        .write()
+                        .unwrap()
+                        .remove(&order_id);
                 } else {
-                    eprintln!("[Market] Attempted to cancel unknown or already filled order: {}", order_id);
+                    eprintln!(
+                        "[Market] Attempted to cancel unknown or already filled order: {}",
+                        order_id
+                    );
                 }
 
                 // Dispatch to Shadow Book (as before)
-                self.shadow_update_tx.send(ShadowEvent::CancelOrder { order_id, agent_id }).unwrap();
-                self.vip_shadow_update_tx.send(ShadowEvent::CancelOrder { order_id, agent_id }).unwrap();
+                self.shadow_update_tx
+                    .send(ShadowEvent::CancelOrder { order_id, agent_id })
+                    .unwrap();
+                self.vip_shadow_update_tx
+                    .send(ShadowEvent::CancelOrder { order_id, agent_id })
+                    .unwrap();
             }
         }
     }
@@ -340,7 +387,11 @@ impl Market {
                 for trade in trades {
                     shadow_trade_count += 1;
                     if shadow_trade_count % 10000 == 0 {
-                        println!("[ShadowWorker] Processed {} trades at {:?}", shadow_trade_count, std::time::Instant::now());
+                        println!(
+                            "[ShadowWorker] Processed {} trades at {:?}",
+                            shadow_trade_count,
+                            std::time::Instant::now()
+                        );
                     }
                     if let Some(price_mut) = back_buffer.last_traded_price.get_mut(&trade.stock_id)
                     {

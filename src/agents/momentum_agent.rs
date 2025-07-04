@@ -2,10 +2,11 @@
 
 use super::{
     agent_trait::{Agent, MarketView},
-    config::{MOMENTUM_AGENT_ACTION_PROB, MOMENTUM_AGENT_MOMENTUM_THRESHOLD,
-             MOMENTUM_AGENT_MOMENTUM_WINDOW, MOMENTUM_AGENT_PRICE_OFFSET_MAX,
-             MOMENTUM_AGENT_PRICE_OFFSET_MIN,
-             MOMENTUM_AGENT_VOL_MAX, MOMENTUM_AGENT_VOL_MIN},
+    config::{
+        MOMENTUM_AGENT_ACTION_PROB, MOMENTUM_AGENT_MOMENTUM_THRESHOLD,
+        MOMENTUM_AGENT_MOMENTUM_WINDOW, MOMENTUM_AGENT_PRICE_OFFSET_MAX,
+        MOMENTUM_AGENT_PRICE_OFFSET_MIN, MOMENTUM_AGENT_VOL_MAX, MOMENTUM_AGENT_VOL_MIN,
+    },
 };
 use crate::{
     simulation::orchestra::ShadowBookHandle,
@@ -130,7 +131,9 @@ impl MomentumAgent {
             let current_price_cents = (current_price_f64 * 100.0).round() as u64;
 
             let mut history_lock = price_history.write().unwrap();
-            let history = history_lock.entry(stock_id).or_insert_with(|| VecDeque::with_capacity(MOMENTUM_AGENT_MOMENTUM_WINDOW));
+            let history = history_lock
+                .entry(stock_id)
+                .or_insert_with(|| VecDeque::with_capacity(MOMENTUM_AGENT_MOMENTUM_WINDOW));
 
             if history.len() == MOMENTUM_AGENT_MOMENTUM_WINDOW {
                 history.pop_front();
@@ -156,7 +159,8 @@ impl MomentumAgent {
                 continue; // No significant momentum
             };
 
-            let offset = rng.gen_range(MOMENTUM_AGENT_PRICE_OFFSET_MIN..=MOMENTUM_AGENT_PRICE_OFFSET_MAX);
+            let offset =
+                rng.gen_range(MOMENTUM_AGENT_PRICE_OFFSET_MIN..=MOMENTUM_AGENT_PRICE_OFFSET_MAX);
             let limit_price = match side {
                 Side::Buy => current_price_cents.saturating_add(offset),
                 Side::Sell => current_price_cents.saturating_sub(offset),
@@ -182,7 +186,10 @@ impl MomentumAgent {
             };
 
             if let Err(e) = order_channel.send(order_req) {
-                eprintln!("[MomentumAgent {}] Failed to send order for stock {}: {}", id, stock_id, e);
+                eprintln!(
+                    "[MomentumAgent {}] Failed to send order for stock {}: {}",
+                    id, stock_id, e
+                );
             }
         }
     }
@@ -323,7 +330,10 @@ impl Agent for MomentumAgent {
     fn cancel_open_order(&mut self, id: u64) {
         self.open_orders.write().unwrap().remove(&id);
         self.order_channel
-            .send(OrderRequest::CancelOrder { agent_id: self.id, order_id: id })
+            .send(OrderRequest::CancelOrder {
+                agent_id: self.id,
+                order_id: id,
+            })
             .expect("Failed to send cancel order request");
     }
 

@@ -568,7 +568,13 @@ impl AgentVisualizer {
             metric_fixed_width(
                 ui,
                 "Last",
-                &format!("${:.2}", *market_state.last_traded_price.get(&self.selected_id).unwrap_or(&0.0)),
+                &format!(
+                    "${:.2}",
+                    *market_state
+                        .last_traded_price
+                        .get(&self.selected_id)
+                        .unwrap_or(&0.0)
+                ),
                 Color32::from_rgb(0, 123, 255),
                 80.0,
             );
