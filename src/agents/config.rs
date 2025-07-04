@@ -47,7 +47,10 @@ pub const MOMENTUM_AGENT_NUM_TRADERS: u32 = 50;
 pub const MOMENTUM_AGENT_ACTION_PROB: f64 = 0.4;
 pub const MOMENTUM_AGENT_VOL_MIN: u64 = 100;
 pub const MOMENTUM_AGENT_VOL_MAX: u64 = 1000;
-pub const MOMENTUM_AGENT_MAX_OFFSET: u64 = 25; // $0.25 in cents
+pub const MOMENTUM_AGENT_PRICE_OFFSET_MIN: u64 = 10; // $0.10 in cents
+pub const MOMENTUM_AGENT_PRICE_OFFSET_MAX: u64 = 50; // $0.50 in cents
+pub const MOMENTUM_AGENT_MOMENTUM_WINDOW: usize = 10; // Number of past prices to consider
+pub const MOMENTUM_AGENT_MOMENTUM_THRESHOLD: f64 = 0.001; // 0.1% price change to trigger trade
 
 // --- DumbAgent (Retail Market Orders) ---
 
@@ -131,3 +134,7 @@ pub const THERMO_AGENT_MIN_TEMP: f64 = 0.01;
 // Note: These are currently set in `grpc_server.rs` not here.
 pub const NORMAL_PROCESSING_LATENCY: usize = 500; // Normal agents
 pub const PREMIUM_PROCESSING_LATENCY: usize = 50; // Premium agents
+
+// --- Market Batching ---
+pub const MARKET_BATCH_SIZE: usize = 100; // Number of orders to batch before processing
+pub const MARKET_BATCH_TIMEOUT_MS: u64 = 1; // Timeout in milliseconds for batch collection

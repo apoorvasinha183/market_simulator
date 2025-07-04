@@ -138,7 +138,16 @@ impl WhaleAgent {
 
         let mid_prices: HashMap<u64, u64> = ids
             .iter()
-            .filter_map(|id| view.get_mid_price(*id).map(|price| (*id, price)))
+            .filter_map(|id| {
+                view.get_mid_price(*id)
+                    .or_else(|| view.last_traded_price.get(id).map(|p| (*p * 100.0) as u64))
+                    .or_else(|| {
+                        view.stocks
+                            .get_stock_by_id(*id)
+                            .map(|s| (s.initial_price * 100.0) as u64)
+                    })
+                    .map(|price| (*id, price))
+            })
             .collect();
 
         thread::scope(|s| {

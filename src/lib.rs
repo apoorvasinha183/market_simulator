@@ -28,6 +28,7 @@ pub use agents::whale_agent::WhaleAgent;
 pub use market::Market;
 
 // --- From `simulators` ---
+pub use simulators::async_order_book::AsyncOrderBook;
 pub use simulators::gbm::GBMSimulator;
 pub use simulators::market_trait::Marketable;
 pub use simulators::order_book::OrderBook;

@@ -539,8 +539,6 @@ impl AgentVisualizer {
         };
         let best_bid = ob.bids.keys().last().copied();
         let best_ask = ob.asks.keys().next().copied();
-        // total_inventory is not available in MarketState, so we'll remove it for now
-        // let total_inv = market_state.total_inventory();
 
         // Always render the status bar, even if bid/ask are missing
         let col = if self.is_market_running {
@@ -565,6 +563,15 @@ impl AgentVisualizer {
             );
 
             ui.separator();
+
+            // Last Traded Price metric - fixed width
+            metric_fixed_width(
+                ui,
+                "Last",
+                &format!("${:.2}", *market_state.last_traded_price.get(&self.selected_id).unwrap_or(&0.0)),
+                Color32::from_rgb(0, 123, 255),
+                80.0,
+            );
 
             // Bid metric - fixed width
             if let Some(bid) = best_bid {
@@ -683,6 +690,7 @@ fn main() -> Result<(), eframe::Error> {
     let participants = vec![
         AgentType::CustomerAgent, // This agent will host the gRPC server
         AgentType::MarketMaker,
+        AgentType::MomentumAgent,
         AgentType::Thermodynamic {
             initial_temperature: 0.2,
             specific_heat: 0.1,
@@ -700,7 +708,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::IPO,
     ];*/
 
-    let orchestra = Orchestra::new(participants, 10, 1000);
+    let orchestra = Orchestra::new(participants, 1, 1000);
     let shadow_handle = orchestra.get_shadow_handle();
 
     std::thread::spawn(move || {

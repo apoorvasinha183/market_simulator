@@ -13,6 +13,7 @@ use crate::agents::dumb_agent::DumbAgent;
 use crate::agents::dumb_limit_agent::DumbLimitAgent;
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
+use crate::agents::momentum_agent::MomentumAgent;
 use crate::agents::thermo_agent::ThermoAgent;
 use crate::agents::whale_agent::WhaleAgent;
 use crate::default_stock_universe;
@@ -23,7 +24,7 @@ use crate::simulators::market_trait::Marketable;
 use crate::simulators::order_book::OrderBook;
 use crate::stocks::StockMarket;
 use crate::types::order::{Order, OrderRequest, Trade};
-use crossbeam_channel::{Sender, unbounded};
+use crossbeam_channel::{Receiver, Sender, unbounded};
 
 // --- This is the shared state agents will read from. ---
 #[derive(Debug, Clone)]
@@ -55,7 +56,7 @@ pub struct AgentResponseChannels {
 
 pub struct Orchestra {
     agents: Vec<Box<dyn Agent>>,
-    market: Market,
+    pub market: Market,
     shadow_handle: ShadowBookHandle,
     // Keep the sender to spawn the heartbeat thread
     event_sender: Sender<MarketEvent>,
@@ -151,6 +152,13 @@ impl Orchestra {
                     rx_trade,
                     view_handle,
                 )),
+                AgentType::MomentumAgent => Box::new(MomentumAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
                 AgentType::CustomerAgent => Box::new(CustomerAgent::new(
                     id,
                     order_tx.clone(),
@@ -206,6 +214,10 @@ impl Orchestra {
 
     pub fn get_shadow_handle(&self) -> ShadowBookHandle {
         self.shadow_handle.clone()
+    }
+
+    pub fn get_last_traded_prices(&self) -> Arc<RwLock<HashMap<u64, f64>>> {
+        self.market.last_traded_price.clone()
     }
 
     /// This method consumes the Orchestra and launches all actors in their own threads.
