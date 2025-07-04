@@ -34,6 +34,7 @@ pub struct Market {
     shadow_update_tx: Sender<ShadowEvent>,
     vip_shadow_update_tx: Sender<ShadowEvent>,
     // Central event bus for the simulation
+    #[allow(dead_code)]
     event_tx: Sender<MarketEvent>,
     // Shared state for last traded prices
     pub last_traded_price: Arc<RwLock<HashMap<u64, f64>>>,

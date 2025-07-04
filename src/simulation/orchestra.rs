@@ -24,7 +24,7 @@ use crate::simulators::market_trait::Marketable;
 use crate::simulators::order_book::OrderBook;
 use crate::stocks::StockMarket;
 use crate::types::order::{Order, OrderRequest, Trade};
-use crossbeam_channel::{Receiver, Sender, unbounded};
+use crossbeam_channel::{Sender, unbounded};
 
 // --- This is the shared state agents will read from. ---
 #[derive(Debug, Clone)]
