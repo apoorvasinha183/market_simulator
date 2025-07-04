@@ -7,6 +7,7 @@ fn main() {
     let participants = vec![
         AgentType::CustomerAgent, // This agent will host the gRPC server
         AgentType::MarketMaker,
+        AgentType::MomentumAgent,
         AgentType::Thermodynamic {
             initial_temperature: 0.2,
             specific_heat: 0.1,

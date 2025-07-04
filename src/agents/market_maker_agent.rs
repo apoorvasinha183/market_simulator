@@ -517,14 +517,14 @@ impl Agent for MarketMakerAgent {
         let open_orders_lock = self.open_orders.read().unwrap();
         open_orders_lock
             .values()
-            .flat_map(|stock_orders| {
+            .flat_map(|stock_orders|
                 stock_orders
                     .read()
                     .unwrap()
                     .values()
                     .cloned()
                     .collect::<Vec<_>>()
-            })
+            )
             .collect()
     }
 
