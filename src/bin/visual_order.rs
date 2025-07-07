@@ -446,7 +446,7 @@ impl AgentVisualizer {
         &self,
         ctx: &egui::Context,
         order_book: &OrderBook,
-        market_state: &MarketState,
+        _market_state: &MarketState,
         current_last_traded_price: f64,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -749,7 +749,7 @@ fn main() -> Result<(), eframe::Error> {
             .with_min_inner_size([1_000.0, 700.0]),
         ..Default::default()
     };
-    let cores = core_affinity::get_core_ids().unwrap_or_default();
+    let _cores = core_affinity::get_core_ids().unwrap_or_default();
 
     let participants = vec![
         AgentType::CustomerAgent, // This agent will host the gRPC server
