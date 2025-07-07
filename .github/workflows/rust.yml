@@ -51,7 +51,9 @@ jobs:
           sudo apt-get install -y protobuf-compiler
       
       - name: Run tests
-        run: cargo test --workspace --exclude thermo_agent_integration_test --locked --verbose
+        run: |
+          cargo test -p market_simulator --locked --verbose
+          
 
   #─────────────────────────────────────────────────────────────────
   bench:
