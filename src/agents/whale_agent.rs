@@ -5,18 +5,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
-use super::{
-    agent_trait::{Agent, MarketView},
-    config::{
-        WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX, WHALE_PRICE_OFFSET_MIN,
-        WHALE_REFRESH_THRESHOLD_BPS, WHALE_TAPER_ORDERS,
-    },
-    latency::WHALE_TICKS_UNTIL_ACTIVE,
+use super::agent_trait::Agent;
+use super::config::{
+    WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX, WHALE_PRICE_OFFSET_MIN,
+    WHALE_REFRESH_THRESHOLD_BPS, WHALE_TAPER_ORDERS,
 };
-use crate::{
-    simulation::orchestra::ShadowBookHandle,
-    types::order::{Order, OrderRequest, Side, Trade},
-};
+use super::latency::WHALE_TICKS_UNTIL_ACTIVE;
+use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
+use crate::types::order::{Order, OrderRequest, Side, Trade};
 
 /// A patient, high-capital agent that periodically cancels and replaces
 /// large limit orders far from mid-price.
@@ -457,7 +453,7 @@ impl Agent for WhaleAgent {
         Box::new(self.clone())
     }
 
-    fn evaluate_port(&mut self, view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, view: &MarketState) -> f64 {
         let inventory_lock = self.inventory.read().unwrap();
         let new_port_value = inventory_lock.iter().fold(0.0, |acc, (stock_id, &vol)| {
             if let Some(px) = view.get_mid_price(*stock_id) {

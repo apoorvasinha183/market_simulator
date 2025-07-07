@@ -16,7 +16,7 @@ pub mod types;
 // === 2. Re-export the public-facing components to create a clean API ===
 
 // --- From `agents` ---
-pub use agents::agent_trait::{Agent, MarketView};
+pub use agents::agent_trait::Agent;
 pub use agents::agent_type::AgentType; // <-- EXPORT THE NEW ENUM
 pub use agents::dumb_agent::DumbAgent;
 pub use agents::dumb_limit_agent::DumbLimitAgent;

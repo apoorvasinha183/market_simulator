@@ -6,16 +6,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
-use super::{
-    agent_trait::{Agent, MarketView},
-    config::{
-        LIMIT_AGENT_ACTION_PROB, LIMIT_AGENT_MAX_OFFSET, LIMIT_AGENT_NUM_TRADERS,
-        LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN,
-    },
+use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
+use super::agent_trait::Agent;
+use super::config::{
+    LIMIT_AGENT_ACTION_PROB, LIMIT_AGENT_MAX_OFFSET, LIMIT_AGENT_NUM_TRADERS,
+    LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN,
 };
 use crate::{
     agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
-    simulation::orchestra::ShadowBookHandle,
     types::order::{Order, OrderRequest, Side, Trade},
 };
 
@@ -342,7 +340,7 @@ impl Agent for DumbLimitAgent {
         Box::new(self.clone())
     }
 
-    fn evaluate_port(&mut self, view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, view: &MarketState) -> f64 {
         let inventory_lock = self.inventory.read().unwrap();
         let new_port_value = inventory_lock.iter().fold(0.0, |acc, (stock_id, &vol)| {
             if let Some(px) = view.get_mid_price(*stock_id) {

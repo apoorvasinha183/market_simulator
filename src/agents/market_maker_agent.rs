@@ -1,18 +1,14 @@
 // src/agents/market_maker_agent.rs
-use super::{
-    agent_trait::{Agent, MarketView},
-    config::{
-        MM_DESIRED_SPREAD, MM_INITIAL_CENTER_PRICE, MM_INITIAL_INVENTORY, MM_QUOTE_VOL_MAX,
-        MM_QUOTE_VOL_MIN, MM_REQUOTE_THRESHOLD_BPS, MM_SEED_DECAY, MM_SEED_DEPTH_PCT,
-        MM_SEED_LEVELS, MM_SEED_TICK_SPACING, MM_SKEW_FACTOR, MM_UNSTICK_VOL_MAX,
-        MM_UNSTICK_VOL_MIN,
-    },
+use super::agent_trait::Agent;
+use super::config::{
+    MM_DESIRED_SPREAD, MM_INITIAL_CENTER_PRICE, MM_INITIAL_INVENTORY, MM_QUOTE_VOL_MAX,
+    MM_QUOTE_VOL_MIN, MM_REQUOTE_THRESHOLD_BPS, MM_SEED_DECAY, MM_SEED_DEPTH_PCT,
+    MM_SEED_LEVELS, MM_SEED_TICK_SPACING, MM_SKEW_FACTOR, MM_UNSTICK_VOL_MAX,
+    MM_UNSTICK_VOL_MIN,
 };
-use crate::{
-    agents::latency::MM_TICKS_UNTIL_ACTIVE,
-    simulation::orchestra::ShadowBookHandle,
-    types::order::{Order, OrderRequest, Side, Trade},
-};
+use crate::agents::latency::MM_TICKS_UNTIL_ACTIVE;
+use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
+use crate::types::order::{Order, OrderRequest, Side, Trade};
 use crossbeam_channel::{Receiver, Sender};
 use rand::Rng;
 use std::collections::HashMap;
@@ -172,7 +168,7 @@ impl MarketMakerAgent {
             let order_channel_clone = order_channel.clone();
             let inventory_clone = inventory.clone();
             let bootstrapped_clone = bootstrapped.clone();
-            let book_clone = view.book(stock_id).cloned();
+            let book_clone = view.book(stock_id);
             let initial_price = view
                 .stocks
                 .get_stock_by_id(stock_id)
@@ -322,7 +318,7 @@ impl MarketMakerAgent {
                             }
                             stock_orders_write_lock.clear();
                             // We need to give the market time to process the cancellations
-                            std::thread::sleep(std::time::Duration::from_micros(1));
+                            std::thread::sleep(std::time::Duration::from_millis(10));
                         }
 
                         if ask_px > bid_px
@@ -550,7 +546,7 @@ impl Agent for MarketMakerAgent {
         Box::new(self.clone())
     }
 
-    fn evaluate_port(&mut self, view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, view: &MarketState) -> f64 {
         let inventory_lock = self.inventory.read().unwrap();
         let new_port_value = inventory_lock.iter().fold(0.0, |acc, (stock_id, &vol)| {
             if let Some(px) = view.get_mid_price(*stock_id) {

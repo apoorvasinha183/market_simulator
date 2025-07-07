@@ -83,31 +83,74 @@ impl eframe::App for AgentVisualizer {
         }
         ctx.request_repaint();
 
-        let (market_state, order_book) = {
-            let state_guard = self.shadow_handle.read().unwrap();
-            let book = state_guard.order_books.get(&self.selected_id).cloned();
-            (state_guard.clone(), book)
-        };
+        let market_state_guard = self.shadow_handle.read().unwrap();
+        
 
-        /* ───────────────────────── TOP BAR ────────────────────────── */
-        egui::TopBottomPanel::top("top_panel")
-            .min_height(60.0)
-            .show(ctx, |ui| {
-                self.render_top_bar(ui, &market_state);
-            });
+        let selected_order_book = market_state_guard.book(self.selected_id);
+        let current_last_traded_price = *market_state_guard.last_traded_price.get(&self.selected_id).unwrap_or(&0.0);
+        let market_state_for_render = market_state_guard.clone(); // Clone the entire state for rendering
 
-        let Some(order_book) = order_book else {
+        drop(market_state_guard);
+
+        let Some(order_book) = selected_order_book else {
             return;
         };
 
         // Debug logging every 60 frames (roughly once per second)
         self.debug_counter += 1;
 
+        /* ───────────────────────── TOP BAR ────────────────────────── */
+        egui::TopBottomPanel::top("top_panel")
+            .min_height(60.0)
+            .show(ctx, |ui| {
+                self.render_top_bar(ui, &market_state_for_render);
+            });
+
         /* ───────────────────────── BOTTOM PANEL ───────────────────── */
-        self.render_order_book_tables(ctx, &order_book, &market_state);
+        egui::TopBottomPanel::bottom("bottom_panel")
+            .resizable(true)
+            .min_height(250.0)
+            .show(ctx, |ui| {
+                ui.add_space(8.0);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    self.render_market_status(ui, &market_state_for_render, &order_book, current_last_traded_price);
+                    ui.add_space(12.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(
+                            RichText::new("📊 Live Order Book")
+                                .font(FontId::proportional(18.0))
+                                .strong(),
+                        );
+                    });
+                    ui.add_space(8.0);
+                    ui.horizontal_top(|ui| {
+                        // Make sure both tables get equal space
+                        let available_width = ui.available_width();
+                        let table_width = (available_width - 40.0) / 2.0; // 20px spacing on each side
+
+                        ui.allocate_ui_with_layout(
+                            egui::Vec2::new(table_width, ui.available_height()),
+                            egui::Layout::top_down(egui::Align::LEFT),
+                            |ui| {
+                                self.render_side_table(ui, &order_book.bids, true);
+                            },
+                        );
+
+                        ui.add_space(20.0);
+
+                        ui.allocate_ui_with_layout(
+                            egui::Vec2::new(table_width, ui.available_height()),
+                            egui::Layout::top_down(egui::Align::LEFT),
+                            |ui| {
+                                self.render_side_table(ui, &order_book.asks, false);
+                            },
+                        );
+                    });
+                });
+            });
 
         /* ───────────────────────── CENTRAL PANEL ──────────────────── */
-        self.render_plots(ctx, &order_book, &market_state);
+        self.render_plots(ctx, &order_book, &market_state_for_render, current_last_traded_price);
     }
 }
 
@@ -132,8 +175,8 @@ impl AgentVisualizer {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // Add debug button
                 if ui.button("🐛 Debug").clicked() {
-                    if let Some(order_book) = market_state.order_books.get(&self.selected_id) {
-                        debug_order_book(order_book, self.selected_id);
+                    if let Some(order_book) = market_state.order_books.get(&self.selected_id).cloned() {
+                        debug_order_book(&order_book, self.selected_id);
                     }
                 }
                 ui.separator();
@@ -202,8 +245,9 @@ impl AgentVisualizer {
 
     fn record_prices(&mut self) {
         let market_state = self.shadow_handle.read().unwrap();
-        for (&id, &px) in market_state.last_traded_price.iter() {
-            let hist = self.price_histories.entry(id).or_default();
+        let selected_id = self.selected_id;
+        if let Some(&px) = market_state.last_traded_price.get(&selected_id) {
+            let hist = self.price_histories.entry(selected_id).or_default();
             if hist.last() != Some(&px) {
                 hist.push(px);
                 if hist.len() > 1_000 {
@@ -211,10 +255,11 @@ impl AgentVisualizer {
                 }
             }
         }
+        // Only update ATH/ATL for the selected stock
         if let Some(hist) = self.price_histories.get(&self.selected_id) {
             if let Some((&last, tail)) = hist.split_last() {
                 self.ath = tail.iter().fold(last, |a, &p| a.max(p));
-                self.atl = tail.iter().fold(last, |a, &p| a.min(p));
+                self.atl = tail.iter().fold(last, |a, &p| p.min(a));
             }
         }
     }
@@ -245,11 +290,13 @@ impl AgentVisualizer {
     }
 
     /* ------------ order-book tables + status bar ------------ */
+    #[allow(dead_code)]
     fn render_order_book_tables(
         &self,
         ctx: &egui::Context,
         order_book: &OrderBook,
         market_state: &MarketState,
+        current_last_traded_price: f64
     ) {
         egui::TopBottomPanel::bottom("bottom_panel")
             .resizable(true)
@@ -257,7 +304,7 @@ impl AgentVisualizer {
             .show(ctx, |ui| {
                 ui.add_space(8.0);
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    self.render_market_status(ui, market_state);
+                    self.render_market_status(ui, market_state, order_book, current_last_traded_price);
                     ui.add_space(12.0);
                     ui.vertical_centered(|ui| {
                         ui.label(
@@ -379,6 +426,7 @@ impl AgentVisualizer {
         ctx: &egui::Context,
         order_book: &OrderBook,
         market_state: &MarketState,
+        current_last_traded_price: f64,
     ) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.columns(2, |cols| {
@@ -436,10 +484,7 @@ impl AgentVisualizer {
                             }
 
                             // Current price indicator
-                            let cp = *market_state
-                                .last_traded_price
-                                .get(&self.selected_id)
-                                .unwrap_or(&0.0);
+                            let cp = current_last_traded_price;
                             p.line(
                                 Line::new(PlotPoints::from(vec![[cp, 0.0], [cp, 1_000_000.0]]))
                                     .color(Color32::from_rgba_unmultiplied(255, 255, 255, 100))
@@ -457,10 +502,7 @@ impl AgentVisualizer {
                             {
                                 (best_bid as f64 / 100.0 + best_ask as f64 / 100.0) / 2.0
                             } else {
-                                *market_state
-                                    .last_traded_price
-                                    .get(&self.selected_id)
-                                    .unwrap_or(&0.0)
+                                current_last_traded_price
                             };
 
                             // Calculate max cumulative volume for y-axis scaling
@@ -533,12 +575,15 @@ impl AgentVisualizer {
     }
 
     /* ---------------- status bar ---------------- */
-    fn render_market_status(&self, ui: &mut egui::Ui, market_state: &MarketState) {
-        let Some(ob) = market_state.order_books.get(&self.selected_id) else {
-            return;
-        };
-        let best_bid = ob.bids.keys().last().copied();
-        let best_ask = ob.asks.keys().next().copied();
+    fn render_market_status(
+        &self,
+        ui: &mut egui::Ui,
+        market_state: &MarketState,
+        order_book: &OrderBook,
+        current_last_traded_price: f64,
+    ) {
+        let best_bid = order_book.bids.keys().last().copied();
+        let best_ask = order_book.asks.keys().next().copied();
 
         // Always render the status bar, even if bid/ask are missing
         let col = if self.is_market_running {
@@ -568,13 +613,7 @@ impl AgentVisualizer {
             metric_fixed_width(
                 ui,
                 "Last",
-                &format!(
-                    "${:.2}",
-                    *market_state
-                        .last_traded_price
-                        .get(&self.selected_id)
-                        .unwrap_or(&0.0)
-                ),
+                &format!("${:.2}", current_last_traded_price),
                 Color32::from_rgb(0, 123, 255),
                 80.0,
             );
@@ -689,9 +728,7 @@ fn main() -> Result<(), eframe::Error> {
             .with_min_inner_size([1_000.0, 700.0]),
         ..Default::default()
     };
-    // Print the number of available cores
     let cores = core_affinity::get_core_ids().unwrap_or_default();
-    println!("Available cores: {}", cores.len());
 
     let participants = vec![
         AgentType::CustomerAgent, // This agent will host the gRPC server
@@ -714,7 +751,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::IPO,
     ];*/
 
-    let orchestra = Orchestra::new(participants, 1, 1000);
+    let orchestra = Orchestra::new(participants, 1000, 100);
     let shadow_handle = orchestra.get_shadow_handle();
 
     std::thread::spawn(move || {

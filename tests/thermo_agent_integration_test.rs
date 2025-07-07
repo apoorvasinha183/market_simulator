@@ -1,9 +1,52 @@
 use market_simulator::{agents::agent_type::AgentType, simulation::orchestra::Orchestra};
-use std::{thread, time::Duration};
+use std::{thread, time::Duration, process::{Command, Child}, io::{BufReader, BufRead}};
+
+fn setup_sentiment_service() -> Child {
+    // Ensure stock.csv is in the current working directory for the sentiment service
+    // In a real scenario, you might copy it or specify its path.
+
+    // Build the sentiment_service binary
+    let build_status = Command::new("cargo")
+        .args(&["build", "--bin", "sentiment_service"])
+        .current_dir("sentiment_service/sentiment")
+        .status()
+        .expect("Failed to build sentiment_service");
+    assert!(build_status.success(), "Failed to build sentiment_service");
+
+    // Start the sentiment_service as a child process
+    let mut child = Command::new("cargo")
+        .args(&["run", "--bin", "sentiment_service", "--", "../../stock.csv"])
+        .current_dir("sentiment_service/sentiment")
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("Failed to start sentiment_service");
+
+    // Wait for the service to indicate it has started listening
+    let stdout = child.stdout.take().expect("Failed to capture stdout");
+    let reader = BufReader::new(stdout);
+    for line in reader.lines() {
+        let line = line.expect("Failed to read line from stdout");
+        println!("[sentiment_service output] {}", line);
+        if line.contains("Sentiment microservice starting...") {
+            break;
+        }
+    }
+    thread::sleep(Duration::from_millis(500)); // Give it a little more time to bind ports
+    child
+}
+
+fn teardown_sentiment_service(mut child: Child) {
+    println!("Terminating sentiment_service...");
+    child.kill().expect("Failed to kill sentiment_service");
+    child.wait().expect("Failed to wait for sentiment_service");
+    println!("sentiment_service terminated.");
+}
 
 #[test]
 fn test_thermo_agent_generates_volume() {
     println!("\n--- Running Test: ThermoAgent Generates Volume ---");
+
+    let sentiment_service_child = setup_sentiment_service();
 
     // 1. Setup: Orchestra with a MarketMaker and a ThermoAgent with high initial temperature
     let agent_types = vec![
@@ -36,6 +79,7 @@ fn test_thermo_agent_generates_volume() {
     let max_wait_time = 10; // seconds
     let check_interval = 100; // milliseconds
 
+    let mut volume_increased = false;
     loop {
         let current_volume = {
             let state = shadow_handle.read().unwrap();
@@ -43,6 +87,7 @@ fn test_thermo_agent_generates_volume() {
         };
 
         if current_volume > initial_volume {
+            volume_increased = true;
             println!("Volume increased. Breaking loop.");
             break;
         }
@@ -65,13 +110,16 @@ fn test_thermo_agent_generates_volume() {
     // 4. Assert: The cumulative volume should have increased, proving trades occurred.
     println!(
         "Initial Volume: {}, Final Volume: {}",
-        initial_volume, final_volume
+        initial_volume,
+        final_volume
     );
     assert!(
-        final_volume > initial_volume,
+        volume_increased,
         "Assertion Failed: The cumulative volume should increase after trades. Expected > {}, got {}",
         initial_volume,
         final_volume
     );
     println!("--- Test Complete: ThermoAgent Generates Volume ---");
+
+    teardown_sentiment_service(sentiment_service_child);
 }

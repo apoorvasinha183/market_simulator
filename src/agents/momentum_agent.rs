@@ -1,17 +1,13 @@
 // src/agents/momentum_agent.rs
 
-use super::{
-    agent_trait::{Agent, MarketView},
-    config::{
-        MOMENTUM_AGENT_ACTION_PROB, MOMENTUM_AGENT_MOMENTUM_THRESHOLD,
-        MOMENTUM_AGENT_MOMENTUM_WINDOW, MOMENTUM_AGENT_PRICE_OFFSET_MAX,
-        MOMENTUM_AGENT_PRICE_OFFSET_MIN, MOMENTUM_AGENT_VOL_MAX, MOMENTUM_AGENT_VOL_MIN,
-    },
+use super::agent_trait::Agent;
+use super::config::{
+    MOMENTUM_AGENT_ACTION_PROB, MOMENTUM_AGENT_MOMENTUM_THRESHOLD,
+    MOMENTUM_AGENT_MOMENTUM_WINDOW, MOMENTUM_AGENT_PRICE_OFFSET_MAX,
+    MOMENTUM_AGENT_PRICE_OFFSET_MIN, MOMENTUM_AGENT_VOL_MAX, MOMENTUM_AGENT_VOL_MIN,
 };
-use crate::{
-    simulation::orchestra::ShadowBookHandle,
-    types::order::{Order, OrderRequest, Side, Trade},
-};
+use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
+use crate::types::order::{Order, OrderRequest, Side, Trade};
 use crossbeam_channel::{Receiver, Sender};
 use rand::Rng;
 use std::collections::{HashMap, VecDeque};
@@ -359,7 +355,7 @@ impl Agent for MomentumAgent {
         })
     }
 
-    fn evaluate_port(&mut self, view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, view: &MarketState) -> f64 {
         let inventory_lock = self.inventory.read().unwrap();
         let new_port_value = inventory_lock.iter().fold(0.0, |acc, (stock_id, &vol)| {
             if let Some(px) = view.get_mid_price(*stock_id) {

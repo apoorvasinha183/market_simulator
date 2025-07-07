@@ -4,11 +4,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
-use super::agent_trait::{Agent, MarketView};
-use crate::{
-    simulation::orchestra::ShadowBookHandle,
-    types::order::{Order, OrderRequest, Side, Trade},
-};
+use super::agent_trait::Agent;
+use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
+use crate::types::order::{Order, OrderRequest, Side, Trade};
 
 /// IPO agent: posts one ladder of sell limits at boot, then passively listens for fills.
 #[derive(Clone)]
@@ -252,7 +250,7 @@ impl Agent for IpoAgent {
         Box::new(self.clone())
     }
 
-    fn evaluate_port(&mut self, view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, view: &MarketState) -> f64 {
         let inventory_lock = self.inventory.read().unwrap();
         let new_port_value = inventory_lock.iter().fold(0.0, |acc, (stock_id, &vol)| {
             if let Some(px) = view.get_mid_price(*stock_id) {

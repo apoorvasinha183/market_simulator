@@ -74,7 +74,7 @@ class Broker:
         stock_ids = [1, 2, 3,4] # Example stock IDs
         sides = ["Buy", "Sell"]
         order_types = ["Market", "Limit"]
-        buy_bias = 0.6
+        buy_bias = 0.7
         for i in range(num_orders):
             client_id = f"customer_agent_{random.randint(0, 2)}" # Example client IDs
             stock_id = random.choice(stock_ids)
@@ -84,7 +84,7 @@ class Broker:
             #side = sides[0]
             #order_type = random.choice(order_types)
             order_type = order_types[0]
-            volume = random.randint(50000, 500000) # Adjusted volume for more impact
+            volume = random.randint(500000, 50000000) # Adjusted volume for more impact
 
             price = 0.0
             if order_type == "Limit":
@@ -125,7 +125,7 @@ class Broker:
 
             # Launch order generator thread
             order_gen_thread = threading.Thread(
-                target=self._order_generator_thread, args=(100000,), daemon=True
+                target=self._order_generator_thread, args=(1000,), daemon=True
             )
             order_gen_thread.start()
             print("[Broker] Started dynamic order generation.")

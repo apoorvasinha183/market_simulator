@@ -1,11 +1,12 @@
-// src/orchestra.rs
+// src/simulation/orchestra.rs
 
+use crossbeam_channel::{Receiver, Sender, unbounded};
+use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-// --- Crate-level imports ---
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
 use crate::agents::customer_agent::CustomerAgent;
@@ -24,9 +25,30 @@ use crate::simulators::market_trait::Marketable;
 use crate::simulators::order_book::OrderBook;
 use crate::stocks::StockMarket;
 use crate::types::order::{Order, OrderRequest, Trade};
-use crossbeam_channel::{Sender, unbounded};
 
-// --- This is the shared state agents will read from. ---
+// ----------------------------------------------------------------------------
+//  Shadow Book Infrastructure
+// ----------------------------------------------------------------------------
+
+/// Events sent from the Market to the ShadowWorkers to update the view.
+#[derive(Debug, Clone)]
+pub enum ShadowEvent {
+    LimitOrder(Order),
+    MarketOrder(Order),
+    CancelOrder { order_id: u64, agent_id: usize },
+}
+
+/// The internal, concurrent state used for building the back-buffer.
+#[derive(Debug)]
+pub struct ConcurrentMarketState {
+    pub order_books: DashMap<u64, OrderBook>,
+    pub stocks: StockMarket,
+    pub last_traded_price: DashMap<u64, f64>,
+    pub cumulative_volume: DashMap<u64, u64>,
+}
+
+/// The shared, read-only state that agents see. This uses standard HashMaps
+/// for maximum read performance, as it's only ever written to in a single swap.
 #[derive(Debug, Clone)]
 pub struct MarketState {
     pub order_books: HashMap<u64, OrderBook>,
@@ -38,9 +60,33 @@ pub struct MarketState {
 pub type ShadowBookHandle = Arc<RwLock<MarketState>>;
 
 impl MarketState {
-    pub fn book(&self, stock_id: u64) -> Option<&OrderBook> {
-        self.order_books.get(&stock_id)
+    /// Creates a new read-only MarketState from the concurrent back-buffer.
+    /// This is the snapshot that gets swapped into the front-buffer for agents.
+    pub fn from_concurrent(concurrent_state: &ConcurrentMarketState) -> Self {
+        MarketState {
+            order_books: concurrent_state
+                .order_books
+                .iter()
+                .map(|entry| (*entry.key(), entry.value().clone()))
+                .collect(),
+            stocks: concurrent_state.stocks.clone(),
+            last_traded_price: concurrent_state
+                .last_traded_price
+                .iter()
+                .map(|entry| (*entry.key(), *entry.value()))
+                .collect(),
+            cumulative_volume: concurrent_state
+                .cumulative_volume
+                .iter()
+                .map(|entry| (*entry.key(), *entry.value()))
+                .collect(),
+        }
     }
+
+    pub fn book(&self, stock_id: u64) -> Option<OrderBook> {
+        self.order_books.get(&stock_id).cloned()
+    }
+
     pub fn get_mid_price(&self, stock_id: u64) -> Option<u64> {
         let book = self.book(stock_id)?;
         let best_bid = book.bids.keys().next_back()?;
@@ -48,6 +94,106 @@ impl MarketState {
         Some((best_bid + best_ask) / 2)
     }
 }
+
+/// Manages the parallel construction of the back-buffer and the final swap.
+pub struct ShadowCoordinator {
+    handle: ShadowBookHandle,
+    update_receivers: HashMap<u64, Receiver<ShadowEvent>>,
+    update_interval_ms: u64,
+}
+
+impl ShadowCoordinator {
+    pub fn new(
+        handle: ShadowBookHandle,
+        update_receivers: HashMap<u64, Receiver<ShadowEvent>>,
+        update_interval_ms: u64,
+    ) -> Self {
+        Self {
+            handle,
+            update_receivers,
+            update_interval_ms,
+        }
+    }
+
+    pub fn run(self) {
+        let initial_state = self.handle.read().unwrap();
+        let back_buffer = Arc::new(ConcurrentMarketState {
+            order_books: initial_state
+                .order_books
+                .iter()
+                .map(|(k, v)| (*k, v.clone()))
+                .collect(),
+            stocks: initial_state.stocks.clone(),
+            last_traded_price: initial_state
+                .last_traded_price
+                .iter()
+                .map(|(k, v)| (*k, *v))
+                .collect(),
+            cumulative_volume: initial_state
+                .cumulative_volume
+                .iter()
+                .map(|(k, v)| (*k, *v))
+                .collect(),
+        });
+
+        for (stock_id, rx) in self.update_receivers {
+            let buffer_clone = back_buffer.clone();
+            thread::spawn(move || {
+                Self::run_builder_thread(rx, buffer_clone, stock_id);
+            });
+        }
+
+        let handle_clone = self.handle.clone();
+        thread::spawn(move || loop {
+            thread::sleep(Duration::from_millis(self.update_interval_ms));
+            let new_front_buffer = MarketState::from_concurrent(&back_buffer);
+            let mut write_lock = handle_clone.write().unwrap();
+            *write_lock = new_front_buffer;
+        });
+    }
+
+    fn run_builder_thread(
+        rx: Receiver<ShadowEvent>,
+        buffer: Arc<ConcurrentMarketState>,
+        stock_id: u64,
+    ) {
+        while let Ok(event) = rx.recv() {
+            let trades = match event {
+                ShadowEvent::LimitOrder(mut order) => buffer
+                    .order_books
+                    .entry(stock_id)
+                    .or_default()
+                    .process_limit_order(&mut order),
+                ShadowEvent::MarketOrder(order) => buffer
+                    .order_books
+                    .entry(stock_id)
+                    .or_default()
+                    .process_market_order(order.agent_id, order.side, order.volume),
+                ShadowEvent::CancelOrder { order_id, agent_id } => {
+                    if let Some(mut book) = buffer.order_books.get_mut(&stock_id) {
+                        book.cancel_order(order_id, agent_id);
+                    }
+                    Vec::new()
+                }
+            };
+
+            if !trades.is_empty() {
+                let last_price = trades.last().unwrap().price as f64 / 100.0;
+                buffer.last_traded_price.insert(stock_id, last_price);
+                let total_volume: u64 = trades.iter().map(|t| t.volume).sum();
+                buffer
+                    .cumulative_volume
+                    .entry(stock_id)
+                    .and_modify(|v| *v += total_volume)
+                    .or_insert(total_volume);
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+//  Orchestra and Agent Setup
+// ----------------------------------------------------------------------------
 
 pub struct AgentResponseChannels {
     pub ack_tx: Sender<Order>,
@@ -58,64 +204,84 @@ pub struct Orchestra {
     agents: Vec<Box<dyn Agent>>,
     pub market: Market,
     shadow_handle: ShadowBookHandle,
-    // Keep the sender to spawn the heartbeat thread
     event_sender: Sender<MarketEvent>,
 }
 
 impl Orchestra {
     pub fn new(
         agent_types: Vec<AgentType>,
-        normal_processing: usize,
-        premium_processing: usize,
+        normal_processing_ms: u64,
+        premium_processing_ms: u64,
     ) -> Self {
         println!("[Orchestra] Initializing simulation...");
 
-        // === 1. Create Infrastructure ===
         let stock_market = StockMarket::from_universe(default_stock_universe());
-
-        let normal_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
-            order_books: HashMap::new(),
-            stocks: stock_market.clone(),
-            last_traded_price: HashMap::new(),
-            cumulative_volume: HashMap::new(),
-        }));
-        let premium_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(MarketState {
-            order_books: HashMap::new(),
-            stocks: stock_market.clone(),
-            last_traded_price: HashMap::new(),
-            cumulative_volume: HashMap::new(),
-        }));
-        println!("[Orchestra] Shared shadow books created.");
-
         let (order_tx, order_rx) = unbounded::<OrderRequest>();
-        println!("[Orchestra] Central market order channel created.");
-
-        // === NEW: Create the central event bus ===
         let (event_tx, event_rx) = unbounded::<MarketEvent>();
-        println!("[Orchestra] Central event bus created.");
 
-        // === 2. Instantiate Agents and Register Their Channels ===
+        let mut normal_shadow_senders = HashMap::new();
+        let mut normal_shadow_receivers = HashMap::new();
+        let mut premium_shadow_senders = HashMap::new();
+        let mut premium_shadow_receivers = HashMap::new();
+
+        for stock in stock_market.get_all_stocks() {
+            let (tx, rx) = unbounded();
+            normal_shadow_senders.insert(stock.id, tx);
+            normal_shadow_receivers.insert(stock.id, rx);
+            let (tx_vip, rx_vip) = unbounded();
+            premium_shadow_senders.insert(stock.id, tx_vip);
+            premium_shadow_receivers.insert(stock.id, rx_vip);
+        }
+
+        let initial_state = || {
+            let mut last_traded_price = HashMap::new();
+            let mut cumulative_volume = HashMap::new();
+            let mut order_books = HashMap::new();
+            for s in stock_market.get_all_stocks() {
+                order_books.insert(s.id, OrderBook::new());
+                last_traded_price.insert(s.id, s.initial_price);
+                cumulative_volume.insert(s.id, 0);
+            }
+            MarketState {
+                order_books,
+                stocks: stock_market.clone(),
+                last_traded_price,
+                cumulative_volume,
+            }
+        };
+
+        let normal_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(initial_state()));
+        let premium_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(initial_state()));
+
+        ShadowCoordinator::new(
+            normal_shadow_book.clone(),
+            normal_shadow_receivers,
+            normal_processing_ms,
+        )
+        .run();
+
+        ShadowCoordinator::new(
+            premium_shadow_book.clone(),
+            premium_shadow_receivers,
+            premium_processing_ms,
+        )
+        .run();
+
+        println!("[Orchestra] Shadow Coordinators launched.");
+
         let mut agents: Vec<Box<dyn Agent>> = Vec::new();
         let mut registration_data: HashMap<usize, AgentResponseChannels> = HashMap::new();
 
-        println!("[Orchestra] Creating {} agents...", agent_types.len());
         for (id, agent_type) in agent_types.into_iter().enumerate() {
-            let (tx_ack, rx_ack) = unbounded::<Order>();
-            let (tx_trade, rx_trade) = unbounded::<Trade>();
-
-            registration_data.insert(
-                id,
-                AgentResponseChannels {
-                    ack_tx: tx_ack,
-                    trade_tx: tx_trade,
-                },
-            );
+            let (tx_ack, rx_ack) = unbounded();
+            let (tx_trade, rx_trade) = unbounded();
+            registration_data.insert(id, AgentResponseChannels { ack_tx: tx_ack, trade_tx: tx_trade });
 
             let view_handle = match agent_type {
                 AgentType::MarketMaker => premium_shadow_book.clone(),
                 _ => normal_shadow_book.clone(),
             };
-
+            
             let new_agent: Box<dyn Agent> = match agent_type {
                 AgentType::DumbMarket => Box::new(DumbAgent::new(
                     id,
@@ -190,24 +356,20 @@ impl Orchestra {
         }
         println!("[Orchestra] {} agents instantiated.", agents.len());
 
-        // === 3. Instantiate Market ===
         let market = Market::new(
             &stock_market,
             order_rx,
             registration_data,
-            normal_shadow_book.clone(),
-            normal_processing,
-            premium_shadow_book.clone(),
-            premium_processing,
-            event_tx.clone(), // Give the market a sender
+            normal_shadow_senders,
+            premium_shadow_senders,
+            event_tx.clone(),
         );
-        println!("[Orchestra] Market instantiated and initialized.");
+        println!("[Orchestra] Market instantiated.");
 
-        // === 4. Return the fully prepared, but not yet running, Orchestra ===
         Orchestra {
             agents,
             market,
-            shadow_handle: normal_shadow_book.clone(),
+            shadow_handle: normal_shadow_book,
             event_sender: event_tx,
         }
     }
@@ -220,52 +382,32 @@ impl Orchestra {
         self.market.last_traded_price.clone()
     }
 
-    /// This method consumes the Orchestra and launches all actors in their own threads.
     pub fn run(self) {
         println!("[Orchestra] Launching all actors...");
-
         let mut handles: Vec<JoinHandle<()>> = vec![];
 
-        // --- NEW: Launch the Heartbeat Thread ---
         let event_sender = self.event_sender.clone();
-        let heartbeat_handle = thread::spawn(move || {
+        handles.push(thread::spawn(move || {
             loop {
                 thread::sleep(Duration::from_millis(100));
                 if event_sender.send(MarketEvent::Heartbeat).is_err() {
-                    // Main channel closed, exit
                     break;
                 }
             }
-        });
-        handles.push(heartbeat_handle);
-        println!("[Orchestra] Heartbeat thread launched.");
+        }));
 
-        // --- NEW: Launch the Sentiment Engine ---
-        let stock_market = self.market.get_stock_market_clone(); // Need a way to get this
+        let stock_market = self.market.get_stock_market_clone();
         let sentiment_sender = self.event_sender.clone();
-        let sentiment_handle = thread::spawn(move || {
+        handles.push(thread::spawn(move || {
             SentimentEngine::run(&stock_market, sentiment_sender);
-        });
-        handles.push(sentiment_handle);
-        println!("[Orchestra] SentimentEngine thread launched.");
+        }));
 
-        // First, move the market into its own thread.
         let mut market = self.market;
-        let market_handle = thread::spawn(move || {
-            market.run();
-        });
-        handles.push(market_handle);
-        println!("[Orchestra] Market thread launched.");
+        handles.push(thread::spawn(move || market.run()));
 
-        // Next, move each agent into its own thread.
         for mut agent in self.agents {
-            let agent_handle = thread::spawn(move || {
-                agent.run();
-            });
-            handles.push(agent_handle);
+            handles.push(thread::spawn(move || agent.run()));
         }
-        println!("[Orchestra] {} agent threads launched.", handles.len() - 2); // -2 for market and heartbeat
-
-        // In a real app, you'd join these handles. For the sim, we let them run.
+        println!("[Orchestra] All actors launched.");
     }
 }

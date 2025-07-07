@@ -222,6 +222,7 @@ impl OrderBook {
                     }
                 }
             }
+            self.order_id_map.remove(&order_id);
         }
         false
     }

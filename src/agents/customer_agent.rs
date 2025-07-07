@@ -8,8 +8,8 @@ use tokio::sync::mpsc as tokio_mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming, transport::Server};
 
-use crate::agents::agent_trait::{Agent, MarketView};
-use crate::simulation::orchestra::ShadowBookHandle;
+use crate::agents::agent_trait::Agent;
+use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
 use crate::types::order::{Order, OrderRequest, Side, Trade};
 
 // This is the namespace that tonic-build creates from our .proto file
@@ -250,7 +250,7 @@ impl Agent for CustomerAgent {
     }
     fn update_portfolio(&mut self) { /* No-op */
     }
-    fn evaluate_port(&mut self, _market_view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, _market_view: &MarketState) -> f64 {
         0.0
     }
     fn get_pending_orders(&self) -> Vec<Order> {

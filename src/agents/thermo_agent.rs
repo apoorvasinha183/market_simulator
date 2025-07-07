@@ -1,12 +1,12 @@
 // src/agents/thermo_agent.rs
 
-use crate::agents::agent_trait::{Agent, MarketView};
+use crate::agents::agent_trait::Agent;
 use crate::agents::config::{
     THERMO_AGENT_BASE_VOLUME_MAX, THERMO_AGENT_BASE_VOLUME_MIN, THERMO_AGENT_INITIAL_CASH,
     THERMO_AGENT_MIN_TEMP,
 };
 use crate::events::MarketEvent;
-use crate::simulation::orchestra::ShadowBookHandle;
+use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
 use crate::stocks::StockMarket;
 use crate::types::order::{Order, OrderRequest, Side, Trade};
 use crossbeam_channel::{Receiver, Sender};
@@ -316,7 +316,7 @@ impl Agent for ThermoAgent {
     fn update_portfolio(&mut self) {
         // Handled internally by process_portfolio_updates
     }
-    fn evaluate_port(&mut self, market_view: &MarketView) -> f64 {
+    fn evaluate_port(&mut self, market_view: &MarketState) -> f64 {
         let mut current_value = self.cash;
         for (&stock_id, &volume) in self.inventory.iter() {
             if let Some(px) = market_view.get_mid_price(stock_id) {
