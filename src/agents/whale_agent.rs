@@ -341,7 +341,7 @@ impl Agent for WhaleAgent {
         //thread::sleep(std::time::Duration::from_secs(40)); // Initial sleep to isolate MarketMakerAgent's view
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_millis(100)); // Whales act less frequently
+            thread::sleep(std::time::Duration::from_millis(10)); // Whales act less frequently
         }
     }
 

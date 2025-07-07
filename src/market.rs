@@ -1,16 +1,16 @@
 // src/market.rs
 
+use crate::Marketable;
 use crate::events::MarketEvent;
 use crate::simulation::orchestra::{AgentResponseChannels, ShadowEvent};
 use crate::simulators::async_order_book::AsyncOrderBook;
 use crate::stocks::definitions::StockMarket;
 use crate::types::{Order, OrderRequest, Trade};
-use crate::Marketable;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::SystemTime;
 use std::thread;
+use std::time::SystemTime;
 
 pub struct Market {
     order_txs: HashMap<u64, Sender<OrderRequest>>,
@@ -105,7 +105,10 @@ impl Market {
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_secs();
-                    println!("[{}] [Live Market] Processed 10,000 trades. Total: {}", now, trade_count);
+                    println!(
+                        "[{}] [Live Market] Processed 10,000 trades. Total: {}",
+                        now, trade_count
+                    );
                 }
 
                 last_traded_price
@@ -144,19 +147,57 @@ impl Market {
         let order_id = self.next_order_id();
 
         let (stock_id, shadow_event) = match &req {
-            OrderRequest::LimitOrder { agent_id, stock_id, side, price, volume } => {
+            OrderRequest::LimitOrder {
+                agent_id,
+                stock_id,
+                side,
+                price,
+                volume,
+            } => {
                 //println!("[Market] Received Limit Order: Agent {} Stock {} Side {:?} Price {} Volume {}", agent_id, stock_id, side, price, volume);
-                let order = Order { id: order_id, agent_id: *agent_id, stock_id: *stock_id, side: *side, price: *price, volume: *volume, filled: 0 };
-                self.order_id_to_stock_id_map.write().unwrap().insert(order_id, *stock_id);
+                let order = Order {
+                    id: order_id,
+                    agent_id: *agent_id,
+                    stock_id: *stock_id,
+                    side: *side,
+                    price: *price,
+                    volume: *volume,
+                    filled: 0,
+                };
+                self.order_id_to_stock_id_map
+                    .write()
+                    .unwrap()
+                    .insert(order_id, *stock_id);
                 if let Some(ch) = self.agent_channels.get(agent_id) {
                     ch.ack_tx.send(order).ok();
                 }
                 (*stock_id, ShadowEvent::LimitOrder(order))
             }
-            OrderRequest::MarketOrder { agent_id, stock_id, side, volume } => {
+            OrderRequest::MarketOrder {
+                agent_id,
+                stock_id,
+                side,
+                volume,
+            } => {
                 //println!("[Market] Received Market Order: Agent {} Stock {} Side {:?} Volume {}", agent_id, stock_id, side, volume);
-                let price = (self.last_traded_price.read().unwrap().get(stock_id).copied().unwrap_or(150.0) * 100.0).round() as u64;
-                let order = Order { id: order_id, agent_id: *agent_id, stock_id: *stock_id, side: *side, volume: *volume, price, filled: 0 };
+                let price = (self
+                    .last_traded_price
+                    .read()
+                    .unwrap()
+                    .get(stock_id)
+                    .copied()
+                    .unwrap_or(150.0)
+                    * 100.0)
+                    .round() as u64;
+                let order = Order {
+                    id: order_id,
+                    agent_id: *agent_id,
+                    stock_id: *stock_id,
+                    side: *side,
+                    volume: *volume,
+                    price,
+                    filled: 0,
+                };
                 if let Some(ch) = self.agent_channels.get(agent_id) {
                     ch.ack_tx.send(order).ok();
                 }
@@ -171,8 +212,17 @@ impl Market {
                 };
 
                 if let Some(stock_id) = stock_id_lookup {
-                    self.order_id_to_stock_id_map.write().unwrap().remove(order_id);
-                    (stock_id, ShadowEvent::CancelOrder { order_id: *order_id, agent_id: *agent_id })
+                    self.order_id_to_stock_id_map
+                        .write()
+                        .unwrap()
+                        .remove(order_id);
+                    (
+                        stock_id,
+                        ShadowEvent::CancelOrder {
+                            order_id: *order_id,
+                            agent_id: *agent_id,
+                        },
+                    )
                 } else {
                     //println!("[Market] Attempted to cancel unknown or already filled order: {}", order_id);
                     return; // Order not found
@@ -206,9 +256,17 @@ impl Marketable for Market {
     }
 
     // These methods are not relevant for the central market engine
-    fn step(&mut self) -> f64 { 0.0 }
-    fn current_price(&self) -> f64 { 0.0 }
+    fn step(&mut self) -> f64 {
+        0.0
+    }
+    fn current_price(&self) -> f64 {
+        0.0
+    }
     fn reset(&mut self) {}
-    fn get_order_book(&self) -> Option<&crate::OrderBook> { None }
-    fn as_any(&self) -> &dyn std::any::Any { self }
+    fn get_order_book(&self) -> Option<&crate::OrderBook> {
+        None
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

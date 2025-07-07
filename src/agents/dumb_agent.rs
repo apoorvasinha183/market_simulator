@@ -1,11 +1,11 @@
 // src/agents/dumb_agent.rs
-use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
 use super::agent_trait::Agent;
 use super::config::{
     DUMB_AGENT_ACTION_PROB, DUMB_AGENT_LARGE_VOL_CHANCE, DUMB_AGENT_LARGE_VOL_MAX,
     DUMB_AGENT_LARGE_VOL_MIN, DUMB_AGENT_NUM_TRADERS, DUMB_AGENT_TYPICAL_VOL_MAX,
     DUMB_AGENT_TYPICAL_VOL_MIN,
 };
+use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
 use crate::{
     agents::latency::DUMB_AGENT_TICKS_UNTIL_ACTIVE,
     types::order::{Order, OrderRequest, Side, Trade},
@@ -257,7 +257,7 @@ impl Agent for DumbAgent {
         // --- 3. The main thread runs the decision loop ---
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_millis(100));
+            thread::sleep(std::time::Duration::from_micros(15));
         }
     }
 

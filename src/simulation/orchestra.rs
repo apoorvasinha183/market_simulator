@@ -144,11 +144,13 @@ impl ShadowCoordinator {
         }
 
         let handle_clone = self.handle.clone();
-        thread::spawn(move || loop {
-            thread::sleep(Duration::from_millis(self.update_interval_ms));
-            let new_front_buffer = MarketState::from_concurrent(&back_buffer);
-            let mut write_lock = handle_clone.write().unwrap();
-            *write_lock = new_front_buffer;
+        thread::spawn(move || {
+            loop {
+                thread::sleep(Duration::from_millis(self.update_interval_ms));
+                let new_front_buffer = MarketState::from_concurrent(&back_buffer);
+                let mut write_lock = handle_clone.write().unwrap();
+                *write_lock = new_front_buffer;
+            }
         });
     }
 
@@ -275,13 +277,19 @@ impl Orchestra {
         for (id, agent_type) in agent_types.into_iter().enumerate() {
             let (tx_ack, rx_ack) = unbounded();
             let (tx_trade, rx_trade) = unbounded();
-            registration_data.insert(id, AgentResponseChannels { ack_tx: tx_ack, trade_tx: tx_trade });
+            registration_data.insert(
+                id,
+                AgentResponseChannels {
+                    ack_tx: tx_ack,
+                    trade_tx: tx_trade,
+                },
+            );
 
             let view_handle = match agent_type {
                 AgentType::MarketMaker => premium_shadow_book.clone(),
                 _ => normal_shadow_book.clone(),
             };
-            
+
             let new_agent: Box<dyn Agent> = match agent_type {
                 AgentType::DumbMarket => Box::new(DumbAgent::new(
                     id,

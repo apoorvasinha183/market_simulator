@@ -1,5 +1,10 @@
 use market_simulator::{agents::agent_type::AgentType, simulation::orchestra::Orchestra};
-use std::{thread, time::Duration, process::{Command, Child}, io::{BufReader, BufRead}};
+use std::{
+    io::{BufRead, BufReader},
+    process::{Child, Command},
+    thread,
+    time::Duration,
+};
 
 fn setup_sentiment_service() -> Child {
     // Ensure stock.csv is in the current working directory for the sentiment service
@@ -110,14 +115,12 @@ fn test_thermo_agent_generates_volume() {
     // 4. Assert: The cumulative volume should have increased, proving trades occurred.
     println!(
         "Initial Volume: {}, Final Volume: {}",
-        initial_volume,
-        final_volume
+        initial_volume, final_volume
     );
     assert!(
         volume_increased,
         "Assertion Failed: The cumulative volume should increase after trades. Expected > {}, got {}",
-        initial_volume,
-        final_volume
+        initial_volume, final_volume
     );
     println!("--- Test Complete: ThermoAgent Generates Volume ---");
 

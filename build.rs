@@ -5,9 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sentiment_ports = [3001, 4001, 5001, 6001, 80]; // Add all relevant ports
     for port in &sentiment_ports {
         println!("Attempting to kill processes on port {}", port);
-        let output = Command::new("lsof")
-            .arg(format!("-i:{}", port))
-            .output();
+        let output = Command::new("lsof").arg(format!("-i:{}", port)).output();
 
         if let Ok(output) = output {
             let stdout = String::from_utf8_lossy(&output.stdout);

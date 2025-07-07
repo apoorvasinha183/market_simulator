@@ -2,9 +2,8 @@
 use super::agent_trait::Agent;
 use super::config::{
     MM_DESIRED_SPREAD, MM_INITIAL_CENTER_PRICE, MM_INITIAL_INVENTORY, MM_QUOTE_VOL_MAX,
-    MM_QUOTE_VOL_MIN, MM_REQUOTE_THRESHOLD_BPS, MM_SEED_DECAY, MM_SEED_DEPTH_PCT,
-    MM_SEED_LEVELS, MM_SEED_TICK_SPACING, MM_SKEW_FACTOR, MM_UNSTICK_VOL_MAX,
-    MM_UNSTICK_VOL_MIN,
+    MM_QUOTE_VOL_MIN, MM_REQUOTE_THRESHOLD_BPS, MM_SEED_DECAY, MM_SEED_DEPTH_PCT, MM_SEED_LEVELS,
+    MM_SEED_TICK_SPACING, MM_SKEW_FACTOR, MM_UNSTICK_VOL_MAX, MM_UNSTICK_VOL_MIN,
 };
 use crate::agents::latency::MM_TICKS_UNTIL_ACTIVE;
 use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
@@ -318,7 +317,7 @@ impl MarketMakerAgent {
                             }
                             stock_orders_write_lock.clear();
                             // We need to give the market time to process the cancellations
-                            std::thread::sleep(std::time::Duration::from_millis(10));
+                            //std::thread::sleep(std::time::Duration::from_millis(10));
                         }
 
                         if ask_px > bid_px

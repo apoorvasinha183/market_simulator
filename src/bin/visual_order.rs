@@ -84,10 +84,12 @@ impl eframe::App for AgentVisualizer {
         ctx.request_repaint();
 
         let market_state_guard = self.shadow_handle.read().unwrap();
-        
 
         let selected_order_book = market_state_guard.book(self.selected_id);
-        let current_last_traded_price = *market_state_guard.last_traded_price.get(&self.selected_id).unwrap_or(&0.0);
+        let current_last_traded_price = *market_state_guard
+            .last_traded_price
+            .get(&self.selected_id)
+            .unwrap_or(&0.0);
         let market_state_for_render = market_state_guard.clone(); // Clone the entire state for rendering
 
         drop(market_state_guard);
@@ -113,7 +115,12 @@ impl eframe::App for AgentVisualizer {
             .show(ctx, |ui| {
                 ui.add_space(8.0);
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    self.render_market_status(ui, &market_state_for_render, &order_book, current_last_traded_price);
+                    self.render_market_status(
+                        ui,
+                        &market_state_for_render,
+                        &order_book,
+                        current_last_traded_price,
+                    );
                     ui.add_space(12.0);
                     ui.vertical_centered(|ui| {
                         ui.label(
@@ -150,7 +157,12 @@ impl eframe::App for AgentVisualizer {
             });
 
         /* ───────────────────────── CENTRAL PANEL ──────────────────── */
-        self.render_plots(ctx, &order_book, &market_state_for_render, current_last_traded_price);
+        self.render_plots(
+            ctx,
+            &order_book,
+            &market_state_for_render,
+            current_last_traded_price,
+        );
     }
 }
 
@@ -175,7 +187,9 @@ impl AgentVisualizer {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 // Add debug button
                 if ui.button("🐛 Debug").clicked() {
-                    if let Some(order_book) = market_state.order_books.get(&self.selected_id).cloned() {
+                    if let Some(order_book) =
+                        market_state.order_books.get(&self.selected_id).cloned()
+                    {
                         debug_order_book(&order_book, self.selected_id);
                     }
                 }
@@ -245,9 +259,10 @@ impl AgentVisualizer {
 
     fn record_prices(&mut self) {
         let market_state = self.shadow_handle.read().unwrap();
-        let selected_id = self.selected_id;
-        if let Some(&px) = market_state.last_traded_price.get(&selected_id) {
-            let hist = self.price_histories.entry(selected_id).or_default();
+
+        // Iterate over all stocks in the market state
+        for (&id, &px) in &market_state.last_traded_price {
+            let hist = self.price_histories.entry(id).or_default();
             if hist.last() != Some(&px) {
                 hist.push(px);
                 if hist.len() > 1_000 {
@@ -255,6 +270,7 @@ impl AgentVisualizer {
                 }
             }
         }
+
         // Only update ATH/ATL for the selected stock
         if let Some(hist) = self.price_histories.get(&self.selected_id) {
             if let Some((&last, tail)) = hist.split_last() {
@@ -296,7 +312,7 @@ impl AgentVisualizer {
         ctx: &egui::Context,
         order_book: &OrderBook,
         market_state: &MarketState,
-        current_last_traded_price: f64
+        current_last_traded_price: f64,
     ) {
         egui::TopBottomPanel::bottom("bottom_panel")
             .resizable(true)
@@ -304,7 +320,12 @@ impl AgentVisualizer {
             .show(ctx, |ui| {
                 ui.add_space(8.0);
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    self.render_market_status(ui, market_state, order_book, current_last_traded_price);
+                    self.render_market_status(
+                        ui,
+                        market_state,
+                        order_book,
+                        current_last_traded_price,
+                    );
                     ui.add_space(12.0);
                     ui.vertical_centered(|ui| {
                         ui.label(

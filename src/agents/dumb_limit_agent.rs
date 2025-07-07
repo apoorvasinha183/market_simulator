@@ -6,12 +6,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
-use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
 use super::agent_trait::Agent;
 use super::config::{
-    LIMIT_AGENT_ACTION_PROB, LIMIT_AGENT_MAX_OFFSET, LIMIT_AGENT_NUM_TRADERS,
-    LIMIT_AGENT_VOL_MAX, LIMIT_AGENT_VOL_MIN,
+    LIMIT_AGENT_ACTION_PROB, LIMIT_AGENT_MAX_OFFSET, LIMIT_AGENT_NUM_TRADERS, LIMIT_AGENT_VOL_MAX,
+    LIMIT_AGENT_VOL_MIN,
 };
+use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
 use crate::{
     agents::latency::LIMIT_AGENT_TICKS_UNTIL_ACTIVE,
     types::order::{Order, OrderRequest, Side, Trade},
@@ -223,7 +223,7 @@ impl Agent for DumbLimitAgent {
 
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_millis(10));
+            thread::sleep(std::time::Duration::from_micros(10));
         }
     }
 
