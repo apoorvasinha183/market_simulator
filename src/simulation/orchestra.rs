@@ -284,7 +284,7 @@ impl Orchestra {
                     trade_tx: tx_trade,
                 },
             );
-
+            // big moneh gets the premium view
             let view_handle = match agent_type {
                 AgentType::MarketMaker => premium_shadow_book.clone(),
                 _ => normal_shadow_book.clone(),
