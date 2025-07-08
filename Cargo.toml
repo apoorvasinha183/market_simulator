@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2024"
 autotests = false
 
-
-
 [lib]
 name = "market_simulator"
 path = "src/lib.rs"
@@ -21,6 +19,17 @@ path = "tests/customer_agent_integration_test.rs"
 [[test]]
 name = "simulation_test"
 path = "tests/simulation_test.rs"
+
+[[bench]]
+name    = "order_book" 
+harness = false       
+[[bench]]
+name = "order_book_enhanced"
+harness = false
+
+[[bench]]
+name = "comprehensive_benchmark"
+harness = false
 
 [dependencies]
 rand = "0.8"
