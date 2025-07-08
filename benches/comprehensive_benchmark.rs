@@ -8,7 +8,7 @@ use market_simulator::simulation::orchestra::{ConcurrentMarketState, ShadowBookH
 use market_simulator::simulators::order_book::OrderBook;
 use market_simulator::stocks::StockMarket;
 use market_simulator::types::order::{Order, Side};
-use std::collections::HashMap;
+//use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 // --- 1. Matching Engine & Order Book Performance ---
