@@ -4,8 +4,7 @@ version = "0.1.0"
 edition = "2024"
 autotests = false
 
-[workspace]
-members = ["sentiment_service/sentiment"]
+
 
 [lib]
 name = "market_simulator"
