@@ -754,7 +754,6 @@ fn main() -> Result<(), eframe::Error> {
     let participants = vec![
         AgentType::CustomerAgent, // This agent will host the gRPC server
         AgentType::MarketMaker,
-        AgentType::DumbLimit,
         AgentType::MomentumAgent,
         AgentType::Thermodynamic {
             initial_temperature: 0.2,
