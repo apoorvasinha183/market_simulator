@@ -9,7 +9,7 @@
  --=------=-=======-===. @++++--.=::-+#**+=:::-=+-:==-:-=--+---:: %@=-=++++++++++++++==+++=++++++++
  ----=----=-========--- @@@@@@@@@@@@@%@*-.::--:.=+++=+*+++++++=.:. .@#-=++++++++++++++++++++==+++++
  ---=--==------==--===.%@*+*=+:.-*#%%#+*-:=-:--:.:++=====++++**:=:   @%=+++++=+++++++++++++++++==++
- ---=----===-----====- @@*%%##%#@@@%@*:=#:-:=+=*+--*###*#*%%%##=+==.  @*==+++++====+++++++++++++++=
+ ---=----===-----====- @@*%%##%#@@@%@*:=#:-:=+=*+--*###*#*%%%##=+==.  @*==+++++====+++++++++++++++==
  -----------=------==:-@##=#@%###=+==:+*@*--.:-==--:=-=+******=%=+=:  +@==+=+++++++++++++++++++++++
  --------=-=--=------ @%#@%@#@%**###@@@.  .==+: -*%#++*=:+=+*= =#*# =. @=+++++++++++=++++++++++++++
  -----------=--==---- @%@%@%%#*#=*%#=   -=--:.++%@@@@@%##*+%# . .@#-+= @+=++++++++++++++=++++++++++
@@ -60,6 +60,7 @@ use crate::simulation::orchestra::{AgentResponseChannels, ShadowEvent};
 use crate::simulators::async_order_book::AsyncOrderBook;
 use crate::stocks::definitions::StockMarket;
 use crate::types::{Order, OrderRequest, Trade};
+use crate::types::candle::Candle;
 use crossbeam_channel::{Receiver, Sender, unbounded};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -88,6 +89,7 @@ impl Market {
         shadow_update_txs: HashMap<u64, Sender<ShadowEvent>>,
         vip_shadow_update_txs: HashMap<u64, Sender<ShadowEvent>>,
         event_tx: Sender<MarketEvent>,
+        trade_to_candle_tx: Sender<Trade>,
     ) -> Self {
         let mut order_txs = HashMap::new();
         let (trade_tx, trade_rx) = unbounded::<Trade>();
@@ -121,6 +123,7 @@ impl Market {
             event_tx.clone(),
             last_traded_price.clone(),
             order_id_to_stock_id_map.clone(),
+            trade_to_candle_tx,
         );
 
         println!("[Market] Connected agents: {:?}", agent_channels_arc.keys());
@@ -149,7 +152,9 @@ impl Market {
         event_tx: Sender<MarketEvent>,
         last_traded_price: Arc<RwLock<HashMap<u64, f64>>>,
         order_id_to_stock_id_map: Arc<RwLock<HashMap<u64, u64>>>,
+        trade_to_candle_tx: Sender<Trade>,
     ) {
+        let trade_to_candle_tx_clone = trade_to_candle_tx.clone();
         thread::spawn(move || {
             let mut trade_count = 0;
             while let Ok(trade) = trade_rx.recv() {
@@ -186,6 +191,8 @@ impl Market {
                 if let Some(maker_ch) = agent_channels.get(&trade.maker_agent_id) {
                     maker_ch.trade_tx.send(trade).ok();
                 }
+
+                trade_to_candle_tx_clone.send(trade).ok();
             }
         });
     }

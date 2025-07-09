@@ -7,6 +7,7 @@ pub enum AgentType {
     MarketMaker,
     IPO,
     WhaleAgent,
+    Astrologer,
     MomentumAgent,
     CustomerAgent, // We can add more here later, like MarketMaker, Institutional, etc.
     Thermodynamic {

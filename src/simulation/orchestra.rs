@@ -10,6 +10,7 @@ use std::time::Duration;
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
 use crate::agents::customer_agent::CustomerAgent;
+use crate::agents::astrologer_agent::AstrologerAgent;
 use crate::agents::dumb_agent::DumbAgent;
 use crate::agents::dumb_limit_agent::DumbLimitAgent;
 use crate::agents::ipo_agent::IpoAgent;
@@ -21,6 +22,7 @@ use crate::default_stock_universe;
 use crate::events::MarketEvent;
 use crate::market::Market;
 use crate::sentiment_engine::SentimentEngine;
+use crate::simulation::candle_analyzer::{CandleAnalyzer, CandleDataHandle};
 use crate::simulators::market_trait::Marketable;
 use crate::simulators::order_book::OrderBook;
 use crate::stocks::StockMarket;
@@ -206,6 +208,8 @@ pub struct Orchestra {
     agents: Vec<Box<dyn Agent>>,
     pub market: Market,
     shadow_handle: ShadowBookHandle,
+    candle_analyzer: CandleAnalyzer,
+    candle_data_handle: CandleDataHandle,
     event_sender: Sender<MarketEvent>,
 }
 
@@ -253,6 +257,8 @@ impl Orchestra {
         };
 
         let normal_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(initial_state()));
+        let (trade_to_candle_tx, trade_to_candle_rx) = unbounded::<Trade>();
+        let (candle_analyzer, candle_data_handle) = CandleAnalyzer::new(trade_to_candle_rx);
         let premium_shadow_book: ShadowBookHandle = Arc::new(RwLock::new(initial_state()));
 
         ShadowCoordinator::new(
@@ -291,6 +297,14 @@ impl Orchestra {
             };
 
             let new_agent: Box<dyn Agent> = match agent_type {
+                AgentType::Astrologer => Box::new(AstrologerAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                    candle_data_handle.clone(),
+                )),
                 AgentType::DumbMarket => Box::new(DumbAgent::new(
                     id,
                     order_tx.clone(),
@@ -371,6 +385,7 @@ impl Orchestra {
             normal_shadow_senders,
             premium_shadow_senders,
             event_tx.clone(),
+            trade_to_candle_tx,
         );
         println!("[Orchestra] Market instantiated.");
 
@@ -378,6 +393,8 @@ impl Orchestra {
             agents,
             market,
             shadow_handle: normal_shadow_book,
+            candle_analyzer,
+            candle_data_handle,
             event_sender: event_tx,
         }
     }
@@ -409,6 +426,9 @@ impl Orchestra {
         handles.push(thread::spawn(move || {
             SentimentEngine::run(&stock_market, sentiment_sender);
         }));
+
+        let candle_analyzer = self.candle_analyzer;
+        handles.push(thread::spawn(move || candle_analyzer.run()));
 
         let mut market = self.market;
         handles.push(thread::spawn(move || market.run()));

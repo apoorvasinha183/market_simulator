@@ -33,7 +33,7 @@ def run_agent_activity(agent_id: str, gateway: RLGateway):
             # print(f"[Agent {agent_id[:8]}] Submitted {order_type} {side} {volume}@{price} for stock {stock_id}") # Suppressed for cleaner output
 
             # Simulate some thinking time for the agent
-            time.sleep(random.uniform(0.1, 0.5))
+            #time.sleep(random.uniform(0.1, 0.5))
 
             # Optionally, check for updates (acks/trades) for this agent
             update = gateway.get_update(agent_id, block=False) # Non-blocking check
