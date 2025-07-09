@@ -772,7 +772,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::IPO,
     ];*/
 
-    let orchestra = Orchestra::new(participants, 1000, 100);
+    let orchestra = Orchestra::new(participants, 10, 10);
     let shadow_handle = orchestra.get_shadow_handle();
 
     std::thread::spawn(move || {

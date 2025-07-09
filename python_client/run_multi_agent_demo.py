@@ -19,10 +19,10 @@ def run_agent_activity(agent_id: str, gateway: RLGateway):
     while True:
         try:
             stock_id = random.choice(STOCK_IDS)
-            order_type = random.choice(ORDER_TYPES)
+            #order_type = random.choice(ORDER_TYPES)
             order_type= ORDER_TYPES[0]
-            #side = random.choice(SIDES)
-            side = SIDES[0]
+            side = random.choice(SIDES)
+            #side = SIDES[1]
             volume = random.randint(MIN_VOLUME, MAX_VOLUME)
             price = 0.0
 
