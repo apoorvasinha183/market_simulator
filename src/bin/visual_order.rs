@@ -3,11 +3,15 @@
 
 use eframe::egui;
 use egui::{Color32, FontId, RichText, Rounding, Stroke, Vec2};
-use egui_plot::{Legend, Line, Plot, PlotBounds, PlotPoints, Points};
+use egui_plot::{BoxElem, BoxPlot, BoxSpread, Legend, Line, Plot, PlotBounds, PlotPoints, Points};
 use market_simulator::{
     AgentType,
-    simulation::orchestra::{MarketState, Orchestra, ShadowBookHandle},
+    simulation::{
+        candle_analyzer::CandleDataHandle,
+        orchestra::{MarketState, Orchestra, ShadowBookHandle},
+    },
     simulators::order_book::{OrderBook, PriceLevel},
+    types::candle::{Candle as AppCandle, TimeFrame},
 };
 //use egui_plot::PlotItem;
 use core_affinity;
@@ -57,8 +61,11 @@ fn format_number(n: u64) -> String {
 // -----------------------------------------------------------------------------
 struct AgentVisualizer {
     shadow_handle: ShadowBookHandle,
+    candle_data_handle: CandleDataHandle, // Add this
     price_histories: HashMap<u64, Vec<f64>>,
+    candle_history: HashMap<(u64, TimeFrame), Vec<AppCandle>>,
     selected_id: u64,
+    selected_timeframe: TimeFrame, // Add this
     is_market_running: bool,
     last_update: Instant,
     theme_dark: bool,
@@ -66,6 +73,7 @@ struct AgentVisualizer {
     ath: f64,
     atl: f64,
     debug_counter: u32,
+    show_candlestick: bool, // Add this
 }
 
 // -----------------------------------------------------------------------------
@@ -78,7 +86,7 @@ impl eframe::App for AgentVisualizer {
 
         // Step simulator every 100 ms
         if self.is_market_running {
-            self.record_prices();
+            self.record_data();
             self.last_update = Instant::now();
         }
         ctx.request_repaint();
@@ -113,14 +121,14 @@ impl eframe::App for AgentVisualizer {
             .resizable(true)
             .min_height(250.0)
             .show(ctx, |ui| {
-                ui.add_space(8.0);
+                self.render_market_status(
+                    ui,
+                    &market_state_for_render,
+                    &order_book,
+                    current_last_traded_price,
+                );
+                ui.add_space(12.0);
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    self.render_market_status(
-                        ui,
-                        &market_state_for_render,
-                        &order_book,
-                        current_last_traded_price,
-                    );
                     ui.add_space(12.0);
                     ui.vertical_centered(|ui| {
                         ui.label(
@@ -193,6 +201,18 @@ impl AgentVisualizer {
                         debug_order_book(&order_book, self.selected_id);
                     }
                 }
+
+                // Candlestick toggle
+                if ui
+                    .button(if self.show_candlestick {
+                        "💹 Price"
+                    } else {
+                        "🕯️ Candles"
+                    })
+                    .clicked()
+                {
+                    self.show_candlestick = !self.show_candlestick;
+                }
                 ui.separator();
 
                 // theme toggle
@@ -252,15 +272,28 @@ impl AgentVisualizer {
                             );
                         }
                     });
+
+                // ▼ timeframe picker
+                egui::ComboBox::from_id_source("timeframe_combo")
+                    .selected_text(format!("🕰️ {}", self.selected_timeframe))
+                    .show_ui(ui, |ui| {
+                        for timeframe in TimeFrame::all() {
+                            ui.selectable_value(
+                                &mut self.selected_timeframe,
+                                timeframe,
+                                timeframe.to_string(),
+                            );
+                        }
+                    });
             });
         });
         ui.add_space(8.0);
     }
 
-    fn record_prices(&mut self) {
+    fn record_data(&mut self) {
         let market_state = self.shadow_handle.read().unwrap();
 
-        // Iterate over all stocks in the market state
+        // Record price history
         for (&id, &px) in &market_state.last_traded_price {
             let hist = self.price_histories.entry(id).or_default();
             if hist.last() != Some(&px) {
@@ -269,6 +302,14 @@ impl AgentVisualizer {
                     hist.remove(0);
                 }
             }
+        }
+
+        // Record candle history
+        let candle_data = self.candle_data_handle.clone();
+        for item in candle_data.iter() {
+            let key = *item.key();
+            let value = item.value().clone();
+            self.candle_history.insert(key, value.into_iter().collect());
         }
 
         // Only update ATH/ATL for the selected stock
@@ -442,6 +483,8 @@ impl AgentVisualizer {
         });
     }
 
+    // Replace the render_plots function with this version that properly handles height allocation
+
     fn render_plots(
         &self,
         ctx: &egui::Context,
@@ -551,45 +594,215 @@ impl AgentVisualizer {
                         });
                 });
 
-                // ─── Price History ────────────────────────────────────────
+                // ─── Price & Volume History ────────────────────────────────
                 cols[1].group(|ui| {
-                    ui.vertical_centered(|ui| {
-                        ui.label(
-                            RichText::new("💹 Price History")
+                    // Get the available height and reserve space for titles and spacing
+                    let available_height = ui.available_height();
+                    let title_height = 30.0; // Approximate height for title
+                    let spacing = 8.0; // Space between elements
+
+                    // Calculate heights properly accounting for titles and spacing
+                    let (price_plot_height, volume_plot_height) = if self.show_candlestick {
+                        let remaining_height =
+                            available_height - (title_height * 2.0) - (spacing * 3.0);
+                        (remaining_height * 0.65, remaining_height * 0.35) // Adjust ratio as needed
+                    } else {
+                        (available_height - title_height - spacing, 0.0)
+                    };
+
+                    // Use a vertical layout for the two plots
+                    ui.vertical(|ui| {
+                        // --- Price History Plot ---
+                        ui.vertical_centered(|ui| {
+                            ui.label(
+                                RichText::new(if self.show_candlestick {
+                                    "🕯️ Candlestick Chart"
+                                } else {
+                                    "💹 Price History"
+                                })
                                 .font(FontId::proportional(16.0))
                                 .strong(),
-                        );
-                    });
+                            );
+                        });
 
-                    let empty: Vec<f64> = Vec::new();
-                    let history = self
-                        .price_histories
-                        .get(&self.selected_id)
-                        .unwrap_or(&empty);
+                        let price_plot = Plot::new("hist_plot")
+                            .legend(Legend::default())
+                            .height(price_plot_height)
+                            .show_axes([true, true])
+                            .show_grid([true, true])
+                            .x_axis_label("Time")
+                            .y_axis_label("Price ($)");
 
-                    Plot::new("hist_plot")
-                        .legend(Legend::default())
-                        .show_axes([true, true])
-                        .show_grid([true, true])
-                        .show(ui, |p| {
-                            let line = Line::new(PlotPoints::from_ys_f64(history))
-                                .color(Color32::from_rgb(0, 123, 255))
-                                .stroke(Stroke::new(3.0, Color32::from_rgb(0, 123, 255)))
-                                .fill(-1.0);
-                            p.line(line.name("price"));
+                        let _price_plot_response = price_plot.show(ui, |p| {
+                            if self.show_candlestick {
+                                let empty: Vec<AppCandle> = Vec::new();
+                                let history = self
+                                    .candle_history
+                                    .get(&(self.selected_id, self.selected_timeframe))
+                                    .unwrap_or(&empty);
 
-                            if let Some(&last) = history.last() {
-                                let x = (history.len() - 1) as f64;
-                                let pulse = (self.animation_time * 4.0).sin().abs();
-                                let radius = 4.0 + pulse * 4.0;
-                                let alpha = (128.0 + pulse * 127.0) as u8;
-                                p.points(
-                                    Points::new(vec![[x, last]])
-                                        .radius(radius as f32)
-                                        .color(Color32::from_rgba_unmultiplied(255, 215, 0, alpha)),
-                                );
+                                if self.debug_counter % 60 == 0 {
+                                    //println!("[DEBUG] Rendering plot for stock {}. Found {} candles for TimeFrame::{:?}.", self.selected_id, history.len(), self.selected_timeframe);
+                                }
+
+                                if !history.is_empty() {
+                                    let box_plot = BoxPlot::new(
+                                        history
+                                            .iter()
+                                            .map(|c| {
+                                                let q1 = c.open.min(c.close);
+                                                let q3 = c.open.max(c.close);
+
+                                                // Enhanced color scheme with better contrast
+                                                let color = if c.close >= c.open {
+                                                    Color32::from_rgb(34, 197, 94) // Brighter green for bullish
+                                                } else {
+                                                    Color32::from_rgb(239, 68, 68) // Brighter red for bearish
+                                                };
+
+                                                let spread = BoxSpread {
+                                                    lower_whisker: c.low,
+                                                    quartile1: q1,
+                                                    median: (c.open + c.close) / 2.0,
+                                                    quartile3: q3,
+                                                    upper_whisker: c.high,
+                                                };
+
+                                                BoxElem::new(c.timestamp as f64, spread)
+                                                    .box_width(c.timeframe.to_millis() as f64 * 0.7)
+                                                    .whisker_width(0.8)
+                                                    .stroke(Stroke::new(1.2, color))
+                                                    .fill(color.linear_multiply(0.8))
+                                                    .name(format!("Candle {}", c.timestamp))
+                                            })
+                                            .collect(),
+                                    )
+                                    .name("Candlesticks");
+                                    p.box_plot(box_plot);
+
+                                    // Add current price line for candlestick view
+                                    if current_last_traded_price > 0.0 {
+                                        let latest_timestamp =
+                                            history.iter().map(|c| c.timestamp).max().unwrap_or(0)
+                                                as f64;
+                                        let earliest_timestamp =
+                                            history.iter().map(|c| c.timestamp).min().unwrap_or(0)
+                                                as f64;
+
+                                        p.line(
+                                            Line::new(PlotPoints::from(vec![
+                                                [earliest_timestamp, current_last_traded_price],
+                                                [latest_timestamp, current_last_traded_price],
+                                            ]))
+                                            .color(Color32::from_rgb(255, 193, 7))
+                                            .stroke(Stroke::new(
+                                                1.5,
+                                                Color32::from_rgb(255, 193, 7),
+                                            ))
+                                            .style(egui_plot::LineStyle::Dashed { length: 8.0 })
+                                            .name("Current Price"),
+                                        );
+                                    }
+                                } else {
+                                    // Show placeholder when no candle data is available
+                                    p.text(
+                                        egui_plot::Text::new(
+                                            egui_plot::PlotPoint::new(
+                                                0.0,
+                                                current_last_traded_price,
+                                            ),
+                                            "No candle data available",
+                                        )
+                                        .color(Color32::GRAY)
+                                        .anchor(egui::Align2::CENTER_CENTER),
+                                    );
+                                }
+                            } else {
+                                // Existing line chart logic...
+                                let empty: Vec<f64> = Vec::new();
+                                let history = self
+                                    .price_histories
+                                    .get(&self.selected_id)
+                                    .unwrap_or(&empty);
+
+                                if !history.is_empty() {
+                                    let line = Line::new(PlotPoints::from_ys_f64(history))
+                                        .color(Color32::from_rgb(0, 123, 255))
+                                        .stroke(Stroke::new(2.5, Color32::from_rgb(0, 123, 255)))
+                                        .fill(-1.0);
+                                    p.line(line.name("Price"));
+
+                                    if let Some(&last) = history.last() {
+                                        let x = (history.len() - 1) as f64;
+                                        let pulse = (self.animation_time * 4.0).sin().abs();
+                                        let radius = 4.0 + pulse * 3.0;
+                                        let alpha = (128.0 + pulse * 127.0) as u8;
+                                        p.points(
+                                            Points::new(vec![[x, last]])
+                                                .radius(radius as f32)
+                                                .color(Color32::from_rgba_unmultiplied(
+                                                    255, 215, 0, alpha,
+                                                )),
+                                        );
+                                    }
+                                }
                             }
                         });
+
+                        // --- Volume History Plot ---
+                        if self.show_candlestick {
+                            ui.add_space(spacing);
+                            ui.vertical_centered(|ui| {
+                                ui.label(
+                                    RichText::new("📊 Volume")
+                                        .font(FontId::proportional(14.0))
+                                        .strong(),
+                                );
+                            });
+
+                            let volume_plot = Plot::new("volume_plot")
+                                .height(volume_plot_height)
+                                .link_axis("hist_plot", true, false) // Link X axis to the price plot
+                                .show_axes([true, true])
+                                .show_grid([false, true])
+                                .x_axis_label("Time")
+                                .y_axis_label("Volume");
+
+                            volume_plot.show(ui, |p| {
+                                let empty: Vec<AppCandle> = Vec::new();
+                                let history = self
+                                    .candle_history
+                                    .get(&(self.selected_id, self.selected_timeframe))
+                                    .unwrap_or(&empty);
+
+                                if !history.is_empty() {
+                                    let bar_chart = egui_plot::BarChart::new(
+                                        history
+                                            .iter()
+                                            .map(|c| {
+                                                // Enhanced color scheme matching the candlesticks
+                                                let color = if c.close >= c.open {
+                                                    Color32::from_rgb(34, 197, 94) // Bullish volume
+                                                } else {
+                                                    Color32::from_rgb(239, 68, 68) // Bearish volume
+                                                };
+
+                                                egui_plot::Bar::new(
+                                                    c.timestamp as f64,
+                                                    c.volume as f64,
+                                                )
+                                                .width(c.timeframe.to_millis() as f64 * 0.7)
+                                                .fill(color.linear_multiply(0.7))
+                                                .stroke(Stroke::new(0.5, color))
+                                            })
+                                            .collect(),
+                                    )
+                                    .name("Volume");
+                                    p.bar_chart(bar_chart);
+                                }
+                            });
+                        }
+                    });
                 });
             });
         });
@@ -775,6 +988,8 @@ fn main() -> Result<(), eframe::Error> {
     let orchestra = Orchestra::new(participants, 10, 10);
     let shadow_handle = orchestra.get_shadow_handle();
 
+    let candle_data_handle = orchestra.get_candle_data_handle();
+
     std::thread::spawn(move || {
         orchestra.run();
     });
@@ -798,8 +1013,11 @@ fn main() -> Result<(), eframe::Error> {
 
     let app_state = AgentVisualizer {
         shadow_handle,
+        candle_data_handle,
         price_histories: hist,
+        candle_history: HashMap::new(),
         selected_id: first_id,
+        selected_timeframe: TimeFrame::TenSeconds,
         is_market_running: false,
         last_update: Instant::now(),
         theme_dark: true,
@@ -807,6 +1025,7 @@ fn main() -> Result<(), eframe::Error> {
         ath: first_px,
         atl: first_px,
         debug_counter: 0,
+        show_candlestick: false,
     };
 
     eframe::run_native(

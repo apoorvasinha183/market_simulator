@@ -9,8 +9,8 @@ use std::time::Duration;
 
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
-use crate::agents::customer_agent::CustomerAgent;
 use crate::agents::astrologer_agent::AstrologerAgent;
+use crate::agents::customer_agent::CustomerAgent;
 use crate::agents::dumb_agent::DumbAgent;
 use crate::agents::dumb_limit_agent::DumbLimitAgent;
 use crate::agents::ipo_agent::IpoAgent;
@@ -405,6 +405,10 @@ impl Orchestra {
 
     pub fn get_last_traded_prices(&self) -> Arc<RwLock<HashMap<u64, f64>>> {
         self.market.last_traded_price.clone()
+    }
+
+    pub fn get_candle_data_handle(&self) -> CandleDataHandle {
+        self.candle_data_handle.clone()
     }
 
     pub fn run(self) {

@@ -56,10 +56,10 @@ impl MarketGateway for CustomerAgentServer {
                 if let Some(event) = result.event {
                     match event {
                         market_gateway::from_python::Event::SubmitOrder(req) => {
-                            /*println!(
+                            println!(
                                 "[CustomerAgent Server] Received SubmitOrder from Python: client_id={}, stock_id={}, order_type={}",
                                 req.client_id, req.stock_id, req.order_type
-                            ); */
+                            );
                             let side = match req.side.as_str() {
                                 "Buy" => Side::Buy,
                                 "Sell" => Side::Sell,
@@ -95,7 +95,7 @@ impl MarketGateway for CustomerAgentServer {
                             };
 
                             // HANDSHAKE STEP 1: Push the python client_id to the queue for this stock
-                            /* 
+                            /*
                             println!(
                                 "[CustomerAgent Server] Pushing client_id {} for stock_id {} to queue.",
                                 req.client_id, req.stock_id

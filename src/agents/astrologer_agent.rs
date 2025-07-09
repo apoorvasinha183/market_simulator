@@ -1,7 +1,7 @@
 // src/agents/astrologer_agent.rs
 
-use std::collections::VecDeque;
 use crossbeam_channel::{Receiver, Sender};
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
@@ -16,7 +16,9 @@ use crate::types::order::{Order, OrderRequest, Trade};
 pub struct AstrologerAgent {
     id: usize,
     order_channel: Sender<OrderRequest>,
+    #[allow(dead_code)]
     ack_channel: Arc<Mutex<Receiver<Order>>>,
+    #[allow(dead_code)]
     port_channel: Arc<Mutex<Receiver<Trade>>>,
     candle_data: CandleDataHandle,
 }
@@ -90,14 +92,20 @@ impl Agent for AstrologerAgent {
         // A "Golden Cross" occurs when the short-term average crosses ABOVE the long-term average.
         // This is a classic bullish signal.
         if prev_short_sma < prev_long_sma && short_sma > long_sma {
-            println!("[Astrologer {}] The stars align for stock {}! A Golden Cross! I must BUY!", self.id, stock_to_analyze);
+            println!(
+                "[Astrologer {}] The stars align for stock {}! A Golden Cross! I must BUY!",
+                self.id, stock_to_analyze
+            );
             self.buy_stock(stock_to_analyze, 100); // Buy 100 shares
         }
 
         // A "Death Cross" occurs when the short-term average crosses BELOW the long-term average.
         // This is a classic bearish signal.
         if prev_short_sma > prev_long_sma && short_sma < long_sma {
-            println!("[Astrologer {}] The omens are dark for stock {}! A Death Cross! I must SELL!", self.id, stock_to_analyze);
+            println!(
+                "[Astrologer {}] The omens are dark for stock {}! A Death Cross! I must SELL!",
+                self.id, stock_to_analyze
+            );
             self.sell_stock(stock_to_analyze, 100); // Sell 100 shares
         }
     }
@@ -123,15 +131,25 @@ impl Agent for AstrologerAgent {
         };
         self.order_channel.send(req).ok();
     }
-    
+
     // --- Other required trait methods (mostly stubs for this agent) ---
     fn acknowledge_order(&mut self) {}
     fn margin_call(&mut self) {}
     fn update_portfolio(&mut self) {}
-    fn evaluate_port(&mut self, _market_view: &MarketState) -> f64 { 0.0 }
-    fn get_pending_orders(&self) -> Vec<Order> { vec![] }
+    fn evaluate_port(&mut self, _market_view: &MarketState) -> f64 {
+        0.0
+    }
+    fn get_pending_orders(&self) -> Vec<Order> {
+        vec![]
+    }
     fn cancel_open_order(&mut self, _order_id: u64) {}
-    fn get_id(&self) -> usize { self.id }
-    fn get_inventory(&self) -> i64 { 0 }
-    fn clone_agent(&self) -> Box<dyn Agent> { Box::new(self.clone()) }
+    fn get_id(&self) -> usize {
+        self.id
+    }
+    fn get_inventory(&self) -> i64 {
+        0
+    }
+    fn clone_agent(&self) -> Box<dyn Agent> {
+        Box::new(self.clone())
+    }
 }

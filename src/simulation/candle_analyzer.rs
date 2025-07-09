@@ -1,10 +1,9 @@
-
 use crate::types::candle::{Candle, TimeFrame};
 use crate::types::order::Trade;
+use crossbeam_channel::Receiver;
 use dashmap::DashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
-use crossbeam_channel::Receiver;
 
 // The shared, read-only handle for agents
 pub type CandleDataHandle = Arc<DashMap<(u64, TimeFrame), VecDeque<Candle>>>;
@@ -31,21 +30,21 @@ impl CandleAnalyzer {
         // The main loop that processes trades
         while let Ok(trade) = self.trade_receiver.recv() {
             // For each timeframe we care about...
-            for &timeframe in &[TimeFrame::OneMinute, TimeFrame::FiveMinutes, TimeFrame::ThirtyMinutes] {
+            for &timeframe in &TimeFrame::all() {
                 self.process_trade_for_timeframe(&trade, timeframe);
             }
         }
     }
 
     fn process_trade_for_timeframe(&self, trade: &Trade, timeframe: TimeFrame) {
-        let timeframe_seconds = timeframe.to_seconds();
+        let timeframe_millis = timeframe.to_millis();
         // Ensure we have a valid timestamp for the trade itself
         let trade_timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs();
+            .as_millis() as u64;
 
-        let candle_timestamp = (trade_timestamp / timeframe_seconds) * timeframe_seconds;
+        let candle_timestamp = (trade_timestamp / timeframe_millis) * timeframe_millis;
 
         let key = (trade.stock_id, timeframe);
 
@@ -60,7 +59,8 @@ impl CandleAnalyzer {
                 let finished_candle = active_candle.clone();
                 let mut history = self.candle_data.entry(key).or_default();
                 history.push_back(finished_candle);
-                if history.len() > 500 { // Keep history trimmed
+                if history.len() > 500 {
+                    // Keep history trimmed
                     history.pop_front();
                 }
             }

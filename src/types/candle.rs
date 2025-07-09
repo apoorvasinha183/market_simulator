@@ -1,20 +1,50 @@
-
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TimeFrame {
+    HundredMillis,
+    OneSecond,
+    TenSeconds,
     OneMinute,
     FiveMinutes,
     ThirtyMinutes,
 }
 
-impl TimeFrame {
-    pub fn to_seconds(&self) -> u64 {
+impl fmt::Display for TimeFrame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TimeFrame::OneMinute => 60,
-            TimeFrame::FiveMinutes => 300,
-            TimeFrame::ThirtyMinutes => 1800,
+            TimeFrame::HundredMillis => write!(f, "100ms"),
+            TimeFrame::OneSecond => write!(f, "1s"),
+            TimeFrame::TenSeconds => write!(f, "10s"),
+            TimeFrame::OneMinute => write!(f, "1m"),
+            TimeFrame::FiveMinutes => write!(f, "5m"),
+            TimeFrame::ThirtyMinutes => write!(f, "30m"),
         }
+    }
+}
+
+impl TimeFrame {
+    pub fn to_millis(&self) -> u64 {
+        match self {
+            TimeFrame::HundredMillis => 100,
+            TimeFrame::OneSecond => 1_000,
+            TimeFrame::TenSeconds => 10_000,
+            TimeFrame::OneMinute => 60_000,
+            TimeFrame::FiveMinutes => 300_000,
+            TimeFrame::ThirtyMinutes => 1_800_000,
+        }
+    }
+
+    pub fn all() -> Vec<TimeFrame> {
+        vec![
+            TimeFrame::HundredMillis,
+            TimeFrame::OneSecond,
+            TimeFrame::TenSeconds,
+            TimeFrame::OneMinute,
+            TimeFrame::FiveMinutes,
+            TimeFrame::ThirtyMinutes,
+        ]
     }
 }
 
