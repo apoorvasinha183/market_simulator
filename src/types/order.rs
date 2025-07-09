@@ -35,16 +35,18 @@ pub struct Order {
 pub enum OrderRequest {
     /// Limit order at a specific price.
     LimitOrder {
+        order_id: u64,
         agent_id: usize,
-        stock_id: u64, // <── NEW
+        stock_id: u64,
         side: Side,
         price: u64,
         volume: u64,
     },
     /// Market order that crosses the book immediately.
     MarketOrder {
+        order_id: u64,
         agent_id: usize,
-        stock_id: u64, // <── NEW
+        stock_id: u64,
         side: Side,
         volume: u64,
     },
@@ -66,6 +68,7 @@ pub struct Trade {
     pub maker_agent_id: usize,
     pub taker_side: Side,
     pub maker_order_id: u64,
+    pub taker_order_id: u64,
 }
 // -----------------------------------------------------------------------------
 //  Unit tests for order-flow types
@@ -103,6 +106,7 @@ mod tests {
     #[test]
     fn limit_and_market_order_requests_hold_stock_id() {
         let limit = OrderRequest::LimitOrder {
+            order_id: 0,
             agent_id: 42,
             stock_id: 3,
             side: Side::Sell,
@@ -110,6 +114,7 @@ mod tests {
             volume: 50,
         };
         let market = OrderRequest::MarketOrder {
+            order_id: 0,
             agent_id: 42,
             stock_id: 3,
             side: Side::Buy,
@@ -135,6 +140,7 @@ mod tests {
             maker_agent_id: 9,
             taker_side: Side::Buy,
             maker_order_id: 77,
+            taker_order_id: 0, // Add this
         };
         assert_eq!(t.stock_id, 2);
         assert_eq!(t.price, 101_23);

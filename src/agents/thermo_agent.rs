@@ -184,6 +184,7 @@ impl ThermoAgent {
                     }
 
                     let order = OrderRequest::MarketOrder {
+                        order_id: 0,
                         agent_id: self.id,
                         stock_id,
                         side,
@@ -298,6 +299,7 @@ impl Agent for ThermoAgent {
                 if volume > 0 {
                     // If we own stock
                     let order = OrderRequest::MarketOrder {
+                        order_id: 0,
                         agent_id: self.id,
                         stock_id,
                         side: Side::Sell,

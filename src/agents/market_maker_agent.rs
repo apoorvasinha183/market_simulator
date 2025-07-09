@@ -1,4 +1,57 @@
 // src/agents/market_maker_agent.rs
+/*
+                                                                                                    
+ .++::;:...........;+:+;:.:;;xx+:...............:+:+...............:;+x+;:.:;+:+;...........;+;;+.; 
+ +;;++.;;;........:;+:;:;x+:....................:+;;...................:;+x;;;:;+;..:::::.:+;.;++++ 
+ +;::;+;.;+:....;;:::;XXx;::........:.......:;;;;:.:;;;;...................:;+;.;:;;::;;:;;:+x+;;+x 
+ ;;:..:;+;.;+:;;::xx+Xx;;;;;::........:;:::;;;::::::::;;;;:.........:........:+:x+;:++;++:+Xx+;;;:: 
+ ..:....:+x;;;::+Xxx+X+  ..:;:::::::::.x$x+:.:::::::::..:;+XX;.........:.....:x.X+xx::x+;xx:.::..   
+ ..:::::..;;:;+++:.x+x+  ....:::::::.x&&&x+;::;:.....::.:;+X&&X;:::..........:x.X;.;xx+;++:..  ...  
+ ...:::::+;.;+;::..x+x+ .. .........X&$.+.x&&&&&&Xx&&&&&&$+;:+$&;:::::.......:x.X:...;xx:;x;....... 
+ x;....++.;x+::....x+x+ ....     ..;XXxx:;+;+X&&&x;$&&$x:;+:x&xx&;..........::X.X:..  .;x+.++:..:+x 
+ .;x+;x+.x+;::::...x+x+ .........:+x;x+::;+X&&&&&Xx&&&&&$Xx+;:;:X$;:........:.X.X.   ...:+x;;x+x+;. 
+ x;.:+;;x;:........x+x+........:+&&&&x:;+xx+xXXXx;:xXxXx+xx+.+X&$&&+.::.......x.x........::x+:+;:;x 
+ .;+;.+x:...... ...x++;........:X$++Xx;;++;::;.;::::;.;:.;++;:xx;+$$;:..::....x.x......:.:::++::+;. 
+ .:x:++:...........x++;........:X$++++:$&&X+;+X&&&&&&Xx;;+$&&+xXx+X&;........:x.x:.........::;x.+;. 
+ :+:++.............++++.........+$X;+:++.:+x;+x:+XXx:+x:++;:;x.+:x$X.........:x.x:.......::...;+.+; 
+ +:++..............+;x+.........:x&$;.++++:X$X&&&&&&&&&+&+;x++:;X&X:.........:x.x:.............;+.+ 
+ ;;+...............+;x;...........+$+.:+;;$X&X;$&&&&&X+&Xxx;;;:;Xx:..........:+.x:........ .....;+: 
+ :x:...............+;+;........ ..:xX..;:.:+;X$X+;;;xX$xx+::;:.xX:...........:+:x..:.............+; 
+ +;...........:....+;+;..:+X&&&&&&&&+.:.......+$&&&&&X;......::x&&&&&&&&&&&x;:+.x... ............:+ 
+ +...........:....&&&&&&&&&&&&&&&&&&&;;;:.....:;;++;;:.....:+;;$&&&&&&&&&&&&&&&&&&X...............; 
+ :...............&&&&&&&&&&&&$x::+xx&+:;++;:::.:;;;;;...::;++::&&x$x;:::;X&&&&&&&&&:..............: 
+ ...............:&&xX+++&&&X;.:::+X$&$+.:++++++;:::::++x+++;.++&$x:.;;::;xXX$&x;;&&X............... 
+ ...............:&&+$+x+;::::::;X&&X&&&&x..;;++X$$$$$x+;;;::X&&&XX$X+;;:.:+xx;;;x&&$............... 
+ ...............:&&+X;x++++x$&&&$+..&&X&&&+....:+x+:::..::x&&&&&+.;X&&&$x++++::.x&&X:::............ 
+ xxxxxxxxxxxxxxxx&&+XX&$Xx++;:...:..&&&+&&&&&$Xx+:;X$x;+&&&&$:&&:.:....:;x$&$X;;+&&$xxxxxxxxxxxxxxx 
+ +++++;:.........&&+x$$..........:..X&&:.x$$XXX+::;+X$$$&&&;:x&&..::.........XX+x&&x.:::........... 
+ ;;;::+xxxxxxxxXx&&;+$$;;::.....::..+&&:+$$X;:;:;$;;+.++&$;..&&&...:.......:;x$;$&&;;;;;::;+xXxxxxx 
+ ...:.++.........&&::$X;;;;:...:;;;::&&XXXx;::+X&&$+x:;:+&$+:&&&:;;;:....:;+;x&:&&&;x+xX++++.:+&&&& 
+ &&&&&&&&&$;.:::.&&;;$++::::....:;::x&&Xx+;;+:x$;;;XX;;x;+&&&&&;.:::.....:+;++$Xx&&.;.;+:&&&&&&&&&& 
+ ++;xXX+.x&$;;;;:&&XXX:;;.;:.....::X&&&:.;:+.;:xX;+XXXx:+:;+$&&+.::......;;:;;x$.&&:;.;+x&x+.x&X;&& 
+ &&&&;&&&&.&;..;:&&&$;::;:;;....:;&&&&.;.+:xx;XX$$+$&++&$;:.:&&&X..:::..:+.;::;XX&&;;.:+$X&&&&&;$&& 
+ &;&&;X&:&$$X.:;.&&&x:::::.;:...X&&&$..:;;.+$&&$X:&&&&&x+$X;:;&&&&X;...:;::::::+&&&+: .;X;&&.&&;&&$ 
+ &;&X;:&&X&;&::;;&&&;:::...:;:X&&&&+.....:+Xx++&&&&x&$X&&++....x&&&&&&&&&.:..:::X&&x. .:x+&&.&&;&&$ 
+ &;&x:X$&.&x&XX$&&&x:::....xX&&&&$.:::;+++x&&&&&&$++&&&$x::++:...X&&&&&&&.....::;&&&:..:x+&&.&&;&&$ 
+ &;&x+$.&x&&:XX&&&&;:::.:x$$xx&&$::::+Xx+xxx+;++&&&&;&+;+xx;;+;::::$.&&&&X+:.::.:x&&X:..x;&&.&&;$&& 
+ &&&+Xxx&&;&$;:&&&X+::xXXx+:;X&&&X+X&&&&&&&&&$&&&&;$X&&&&&&&&&&x;;;&&&&::+xXXx;.:+&&&.:.X+&&&&&;+$& 
+ &&&$X;Xx&&&&;;&&$:++xx+::;;;;&&:&$&&&&&&:;::X&&&&&&:&&:::;&&&&&&&&&&&X;;;.:;++xX+;&&&:.X$&&&&X+:+$ 
+ ++x$x++;&&&x;$&&:+x;.;+;;::::&&&+&&&x:&&::..$&&&&X&&&&x...&&$&&&&&&&&;:::;;+;.;;;:X&&;.X&x;.;+x:x; 
+ xxxX;.:+:...:&&+.:;+;;:::::::x&&&&&&:.&&x:::$&:$&&&$&&&;;+&&;:.&&&&&&::::::::;+x;:.&&&.X&x+x;+x:+X 
+ &&&$x++X$$$$$&&::;;:::::::::.:;&&&&&:.&&X..;&&&&&:&&&&&;::&&:::&&&&$;:::::::::::;;;x&&;$&&&&&&&&&& 
+ ;;::.::.:;;:&&$:::::::;:::..;.++&&&+..&&&..;&&:$&&&;$&$:..&&:.:$&&x+:;:..::::::::::;&&x:+$&&&$x+;; 
+ xxxxxxxxxxxx&&X:::::::::::::;x+.::.:..&&&;:;&&&&X.X&&&&x::&&..:..:.;xx:;;::::::;;:::&&$xxxxxxxxxxx 
+ ::::::::::::&&&::::::::::;;.X&&&&&&&&&&&&&&&&;x$X+;:+&&&&&&&&&&&&&&&&&;:;;:::::::::+&&+::::::::::: 
+ ::::::::::::x&&&&:::....X&&&&&&&&&&&&&&&X::;;::x&&&&&&&X::&&&&&&&&&&&&&&&&;...:::+&&&&;::::::::::: 
+ .............x&&&&&&&&&&&&&&&Xxxxxxxxx&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&;............ 
+ .............;xX&&&&&&&&&X::::::::::::X&&::::;;;;;;;;;;;;:.:..+$&Xx++XX+$&&&&&&&&&&x+:............ 
+ ............;++:...:::...............::&&x.............:x$&&&X;..::..+&&&&&&&&&&&;.;++:........... 
+ ..........:;+;........................:+&&&&&&&&&&&&&&&&&&&&&&&$Xx+::::;x$&&&&&XX+:.:;+;:......... 
+ .........:;;:.........................:;;&&&&&&&&&&&&&&&&X+;+$&&&&&&&&&&&&&&&&&&X.::..:;::........ 
+                                                                                                    
+
+
+*/
 use super::agent_trait::Agent;
 use super::config::{
     MM_DESIRED_SPREAD, MM_INITIAL_CENTER_PRICE, MM_INITIAL_INVENTORY, MM_QUOTE_VOL_MAX,
@@ -216,6 +269,7 @@ impl MarketMakerAgent {
                         )); */
                         order_channel_clone
                             .send(OrderRequest::LimitOrder {
+                                order_id: 0,
                                 agent_id,
                                 stock_id,
                                 side: Side::Buy,
@@ -225,6 +279,7 @@ impl MarketMakerAgent {
                             .unwrap();
                         order_channel_clone
                             .send(OrderRequest::LimitOrder {
+                                order_id: 0,
                                 agent_id,
                                 stock_id,
                                 side: Side::Sell,
@@ -250,6 +305,7 @@ impl MarketMakerAgent {
                             rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
                         order_channel_clone
                             .send(OrderRequest::LimitOrder {
+                                order_id: 0,
                                 agent_id,
                                 stock_id,
                                 side: Side::Sell,
@@ -263,6 +319,7 @@ impl MarketMakerAgent {
                             rand::thread_rng().gen_range(MM_UNSTICK_VOL_MIN..=MM_UNSTICK_VOL_MAX);
                         order_channel_clone
                             .send(OrderRequest::LimitOrder {
+                                order_id: 0,
                                 agent_id,
                                 stock_id,
                                 side: Side::Buy,
@@ -328,6 +385,7 @@ impl MarketMakerAgent {
                                 rand::thread_rng().gen_range(MM_QUOTE_VOL_MIN..=MM_QUOTE_VOL_MAX);
                             order_channel_clone
                                 .send(OrderRequest::LimitOrder {
+                                    order_id: 0,
                                     agent_id,
                                     stock_id,
                                     side: Side::Buy,
@@ -337,6 +395,7 @@ impl MarketMakerAgent {
                                 .unwrap();
                             order_channel_clone
                                 .send(OrderRequest::LimitOrder {
+                                    order_id: 0,
                                     agent_id,
                                     stock_id,
                                     side: Side::Sell,
@@ -392,7 +451,7 @@ impl Agent for MarketMakerAgent {
 
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_micros(1));
+            thread::sleep(std::time::Duration::from_nanos(10));
         }
     }
 
@@ -412,6 +471,7 @@ impl Agent for MarketMakerAgent {
     fn buy_stock(&mut self, stock_id: u64, volume: u64) {
         self.order_channel
             .send(OrderRequest::MarketOrder {
+                order_id: 0,
                 agent_id: self.id,
                 stock_id,
                 side: Side::Buy,
@@ -423,6 +483,7 @@ impl Agent for MarketMakerAgent {
     fn sell_stock(&mut self, stock_id: u64, volume: u64) {
         self.order_channel
             .send(OrderRequest::MarketOrder {
+                order_id: 0,
                 agent_id: self.id,
                 stock_id,
                 side: Side::Sell,
@@ -440,6 +501,7 @@ impl Agent for MarketMakerAgent {
                 if vol > 0 {
                     self.order_channel
                         .send(OrderRequest::MarketOrder {
+                            order_id: 0,
                             agent_id: self.id,
                             stock_id,
                             side: Side::Sell,
@@ -449,6 +511,7 @@ impl Agent for MarketMakerAgent {
                 } else if vol < 0 {
                     self.order_channel
                         .send(OrderRequest::MarketOrder {
+                            order_id: 0,
                             agent_id: self.id,
                             stock_id,
                             side: Side::Buy,

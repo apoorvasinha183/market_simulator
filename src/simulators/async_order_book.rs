@@ -49,6 +49,7 @@ impl AsyncOrderBook {
     fn process_request(&mut self, req: OrderRequest) -> Vec<Trade> {
         match req {
             OrderRequest::LimitOrder {
+                order_id, // Capture the order_id
                 agent_id,
                 stock_id,
                 side,
@@ -56,7 +57,7 @@ impl AsyncOrderBook {
                 volume,
             } => {
                 let mut order = crate::types::Order {
-                    id: 0, // The async book doesn't know the global ID, market will assign
+                    id: order_id, // Use the captured order_id
                     agent_id,
                     stock_id,
                     side,
@@ -67,11 +68,23 @@ impl AsyncOrderBook {
                 self.order_book.process_limit_order(&mut order)
             }
             OrderRequest::MarketOrder {
+                order_id, // Capture the order_id
                 agent_id,
-                stock_id: _,
+                stock_id,
                 side,
                 volume,
-            } => self.order_book.process_market_order(agent_id, side, volume),
+            } => {
+                let mut order = crate::types::Order {
+                    id: order_id, // Use the captured order_id
+                    agent_id,
+                    stock_id,
+                    side,
+                    volume,
+                    price: 0, // Market orders don't have a price in the request, will be filled by order book
+                    filled: 0,
+                };
+                self.order_book.process_market_order(order_id, agent_id, side, volume) // Pass order_id
+            }
             OrderRequest::CancelOrder { agent_id, order_id } => {
                 self.order_book.cancel_order(order_id, agent_id);
                 Vec::new() // No trades from a cancel

@@ -76,7 +76,7 @@ fn order_latency(c: &mut Criterion) {
         order_book.process_limit_order(&mut limit_order);
 
         b.iter(|| {
-            order_book.process_market_order(1, Side::Buy, 10);
+            order_book.process_market_order(0, 1, Side::Buy, 10); // Add taker_order_id: 0
         })
     });
 }

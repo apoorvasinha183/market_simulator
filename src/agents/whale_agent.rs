@@ -217,6 +217,7 @@ impl WhaleAgent {
 
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
+                                        order_id: 0,
                                         agent_id: id,
                                         stock_id,
                                         side: Side::Buy,
@@ -227,6 +228,7 @@ impl WhaleAgent {
 
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
+                                        order_id: 0,
                                         agent_id: id,
                                         stock_id,
                                         side: Side::Sell,
@@ -264,6 +266,7 @@ impl WhaleAgent {
                                     );
                                     order_channel
                                         .send(OrderRequest::LimitOrder {
+                                            order_id: 0,
                                             agent_id: id,
                                             stock_id,
                                             side: Side::Buy,
@@ -292,6 +295,7 @@ impl WhaleAgent {
                                     );
                                     order_channel
                                         .send(OrderRequest::LimitOrder {
+                                            order_id: 0,
                                             agent_id: id,
                                             stock_id,
                                             side: Side::Sell,
@@ -341,7 +345,7 @@ impl Agent for WhaleAgent {
         //thread::sleep(std::time::Duration::from_secs(40)); // Initial sleep to isolate MarketMakerAgent's view
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_millis(10)); // Whales act less frequently
+            thread::sleep(std::time::Duration::from_micros(10)); // Whales act less frequently
         }
     }
 
@@ -359,6 +363,7 @@ impl Agent for WhaleAgent {
     fn buy_stock(&mut self, stock_id: u64, volume: u64) {
         self.order_channel
             .send(OrderRequest::MarketOrder {
+                order_id: 0,
                 agent_id: self.id,
                 stock_id,
                 side: Side::Buy,
@@ -370,6 +375,7 @@ impl Agent for WhaleAgent {
     fn sell_stock(&mut self, stock_id: u64, volume: u64) {
         self.order_channel
             .send(OrderRequest::MarketOrder {
+                order_id: 0,
                 agent_id: self.id,
                 stock_id,
                 side: Side::Sell,

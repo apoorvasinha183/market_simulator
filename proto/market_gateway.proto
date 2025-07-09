@@ -8,41 +8,38 @@ service MarketGateway {
   rpc EventStream(stream FromPython) returns (stream ToPython);
 }
 
-// === Messages from Python Broker to Rust Agent ===
+// Message from Python client to Rust server
 message FromPython {
-  // Use `oneof` to create a tagged union, like a Rust enum.
   oneof event {
     SubmitOrderRequest submit_order = 1;
-    // You can add more request types here later, e.g., CancelOrderRequest
   }
 }
 
-// === Messages from Rust Agent to Python Broker ===
+// Message from Rust server to Python client
 message ToPython {
   oneof event {
     OrderAck order_ack = 1;
     TradeUpdate trade_update = 2;
-    // You could add error messages, market data updates, etc.
+    MarketUpdate market_update = 3;
   }
 }
 
-// --- Message Details ---
+// --- Message Definitions ---
 
 message SubmitOrderRequest {
-  string client_id = 1; // To know which Python agent this is for
+  string client_id = 1;
   uint64 stock_id = 2;
-  string side = 3; // "Buy" or "Sell"
-  double price = 4; // Use double for price, convert to u64 in Rust
+  string side = 3;
+  double price = 4; // For limit orders
   uint64 volume = 5;
-  // Add order type: "Market" or "Limit"
-  string order_type = 6;
+  string order_type = 6; // "Market" or "Limit"
 }
 
 message OrderAck {
   string client_id = 1;
-  uint64 order_id = 2; // The simulation's official order ID
-  string status = 3; // e.g., "Accepted", "Rejected"
-  string details = 4; // Optional error message
+  uint64 order_id = 2;
+  string status = 3;
+  string details = 4;
 }
 
 message TradeUpdate {
@@ -54,3 +51,13 @@ message TradeUpdate {
   uint64 new_total_filled = 6;
   bool is_fully_filled = 7;
 }
+
+message MarketUpdate {
+    uint64 stock_id = 1;
+    double best_bid_price = 2;
+    uint64 best_bid_volume = 3;
+    double best_ask_price = 4;
+    uint64 best_ask_volume = 5;
+    double last_traded_price = 6;
+}
+

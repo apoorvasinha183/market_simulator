@@ -317,7 +317,7 @@ pub fn bench_market_order_scaling(c: &mut Criterion) {
                 b.iter_batched(
                     || setup_sell_book(n),
                     |mut book| {
-                        let trades = book.process_market_order(black_box(999), Side::Buy, sweep);
+                        let trades = book.process_market_order(0, black_box(999), Side::Buy, sweep);
                         black_box(trades);
                     },
                     BatchSize::LargeInput,
@@ -336,7 +336,7 @@ pub fn bench_market_order_scaling(c: &mut Criterion) {
                 || {
                     let mut book = setup_sell_book(n);
                     Box::new(move || {
-                        let trades = book.process_market_order(999, Side::Buy, sweep);
+                        let trades = book.process_market_order(0, 999, Side::Buy, sweep);
                         black_box(trades);
                     })
                 },
@@ -451,7 +451,7 @@ pub fn bench_mixed_book_operations(c: &mut Criterion) {
                     b.iter_batched(
                         || setup_mixed_book(n),
                         |mut book| {
-                            let trades = book.process_market_order(black_box(999), side, sweep);
+                            let trades = book.process_market_order(0, black_box(999), side, sweep);
                             black_box(trades);
                         },
                         BatchSize::LargeInput,
@@ -470,7 +470,7 @@ pub fn bench_mixed_book_operations(c: &mut Criterion) {
                     || {
                         let mut book = setup_mixed_book(n);
                         Box::new(move || {
-                            let trades = book.process_market_order(999, side, sweep);
+                            let trades = book.process_market_order(0, 999, side, sweep);
                             black_box(trades);
                         })
                     },
@@ -499,7 +499,7 @@ pub fn bench_price_level_impact(c: &mut Criterion) {
             b.iter_batched(
                 || setup_book_with_params(FIXED_ORDERS, levels, Side::Sell, 100, 42),
                 |mut book| {
-                    let trades = book.process_market_order(black_box(999), Side::Buy, FIXED_SWEEP);
+                    let trades = book.process_market_order(0, black_box(999), Side::Buy, FIXED_SWEEP);
                     black_box(trades);
                 },
                 BatchSize::LargeInput,
@@ -518,7 +518,7 @@ pub fn bench_price_level_impact(c: &mut Criterion) {
             || {
                 let mut book = setup_book_with_params(FIXED_ORDERS, levels, Side::Sell, 100, 42);
                 Box::new(move || {
-                    let trades = book.process_market_order(999, Side::Buy, FIXED_SWEEP);
+                    let trades = book.process_market_order(0, 999, Side::Buy, FIXED_SWEEP);
                     black_box(trades);
                 })
             },
@@ -603,7 +603,7 @@ pub fn bench_short_covering_scenarios(c: &mut Criterion) {
             b.iter_batched(
                 || setup_sell_book(BOOK_SIZE),
                 |mut book| {
-                    let trades = book.process_market_order(black_box(888), Side::Buy, cover_volume);
+                    let trades = book.process_market_order(0, black_box(888), Side::Buy, cover_volume);
                     black_box(trades);
                 },
                 BatchSize::LargeInput,
@@ -622,7 +622,7 @@ pub fn bench_short_covering_scenarios(c: &mut Criterion) {
             || {
                 let mut book = setup_sell_book(BOOK_SIZE);
                 Box::new(move || {
-                    let trades = book.process_market_order(888, Side::Buy, cover_volume);
+                    let trades = book.process_market_order(0, 888, Side::Buy, cover_volume);
                     black_box(trades);
                 })
             },
@@ -653,7 +653,7 @@ pub fn bench_negative_inventory_patterns(c: &mut Criterion) {
                 |mut book| {
                     for (i, &volume) in cover_sequence.iter().enumerate() {
                         let trades =
-                            book.process_market_order(black_box(800 + i), Side::Buy, volume);
+                            book.process_market_order(0, black_box(800 + i), Side::Buy, volume);
                         black_box(trades);
                     }
                 },
@@ -676,7 +676,7 @@ pub fn bench_negative_inventory_patterns(c: &mut Criterion) {
                 Box::new(move || {
                     let mut book = setup_sell_book(BOOK_SIZE);
                     for (i, &volume) in cover_seq.iter().enumerate() {
-                        let trades = book.process_market_order(800 + i, Side::Buy, volume);
+                        let trades = book.process_market_order(0, 800 + i, Side::Buy, volume);
                         black_box(trades);
                     }
                 })

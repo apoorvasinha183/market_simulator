@@ -174,6 +174,7 @@ impl MomentumAgent {
             }
 
             let order_req = OrderRequest::LimitOrder {
+                order_id: 0,
                 agent_id: id,
                 stock_id,
                 side,
@@ -219,7 +220,7 @@ impl Agent for MomentumAgent {
 
         loop {
             self.decide_actions();
-            thread::sleep(std::time::Duration::from_millis(100)); // Act less frequently
+            thread::sleep(std::time::Duration::from_nanos(100)); // Act less frequently
         }
     }
 
@@ -236,6 +237,7 @@ impl Agent for MomentumAgent {
     fn buy_stock(&mut self, stock_id: u64, volume: u64) {
         self.order_channel
             .send(OrderRequest::MarketOrder {
+                order_id: 0,
                 agent_id: self.id,
                 stock_id,
                 side: Side::Buy,
@@ -247,6 +249,7 @@ impl Agent for MomentumAgent {
     fn sell_stock(&mut self, stock_id: u64, volume: u64) {
         self.order_channel
             .send(OrderRequest::MarketOrder {
+                order_id: 0,
                 agent_id: self.id,
                 stock_id,
                 side: Side::Sell,
@@ -264,6 +267,7 @@ impl Agent for MomentumAgent {
                 if vol > 0 {
                     self.order_channel
                         .send(OrderRequest::MarketOrder {
+                            order_id: 0,
                             agent_id: self.id,
                             stock_id,
                             side: Side::Sell,

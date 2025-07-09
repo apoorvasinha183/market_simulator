@@ -168,6 +168,7 @@ impl DumbLimitAgent {
                             // Chance to submit a market order
                             order_channel
                                 .send(OrderRequest::MarketOrder {
+                                    order_id: 0,
                                     agent_id: id,
                                     stock_id,
                                     side,
@@ -177,6 +178,7 @@ impl DumbLimitAgent {
                         } else {
                             order_channel
                                 .send(OrderRequest::LimitOrder {
+                                    order_id: 0,
                                     agent_id: id,
                                     stock_id,
                                     side,
@@ -239,6 +241,7 @@ impl Agent for DumbLimitAgent {
     fn buy_stock(&mut self, stock_id: u64, volume: u64) {
         self.order_channel
             .send(OrderRequest::MarketOrder {
+                order_id: 0,
                 agent_id: self.id,
                 stock_id,
                 side: Side::Buy,
@@ -250,6 +253,7 @@ impl Agent for DumbLimitAgent {
     fn sell_stock(&mut self, stock_id: u64, volume: u64) {
         self.order_channel
             .send(OrderRequest::MarketOrder {
+                order_id: 0,
                 agent_id: self.id,
                 side: Side::Sell,
                 stock_id,
@@ -265,6 +269,7 @@ impl Agent for DumbLimitAgent {
             if volume < 0 {
                 self.order_channel
                     .send(OrderRequest::MarketOrder {
+                        order_id: 0,
                         agent_id: self.id,
                         stock_id,
                         side: Side::Buy,

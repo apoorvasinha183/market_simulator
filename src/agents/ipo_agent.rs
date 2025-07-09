@@ -125,6 +125,7 @@ impl IpoAgent {
         );
         for i in 0..num_levels {
             let order_req = OrderRequest::LimitOrder {
+                order_id: 0,
                 agent_id: id,
                 stock_id,
                 side: Side::Sell,

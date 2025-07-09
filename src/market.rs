@@ -1,4 +1,58 @@
 // src/market.rs
+/* 
+                                          ::  .::                                                   
+ =======----==-==============++=-..@@@@@@@@@+@@@@@@@@@@@@%=  :=++++++++++++++++++++++++++++++++++++ 
+ ============-====-=========-:   @@@#+#@-:#%@+=+#*++@*@%@@@@@@..:=+++++++++++++++++++++++++++++++++ 
+ --=-===============-=====-. *@@%@*#=%*=@* %#@%#@@#*+@-#+@*#@%@@@.-++++++++++++++++++++++++++++++++ 
+ --=-==-=======-========-: #@@@@+#@%@@*%#@%##@@%@@@@@@@@@@@@@*@%@@*-+++++++++++++++++++++++++++++++ 
+ =----===========---====:=@@+=%@@@@@*--#@+#*++:+=+**+*%@@@@@@@@@@@@*-++++++++++++++++++++++++++++++ 
+ --=------=-=======-===. @++++--.=::-+#**+=:::-=+-:==-:-=--+---:: %@=-=++++++++++++++==+++=++++++++ 
+ ----=----=-========--- @@@@@@@@@@@@@%@*-.::--:.=+++=+*+++++++=.:. .@#-=++++++++++++++++++++==+++++ 
+ ---=--==------==--===.%@*+*=+:.-*#%%#+*-:=-:--:.:++=====++++**:=:   @%=+++++=+++++++++++++++++==++ 
+ ---=----===-----====- @@*%%##%#@@@%@*:=#:-:=+=*+--*###*#*%%%##=+==.  @*==+++++====+++++++++++++++= 
+ -----------=------==:-@##=#@%###=+==:+*@*--.:-==--:=-=+******=%=+=:  +@==+=+++++++++++++++++++++++ 
+ --------=-=--=------ @%#@%@#@%**###@@@.  .==+: -*%#++*=:+=+*= =#*# =. @=+++++++++++=++++++++++++++ 
+ -----------=--==---- @%@%@%%#*#=*%#=   -=--:.++%@@@@@%##*+%# . .@#-+= @+=++++++++++++++=++++++++++ 
+ -----------------=-- @@%%#*++#@*@*  ::==+-+#@@%=+**#%@@@@@#@%%**@ =:  .%=+++++++++++++++++++=+++++ 
+ ---------------=---- @@@@%%*#+@*+- ..:=-:+:    .+**+-==#%%%@@%@@= @==  #===+++++++++++++++++++=+=+ 
+ ---------------=---- @@ @@@@@%@@*::.=+++--%*%@@@@@#@@@@@#@++%#@-=@@@@@*:#==+++++++++++++++++++++++ 
+ -------------------- *@   :.+#@*=------= :+##@:.:-=++*@@@@*.  *  @#%@@@@@@=++++=++++++++++++++++++ 
+ ----------------==-:+% -@.   @*--....--+#%*++#%@@@%@@@@@@@*:.-#* @@#%*   #+=+++========+++++++++++ 
+ -------------------.@.    .. @-=-.----.: .:---==**#%%%@#*:*=:-*% @@@@@@@--=====================+++ 
+ -------------------.-#@@@@:@ @@@*--=+=+=-::--.==+**##***=--::==** @@: @ **=====================+++ 
+ -------------------.*@@*:  = +@@%-=-+--==*-.-=+####**#%@@:    .:** @@-::*+======================++ 
+ -------------------:* @@ : - #@@%=* .:..- +*#%*#++*#@@@# :-#@%+--#+ @#= **+======================+ 
+ ----:--------------::=+.:@% .@@.-%%-=#-*=:#@+--= +@@%+++* :@%. .=%# *-=  @+++++++++=============== 
+ --------------------::- .:- =@@#+*%@%=*@.#@.   #@@@%#=*+@@*-= .=@:@ @.   @=+======+++============= 
+ ----------------------:%+=-*%+*.+.=#+@%*@@@+ =@@@@@@@@@@@@@@@@@..*-@@@  %#=+========+============= 
+ ----------------------:*:  *@*@@=#**#=%#%@#= #@@%+. -.=***#+#%@# @ *@  %@+==========+++=========== 
+ --------:-:-----------:+-. @%-*-***#-=@@@@@@#.@@@@@@*@-@%@@@@@*.-#%%@  %++++=++=======+++++++++++= 
+ -------------:--------:==.:@ *-**=%%@#-*#@@*+-#@%#-*@@ -    #@@@-  @. %+-===+===+======++=======++ 
+ ----------------------:+- -@:*-:-+@%*%%@@@@%%+%@%@*:-*@@@@@+    @@@@=@=+====+=+=+===+============+ 
+ -----------------:-----=: +@#@=@=.-@@@#@##@@%=@@@@@@@ :. :-#@%@   @@=@.========++++=============== 
+ ----------------------=-: :@+=.+@*%#+#*%@%@%*+%@%@%%@@@@@%@%#-:   @.@+-=============+=+++++++++=+= 
+ --------------:----:-:+=:: @@@@%:=%%%%#@@%@@%+%@%@@#@@%@*%@@@@*#@@@ @:-==============+============ 
+ ----------------------=:--. :@@@@%%+**%@@%@%*:%#%@%%###%%#%%**  ++@ @:=================+=========+ 
+ ----------------------=-:.::   *@@@@@%=*%@@@%*@@#@@%#@@#@%@%@#=:*@+::===================++===++++= 
+ -----------------:--:=---::::..   +@@@@@#*@@#-**#@@%@@@%%%#*%@=@%@-+ *====================+++====+ 
+ -------------------:-=::-:::-=:.-.    %@@@@@%%=**#%#%@@@@%@@@@#@%@% :#============================ 
+ ------------------:.+---:-::-:-++=-:-:.:-@@@@%#*=-+:*+=*%#%@%%*+ +   +============================ 
+ :-:--------------:.++--.:::=:-:-=*--===-:. @@@%@##+%@+@@#**%@@*%%**=*+============================ 
+ :-:-----------:.. #*--::..::-=-+--+*+++++=-:*@@@@@%@##@#@%#%@@*#=** +============================= 
+ --------::.    :%**--:.--.:-:*--:---===:==--: :#@@@@@@@%#@@%%@@%@%==+============================= 
+                                               .::..:::+******-=:                                   
+*/
+/*
+Greetings, they call me CHADSDAQ . I am the Market, the heart of this trading simulation.
+I manage the order books, process trades, and keep everything running smoothly.
+I am the core of the financial system , it is important you reader have blind faith in my fairness and correctness.
+Remember ,crying in the casino is not allowed. Good luck, and may the odds be ever in your favor.
+
+*/ 
+// Multi-ticker, multi-threaded matching engine.
+// The Market is a "dumb" manager of order books, decoupled from agents.
+// It receives orders via a channel and publishes updates to agents and a shadow book reconciler.
+// If this file doesn't work , they will show this as an example of how to generate combinatorial deadlocks . 
 
 use crate::Marketable;
 use crate::events::MarketEvent;
@@ -143,18 +197,23 @@ impl Market {
         *counter
     }
 
-    fn process_request(&mut self, req: OrderRequest) {
+    fn process_request(&mut self, mut req: OrderRequest) { // Make req mutable
         let order_id = self.next_order_id();
 
-        let (stock_id, shadow_event) = match &req {
+        // Assign the generated order_id to the request
+        let stock_id_for_dispatch;
+        let shadow_event_for_dispatch;
+
+        match &mut req { // Match on mutable req
             OrderRequest::LimitOrder {
+                order_id: req_order_id, // Capture mutable reference to order_id
                 agent_id,
                 stock_id,
                 side,
                 price,
                 volume,
             } => {
-                //println!("[Market] Received Limit Order: Agent {} Stock {} Side {:?} Price {} Volume {}", agent_id, stock_id, side, price, volume);
+                *req_order_id = order_id; // Assign the new order_id
                 let order = Order {
                     id: order_id,
                     agent_id: *agent_id,
@@ -171,15 +230,17 @@ impl Market {
                 if let Some(ch) = self.agent_channels.get(agent_id) {
                     ch.ack_tx.send(order).ok();
                 }
-                (*stock_id, ShadowEvent::LimitOrder(order))
+                stock_id_for_dispatch = *stock_id;
+                shadow_event_for_dispatch = ShadowEvent::LimitOrder(order);
             }
             OrderRequest::MarketOrder {
+                order_id: req_order_id, // Capture mutable reference to order_id
                 agent_id,
                 stock_id,
                 side,
                 volume,
             } => {
-                //println!("[Market] Received Market Order: Agent {} Stock {} Side {:?} Volume {}", agent_id, stock_id, side, volume);
+                *req_order_id = order_id; // Assign the new order_id
                 let price = (self
                     .last_traded_price
                     .read()
@@ -201,49 +262,45 @@ impl Market {
                 if let Some(ch) = self.agent_channels.get(agent_id) {
                     ch.ack_tx.send(order).ok();
                 }
-                (*stock_id, ShadowEvent::MarketOrder(order))
+                stock_id_for_dispatch = *stock_id;
+                shadow_event_for_dispatch = ShadowEvent::MarketOrder(order);
             }
             OrderRequest::CancelOrder { agent_id, order_id } => {
-                //println!("[Market] Received Cancel Order: Agent {} Order {}", agent_id, order_id);
-
                 let stock_id_lookup = {
                     let map_guard = self.order_id_to_stock_id_map.read().unwrap();
-                    map_guard.get(order_id).copied()
+                    map_guard.get(&order_id).copied()
                 };
 
                 if let Some(stock_id) = stock_id_lookup {
                     self.order_id_to_stock_id_map
                         .write()
                         .unwrap()
-                        .remove(order_id);
-                    (
-                        stock_id,
-                        ShadowEvent::CancelOrder {
-                            order_id: *order_id,
-                            agent_id: *agent_id,
-                        },
-                    )
+                        .remove(&order_id);
+                    stock_id_for_dispatch = stock_id;
+                    shadow_event_for_dispatch = ShadowEvent::CancelOrder {
+                        order_id: *order_id,
+                        agent_id: *agent_id,
+                    };
                 } else {
-                    //println!("[Market] Attempted to cancel unknown or already filled order: {}", order_id);
                     return; // Order not found
                 }
             }
         };
 
         // Dispatch to the appropriate AsyncOrderBook
-        if let Some(tx) = self.order_txs.get(&stock_id) {
+        if let Some(tx) = self.order_txs.get(&stock_id_for_dispatch) {
             //println!("[Market] Dispatching request to AsyncOrderBook for stock {}", stock_id);
             tx.send(req).ok();
         }
 
         // Dispatch to the appropriate shadow book channels
-        if let Some(tx) = self.shadow_update_txs.get(&stock_id) {
+        if let Some(tx) = self.shadow_update_txs.get(&stock_id_for_dispatch) {
             //println!("[Market] Dispatching shadow event for stock {}", stock_id);
-            tx.send(shadow_event.clone()).ok();
+            tx.send(shadow_event_for_dispatch.clone()).ok();
         }
-        if let Some(tx) = self.vip_shadow_update_txs.get(&stock_id) {
+        if let Some(tx) = self.vip_shadow_update_txs.get(&stock_id_for_dispatch) {
             //println!("[Market] Dispatching VIP shadow event for stock {}", stock_id);
-            tx.send(shadow_event).ok();
+            tx.send(shadow_event_for_dispatch).ok();
         }
     }
 }

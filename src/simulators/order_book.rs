@@ -51,6 +51,7 @@ impl OrderBook {
     // ---------------------------------------------------------------------
     pub fn process_market_order(
         &mut self,
+        taker_order_id: u64,
         taker_agent_id: usize,
         side: Side,
         mut volume_to_fill: u64,
@@ -99,6 +100,7 @@ impl OrderBook {
                         maker_agent_id: maker_order.agent_id,
                         taker_side: side,
                         maker_order_id: maker_order.id,
+                        taker_order_id,
                     });
                     // ----------------------------------
 
@@ -172,6 +174,7 @@ impl OrderBook {
                             maker_agent_id: maker_order.agent_id,
                             taker_side: order.side,
                             maker_order_id: maker_order.id,
+                            taker_order_id: order.id,
                         });
                         // ----------------------------------
 
@@ -269,7 +272,7 @@ mod tests {
     fn test_market_order_simple_fill() {
         let mut book = OrderBook::new();
         book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 50));
-        let trades = book.process_market_order(2, Side::Buy, 30);
+        let trades = book.process_market_order(0, 2, Side::Buy, 30); // Add taker_order_id: 0
         assert_eq!(trades.len(), 1);
         let ask_level = book.asks.get(&100).unwrap();
         assert_eq!(ask_level.total_volume, 20);
@@ -280,7 +283,7 @@ mod tests {
     fn test_market_order_full_fill_and_remove() {
         let mut book = OrderBook::new();
         book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 50));
-        book.process_market_order(2, Side::Buy, 50);
+        book.process_market_order(0, 2, Side::Buy, 50); // Add taker_order_id: 0
         assert!(book.asks.get(&100).is_none());
         assert!(book.order_id_map.get(&1).is_none());
     }
@@ -332,7 +335,7 @@ mod tests {
         book.add_limit_order(new_order(2, 1, 1, Side::Sell, 101, 30));
         book.add_limit_order(new_order(3, 1, 1, Side::Sell, 102, 40));
 
-        let trades = book.process_market_order(2, Side::Buy, 100);
+        let trades = book.process_market_order(0, 2, Side::Buy, 100); // Add taker_order_id: 0
 
         assert_eq!(trades.len(), 3);
         assert_eq!(trades.iter().map(|t| t.volume).sum::<u64>(), 90);
@@ -348,7 +351,7 @@ mod tests {
         let mut book = OrderBook::new();
         book.add_limit_order(new_order(1, 1, 1, Side::Sell, 100, 100));
 
-        book.process_market_order(2, Side::Buy, 40);
+        book.process_market_order(0, 2, Side::Buy, 40); // Add taker_order_id: 0
 
         let level = book.asks.get(&100).unwrap();
         assert_eq!(level.total_volume, 60);

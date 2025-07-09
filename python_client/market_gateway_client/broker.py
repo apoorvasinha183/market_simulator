@@ -21,6 +21,7 @@ class Broker:
         self.stub = None
         self.is_running = False
         self.outgoing_messages = queue.Queue()
+        self.incoming_updates_queue = queue.Queue()
 
     # ──────────────────────────────────────────────────────────────────────────
     # internal helpers
@@ -32,10 +33,10 @@ class Broker:
         print("[Broker] Listening for messages from the server...")
         try:
             for update in stream:
-                print(f"[Broker] Received update: {update}")
+                self.incoming_updates_queue.put(update)
         except grpc.RpcError as e:
             if self.is_running:
-                print(f"[Broker] Error listening for updates: {e.status()}")
+                print(f"[Broker] Error listening for updates: {e}")
 
     def _generate_requests(self):
         """
@@ -44,6 +45,7 @@ class Broker:
         while self.is_running:
             try:
                 message = self.outgoing_messages.get(timeout=1)
+                print(f"[Broker] _generate_requests yielding message for stock {message.submit_order.stock_id}")
                 yield message
             except queue.Empty:
                 continue
@@ -66,40 +68,16 @@ class Broker:
         self.outgoing_messages.put(from_python_message)
         print(f"[Broker] Enqueued order: {order_type} {side} {volume}@{price} for stock {stock_id}")
 
-    def _order_generator_thread(self, num_orders=100):
-        """
-        Background thread: generates and enqueues various types of orders.
-        """
-        print(f"[Broker] 🔫  Order generator thread started (generating {num_orders} orders).")
-        stock_ids = [1, 2, 3,4] # Example stock IDs
-        sides = ["Buy", "Sell"]
-        order_types = ["Market", "Limit"]
-        buy_bias = 0.7
-        for i in range(num_orders):
-            client_id = f"customer_agent_{random.randint(0, 2)}" # Example client IDs
-            stock_id = random.choice(stock_ids)
-            #stock_id = 3
-            #side = random.choice(sides)
-            side = "Buy" if random.random() < buy_bias else "Sell"
-            #side = sides[0]
-            #order_type = random.choice(order_types)
-            order_type = order_types[0]
-            volume = random.randint(5000, 50000) # Adjusted volume for more impact
-
-            price = 0.0
-            if order_type == "Limit":
-                # Generate a more dynamic price for limit orders
-                base_price = 150.0 # Still a base, but now with wider swings
-                price = round(base_price + random.uniform(-10.0, 10.0), 2)
-
-            self.send_order(client_id, stock_id, side, order_type, volume, price)
-            time.sleep(random.uniform(0.05, 0.5)) # Faster order generation
-        print("[Broker] Order generator thread finished.")
+    def get_raw_update(self, block=True, timeout=1.0):
+        try:
+            return self.incoming_updates_queue.get(block=block, timeout=timeout)
+        except queue.Empty:
+            return None
 
     # ──────────────────────────────────────────────────────────────────────────
     # public API
     # ──────────────────────────────────────────────────────────────────────────
-    def run(self):
+    def connect(self):
         """
         Establishes the connection and starts the listener thread.
         """
@@ -123,23 +101,8 @@ class Broker:
             )
             listener_thread.start()
 
-            # Launch order generator thread
-            order_gen_thread = threading.Thread(
-                target=self._order_generator_thread, args=(1000,), daemon=True
-            )
-            order_gen_thread.start()
-            print("[Broker] Started dynamic order generation.")
-
-            # Keep main thread alive until order generation is done
-            while order_gen_thread.is_alive():
-                time.sleep(0.1)
-
         except grpc.RpcError as e:
             print(f"[Broker] Failed to connect to gRPC server: {e.status()}")
-        except KeyboardInterrupt:
-            print("[Broker] Shutting down.")
-        finally:
-            self.stop()
 
     def stop(self):
         """

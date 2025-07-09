@@ -170,7 +170,7 @@ impl ShadowCoordinator {
                     .order_books
                     .entry(stock_id)
                     .or_default()
-                    .process_market_order(order.agent_id, order.side, order.volume),
+                    .process_market_order(order.id, order.agent_id, order.side, order.volume),
                 ShadowEvent::CancelOrder { order_id, agent_id } => {
                     if let Some(mut book) = buffer.order_books.get_mut(&stock_id) {
                         book.cancel_order(order_id, agent_id);
