@@ -59,7 +59,7 @@ pub fn bench_scaling(c: &mut Criterion) {
                     |mut book| {
                         // perform a market buy of `sweep` shares
                         let trades = book.process_market_order(
-                            0, // taker_order_id: placeholder
+                            0,              // taker_order_id: placeholder
                             black_box(999), // taker id
                             Side::Buy,
                             sweep,

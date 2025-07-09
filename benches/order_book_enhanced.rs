@@ -499,7 +499,8 @@ pub fn bench_price_level_impact(c: &mut Criterion) {
             b.iter_batched(
                 || setup_book_with_params(FIXED_ORDERS, levels, Side::Sell, 100, 42),
                 |mut book| {
-                    let trades = book.process_market_order(0, black_box(999), Side::Buy, FIXED_SWEEP);
+                    let trades =
+                        book.process_market_order(0, black_box(999), Side::Buy, FIXED_SWEEP);
                     black_box(trades);
                 },
                 BatchSize::LargeInput,
@@ -603,7 +604,8 @@ pub fn bench_short_covering_scenarios(c: &mut Criterion) {
             b.iter_batched(
                 || setup_sell_book(BOOK_SIZE),
                 |mut book| {
-                    let trades = book.process_market_order(0, black_box(888), Side::Buy, cover_volume);
+                    let trades =
+                        book.process_market_order(0, black_box(888), Side::Buy, cover_volume);
                     black_box(trades);
                 },
                 BatchSize::LargeInput,

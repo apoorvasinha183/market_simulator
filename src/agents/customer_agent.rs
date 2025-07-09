@@ -41,7 +41,10 @@ impl MarketGateway for CustomerAgentServer {
     ) -> Result<Response<Self::EventStreamStream>, Status> {
         let mut stream = request.into_inner();
         let (tx, rx) = tokio_mpsc::channel(10000);
-        self.grpc_response_sender.lock().unwrap().replace(tx.clone()); // Store the sender
+        self.grpc_response_sender
+            .lock()
+            .unwrap()
+            .replace(tx.clone()); // Store the sender
 
         // --- Task to handle incoming messages from Python ---
         let sender_clone = self.order_request_sender.clone();
@@ -53,11 +56,17 @@ impl MarketGateway for CustomerAgentServer {
                 if let Some(event) = result.event {
                     match event {
                         market_gateway::from_python::Event::SubmitOrder(req) => {
-                            println!("[CustomerAgent Server] Received SubmitOrder from Python: client_id={}, stock_id={}, order_type={}", req.client_id, req.stock_id, req.order_type);
+                            println!(
+                                "[CustomerAgent Server] Received SubmitOrder from Python: client_id={}, stock_id={}, order_type={}",
+                                req.client_id, req.stock_id, req.order_type
+                            );
                             let side = match req.side.as_str() {
                                 "Buy" => Side::Buy,
                                 "Sell" => Side::Sell,
-                                _ => { /* ... error handling ... */ return; }
+                                _ => {
+                                    /* ... error handling ... */
+                                    return;
+                                }
                             };
 
                             let order_request = match req.order_type.as_str() {
@@ -79,19 +88,32 @@ impl MarketGateway for CustomerAgentServer {
                                         volume: req.volume,
                                     }
                                 }
-                                _ => { /* ... error handling ... */ return; }
+                                _ => {
+                                    /* ... error handling ... */
+                                    return;
+                                }
                             };
-                            
+
                             // HANDSHAKE STEP 1: Push the python client_id to the queue for this stock
-                            println!("[CustomerAgent Server] Pushing client_id {} for stock_id {} to queue.", req.client_id, req.stock_id);
-                            queues_clone.entry(req.stock_id).or_default().lock().unwrap().push_back(req.client_id.clone());
+                            println!(
+                                "[CustomerAgent Server] Pushing client_id {} for stock_id {} to queue.",
+                                req.client_id, req.stock_id
+                            );
+                            queues_clone
+                                .entry(req.stock_id)
+                                .or_default()
+                                .lock()
+                                .unwrap()
+                                .push_back(req.client_id.clone());
 
                             sender_clone.send(order_request.clone()).unwrap();
                         }
                     }
                 }
             }
-            eprintln!("[CustomerAgent Server] Incoming gRPC stream from Python ended or errored unexpectedly.");
+            eprintln!(
+                "[CustomerAgent Server] Incoming gRPC stream from Python ended or errored unexpectedly."
+            );
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))
@@ -107,11 +129,11 @@ pub struct CustomerAgent {
     port_channel: Arc<Mutex<Receiver<Trade>>>,
     _view_handle: ShadowBookHandle,
     _open_orders: Arc<Mutex<Vec<Order>>>,
-    
+
     // NEW STATE MANAGEMENT
     order_id_to_client_id: Arc<DashMap<u64, String>>,
     client_id_queues: Arc<DashMap<u64, Mutex<VecDeque<String>>>>,
-    
+
     // Holds the sender for the single gRPC response stream back to Python
     grpc_response_sender: Arc<Mutex<Option<tokio::sync::mpsc::Sender<Result<ToPython, Status>>>>>,
 }
@@ -142,12 +164,12 @@ impl Agent for CustomerAgent {
     fn run(&mut self) {
         //println!("[CustomerAgent {}] Starting...", self.id);
         let rt = Runtime::new().unwrap();
-        
+
         let ack_rx_clone = self.ack_channel.clone();
         let map_clone = self.order_id_to_client_id.clone();
         let queues_clone = self.client_id_queues.clone();
         let response_sender_clone = self.grpc_response_sender.clone();
-        
+
         thread::spawn(move || {
             let rx = ack_rx_clone.lock().unwrap();
             //println!("[CustomerAgent ACK Listener] Waiting for ACKs...");
@@ -160,23 +182,30 @@ impl Agent for CustomerAgent {
                         // Create the permanent mapping
                         map_clone.insert(order_ack.id, client_id.clone());
                         //println!("[CustomerAgent ACK Listener] Mapped order_id {} to client_id {}. Current map size: {}. Map content: {:?}", order_ack.id, client_id, map_clone.len(), map_clone);
-                        
+
                         let ack_msg = OrderAck {
                             client_id: client_id.clone(),
                             order_id: order_ack.id,
                             status: "Confirmed".to_string(),
                             details: "Order confirmed by market".to_string(),
                         };
-                        let response_msg = ToPython { event: Some(market_gateway::to_python::Event::OrderAck(ack_msg)) };
+                        let response_msg = ToPython {
+                            event: Some(market_gateway::to_python::Event::OrderAck(ack_msg)),
+                        };
                         //println!("[CustomerAgent ACK Listener] Attempting to send OrderAck for order_id {} to gRPC stream...", order_ack.id);
                         if let Some(sender) = response_sender_clone.lock().unwrap().as_ref() {
                             if let Err(e) = sender.blocking_send(Ok(response_msg)) {
-                                eprintln!("[CustomerAgent ACK Listener] Failed to send OrderAck for order_id {} to gRPC stream: {:?}", order_ack.id, e);
+                                eprintln!(
+                                    "[CustomerAgent ACK Listener] Failed to send OrderAck for order_id {} to gRPC stream: {:?}",
+                                    order_ack.id, e
+                                );
                             } else {
                                 //println!("[CustomerAgent ACK Listener] Successfully sent OrderAck for order_id {} to client {}.", order_ack.id, client_id);
                             }
                         } else {
-                            eprintln!("[CustomerAgent ACK Listener] No gRPC sender available for OrderAck.");
+                            eprintln!(
+                                "[CustomerAgent ACK Listener] No gRPC sender available for OrderAck."
+                            );
                         }
                     } else {
                         //println!("[CustomerAgent ACK Listener] Queue for stock_id {} was empty, but received ACK. This should not happen.", order_ack.stock_id);
@@ -193,7 +222,7 @@ impl Agent for CustomerAgent {
         let trade_rx_clone = self.port_channel.clone();
         let map_clone_trade = self.order_id_to_client_id.clone();
         let response_sender_clone_trade = self.grpc_response_sender.clone();
-        
+
         thread::spawn(move || {
             let rx = trade_rx_clone.lock().unwrap();
             //println!("[CustomerAgent Trade Listener] Waiting for trades...");
@@ -204,7 +233,8 @@ impl Agent for CustomerAgent {
                 let mut order_id_to_send: u64 = 0;
 
                 // Check if our agent was the taker
-                if trade.taker_agent_id == agent_id_for_trade_listener { // Use cloned id
+                if trade.taker_agent_id == agent_id_for_trade_listener {
+                    // Use cloned id
                     //println!("[CustomerAgent Trade Listener] Our agent was the taker. Attempting lookup for taker_order_id: {}.", trade.taker_order_id);
                     if let Some(entry) = map_clone_trade.get(&trade.taker_order_id) {
                         client_id_to_send = Some(entry.value().clone());
@@ -216,7 +246,10 @@ impl Agent for CustomerAgent {
                 }
 
                 // If not found as taker, check if our agent was the maker
-                if client_id_to_send.is_none() && trade.maker_agent_id == agent_id_for_trade_listener { // Use cloned id
+                if client_id_to_send.is_none()
+                    && trade.maker_agent_id == agent_id_for_trade_listener
+                {
+                    // Use cloned id
                     //println!("[CustomerAgent Trade Listener] Our agent was the maker. Attempting lookup for maker_order_id: {}.", trade.maker_order_id);
                     if let Some(entry) = map_clone_trade.get(&trade.maker_order_id) {
                         client_id_to_send = Some(entry.value().clone());
@@ -234,19 +267,28 @@ impl Agent for CustomerAgent {
                         stock_id: trade.stock_id,
                         price: trade.price as f64 / 100.0,
                         volume_filled: trade.volume,
-                        new_total_filled: 0, // Placeholder
+                        new_total_filled: 0,    // Placeholder
                         is_fully_filled: false, // Placeholder
                     };
-                    let response_msg = ToPython { event: Some(market_gateway::to_python::Event::TradeUpdate(trade_msg.clone())) };
+                    let response_msg = ToPython {
+                        event: Some(market_gateway::to_python::Event::TradeUpdate(
+                            trade_msg.clone(),
+                        )),
+                    };
                     //println!("[CustomerAgent Trade Listener] Attempting to send TradeUpdate for order_id {} to gRPC stream...", order_id_to_send);
                     if let Some(sender) = response_sender_clone_trade.lock().unwrap().as_ref() {
                         if let Err(e) = sender.blocking_send(Ok(response_msg)) {
-                            eprintln!("[CustomerAgent Trade Listener] Failed to send trade update to gRPC stream: {:?}", e);
+                            eprintln!(
+                                "[CustomerAgent Trade Listener] Failed to send trade update to gRPC stream: {:?}",
+                                e
+                            );
                         } else {
                             //println!("[CustomerAgent Trade Listener] Successfully sent TradeUpdate for order_id {} to client {}.", order_id_to_send, trade_msg.client_id);
                         }
                     } else {
-                        eprintln!("[CustomerAgent Trade Listener] No gRPC sender available for TradeUpdate.");
+                        eprintln!(
+                            "[CustomerAgent Trade Listener] No gRPC sender available for TradeUpdate."
+                        );
                     }
                 } else {
                     //println!("[CustomerAgent Trade Listener] No client_id found for either taker_order_id or maker_order_id. Skipping TradeUpdate.");
@@ -272,23 +314,37 @@ impl Agent for CustomerAgent {
                 .serve(addr)
                 .await
             {
-                eprintln!("[CustomerAgent {}] Error running gRPC server: {}", self.id, e);
+                eprintln!(
+                    "[CustomerAgent {}] Error running gRPC server: {}",
+                    self.id, e
+                );
             }
         });
     }
 
     // --- The rest of the trait methods are stubs for now ---
-    fn decide_actions(&mut self) { thread::sleep(std::time::Duration::from_millis(100)); }
+    fn decide_actions(&mut self) {
+        thread::sleep(std::time::Duration::from_millis(100));
+    }
     fn buy_stock(&mut self, _stock_id: u64, _volume: u64) {}
     fn sell_stock(&mut self, _stock_id: u64, _volume: u64) {}
     fn acknowledge_order(&mut self) {}
     fn margin_call(&mut self) {}
     fn update_portfolio(&mut self) {}
-    fn evaluate_port(&mut self, _market_view: &MarketState) -> f64 { 0.0 }
-    fn get_pending_orders(&self) -> Vec<Order> { vec![] }
+    fn evaluate_port(&mut self, _market_view: &MarketState) -> f64 {
+        0.0
+    }
+    fn get_pending_orders(&self) -> Vec<Order> {
+        vec![]
+    }
     fn cancel_open_order(&mut self, _order_id: u64) {}
-    fn get_id(&self) -> usize { self.id }
-    fn get_inventory(&self) -> i64 { 0 }
-    fn clone_agent(&self) -> Box<dyn Agent> { Box::new(self.clone()) }
+    fn get_id(&self) -> usize {
+        self.id
+    }
+    fn get_inventory(&self) -> i64 {
+        0
+    }
+    fn clone_agent(&self) -> Box<dyn Agent> {
+        Box::new(self.clone())
+    }
 }
-

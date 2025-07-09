@@ -74,7 +74,7 @@ impl AsyncOrderBook {
                 side,
                 volume,
             } => {
-                let mut order = crate::types::Order {
+                let _order = crate::types::Order {
                     id: order_id, // Use the captured order_id
                     agent_id,
                     stock_id,
@@ -83,7 +83,8 @@ impl AsyncOrderBook {
                     price: 0, // Market orders don't have a price in the request, will be filled by order book
                     filled: 0,
                 };
-                self.order_book.process_market_order(order_id, agent_id, side, volume) // Pass order_id
+                self.order_book
+                    .process_market_order(order_id, agent_id, side, volume) // Pass order_id
             }
             OrderRequest::CancelOrder { agent_id, order_id } => {
                 self.order_book.cancel_order(order_id, agent_id);
