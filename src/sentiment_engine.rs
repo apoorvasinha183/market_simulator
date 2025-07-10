@@ -2,9 +2,9 @@
 use crate::events::MarketEvent;
 use crate::stocks::StockMarket;
 use crossbeam_channel::Sender;
+use std::io;
 use std::net::UdpSocket;
 use std::thread;
-use std::io;
 
 /// The SentimentEngine is responsible for listening to external sentiment data
 /// and broadcasting it into the simulation's central event bus.
@@ -18,18 +18,18 @@ impl SentimentEngine {
             socket2::Type::DGRAM,
             Some(socket2::Protocol::UDP),
         )?;
-        
+
         // Enable SO_REUSEPORT for multiple processes
         socket.set_reuse_port(true)?;
-        
+
         // Optional: also set SO_REUSEADDR
         socket.set_reuse_address(true)?;
-        
+
         // Bind to the address
         let addr = format!("127.0.0.1:{}", port);
         let socket_addr: std::net::SocketAddr = addr.parse().unwrap();
         socket.bind(&socket_addr.into())?;
-        
+
         // Convert to std::net::UdpSocket
         Ok(socket.into())
     }
@@ -72,7 +72,7 @@ impl SentimentEngine {
                         Ok((size, _src)) => {
                             if let Ok(s) = std::str::from_utf8(&buf[..size]) {
                                 if let Ok(score) = s.trim().parse::<f64>() {
-                                    /* 
+                                    /*
                                     println!(
                                         "[SentimentEngine] PID {} received sentiment {} for {} from {}",
                                         std::process::id(),

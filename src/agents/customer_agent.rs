@@ -39,9 +39,11 @@ impl MarketGateway for CustomerAgentServer {
         &self,
         request: Request<Streaming<FromPython>>,
     ) -> Result<Response<Self::EventStreamStream>, Status> {
-        println!("
+        println!(
+            "
 [CustomerAgent Server] gRPC HANDLER CALLED. A client has connected.
-");
+"
+        );
         let mut stream = request.into_inner();
         let (tx, rx) = tokio_mpsc::channel(10000);
         self.grpc_response_sender
@@ -70,7 +72,10 @@ impl MarketGateway for CustomerAgentServer {
                                 "Buy" => Side::Buy,
                                 "Sell" => Side::Sell,
                                 _ => {
-                                    eprintln!("[CustomerAgent Server] Invalid side received: {}", req.side);
+                                    eprintln!(
+                                        "[CustomerAgent Server] Invalid side received: {}",
+                                        req.side
+                                    );
                                     return;
                                 }
                             };
@@ -95,7 +100,10 @@ impl MarketGateway for CustomerAgentServer {
                                     }
                                 }
                                 _ => {
-                                    eprintln!("[CustomerAgent Server] Invalid order_type received: {}", req.order_type);
+                                    eprintln!(
+                                        "[CustomerAgent Server] Invalid order_type received: {}",
+                                        req.order_type
+                                    );
                                     return;
                                 }
                             };
@@ -114,7 +122,10 @@ impl MarketGateway for CustomerAgentServer {
 
                             //println!("[CustomerAgent Server] Sending order request to internal market channel.");
                             if let Err(e) = sender_clone.send(order_request.clone()) {
-                                eprintln!("[CustomerAgent Server] FAILED to send order to internal market channel: {}", e);
+                                eprintln!(
+                                    "[CustomerAgent Server] FAILED to send order to internal market channel: {}",
+                                    e
+                                );
                             } else {
                                 //println!("[CustomerAgent Server] Successfully sent order to internal market channel.");
                             }
@@ -318,7 +329,10 @@ impl Agent for CustomerAgent {
                 grpc_response_sender: self.grpc_response_sender.clone(),
             };
 
-            println!("[CustomerAgent {}] gRPC server listening on {}", self.id, addr);
+            println!(
+                "[CustomerAgent {}] gRPC server listening on {}",
+                self.id, addr
+            );
 
             if let Err(e) = Server::builder()
                 .add_service(MarketGatewayServer::new(server))
