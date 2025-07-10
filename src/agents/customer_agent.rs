@@ -39,6 +39,9 @@ impl MarketGateway for CustomerAgentServer {
         &self,
         request: Request<Streaming<FromPython>>,
     ) -> Result<Response<Self::EventStreamStream>, Status> {
+        println!("
+[CustomerAgent Server] gRPC HANDLER CALLED. A client has connected.
+");
         let mut stream = request.into_inner();
         let (tx, rx) = tokio_mpsc::channel(10000);
         self.grpc_response_sender
@@ -52,19 +55,22 @@ impl MarketGateway for CustomerAgentServer {
         let queues_clone = self.client_id_queues.clone();
 
         tokio::spawn(async move {
+            //println!("[CustomerAgent Server] TASK SPAWNED to listen for messages from Python client.");
+            //println!("[CustomerAgent Server] Task spawned to handle incoming Python messages.");
             while let Some(result) = stream.message().await.ok().flatten() {
+                //println!("[CustomerAgent Server] Received a message from gRPC stream.");
                 if let Some(event) = result.event {
                     match event {
                         market_gateway::from_python::Event::SubmitOrder(req) => {
-                            println!(
-                                "[CustomerAgent Server] Received SubmitOrder from Python: client_id={}, stock_id={}, order_type={}",
-                                req.client_id, req.stock_id, req.order_type
-                            );
+                            //println!(
+                            //    "[CustomerAgent Server] Received SubmitOrder from Python: client_id={}, stock_id={}, side={}, type={}, vol={}",
+                            //    req.client_id, req.stock_id, req.side, req.order_type, req.volume
+                            //);
                             let side = match req.side.as_str() {
                                 "Buy" => Side::Buy,
                                 "Sell" => Side::Sell,
                                 _ => {
-                                    /* ... error handling ... */
+                                    eprintln!("[CustomerAgent Server] Invalid side received: {}", req.side);
                                     return;
                                 }
                             };
@@ -89,17 +95,16 @@ impl MarketGateway for CustomerAgentServer {
                                     }
                                 }
                                 _ => {
-                                    /* ... error handling ... */
+                                    eprintln!("[CustomerAgent Server] Invalid order_type received: {}", req.order_type);
                                     return;
                                 }
                             };
 
                             // HANDSHAKE STEP 1: Push the python client_id to the queue for this stock
-                            /*
-                            println!(
-                                "[CustomerAgent Server] Pushing client_id {} for stock_id {} to queue.",
-                                req.client_id, req.stock_id
-                            ); */
+                            //println!(
+                            //    "[CustomerAgent Server] Pushing client_id {} for stock_id {} to queue.",
+                            //    req.client_id, req.stock_id
+                            //);
                             queues_clone
                                 .entry(req.stock_id)
                                 .or_default()
@@ -107,7 +112,12 @@ impl MarketGateway for CustomerAgentServer {
                                 .unwrap()
                                 .push_back(req.client_id.clone());
 
-                            sender_clone.send(order_request.clone()).unwrap();
+                            //println!("[CustomerAgent Server] Sending order request to internal market channel.");
+                            if let Err(e) = sender_clone.send(order_request.clone()) {
+                                eprintln!("[CustomerAgent Server] FAILED to send order to internal market channel: {}", e);
+                            } else {
+                                //println!("[CustomerAgent Server] Successfully sent order to internal market channel.");
+                            }
                         }
                     }
                 }
@@ -300,7 +310,7 @@ impl Agent for CustomerAgent {
 
         // --- Spawn gRPC Server ---
         rt.block_on(async {
-            let addr = "[::1]:50051".parse().unwrap();
+            let addr = "0.0.0.0:50051".parse().unwrap();
             let server = CustomerAgentServer {
                 order_request_sender: self.order_channel.clone(),
                 client_id_queues: self.client_id_queues.clone(),
@@ -308,7 +318,7 @@ impl Agent for CustomerAgent {
                 grpc_response_sender: self.grpc_response_sender.clone(),
             };
 
-            //println!("[CustomerAgent {}] gRPC server listening on {}", self.id, addr);
+            println!("[CustomerAgent {}] gRPC server listening on {}", self.id, addr);
 
             if let Err(e) = Server::builder()
                 .add_service(MarketGatewayServer::new(server))

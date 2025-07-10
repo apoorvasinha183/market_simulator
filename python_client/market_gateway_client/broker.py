@@ -22,6 +22,7 @@ class Broker:
         self.is_running = False
         self.outgoing_messages = queue.Queue()
         self.incoming_updates_queue = queue.Queue()
+        self._unpacked_updates_queue = queue.Queue()
 
     # ──────────────────────────────────────────────────────────────────────────
     # internal helpers
@@ -29,14 +30,33 @@ class Broker:
     def _listen_for_updates(self, stream):
         """
         Runs in a separate thread, listening for messages from the server.
+        Messages are batched before being put into the incoming_updates_queue.
         """
         print("[Broker] Listening for messages from the server...")
+        current_batch = []
+        last_batch_time = time.time()
+        batch_interval = 0.01  # 10 ms
+        max_batch_size = 100
+
         try:
             for update in stream:
-                self.incoming_updates_queue.put(update)
+                current_batch.append(update)
+
+                # Check if batch is ready to be pushed
+                if len(current_batch) >= max_batch_size or \
+                   (time.time() - last_batch_time) >= batch_interval:
+                    if current_batch:  # Ensure batch is not empty
+                        self.incoming_updates_queue.put(current_batch)
+                        current_batch = []
+                        last_batch_time = time.time()
+
         except grpc.RpcError as e:
             if self.is_running:
                 print(f"[Broker] Error listening for updates: {e}")
+        finally:
+            # Put any remaining messages in the batch when the stream ends
+            if current_batch:
+                self.incoming_updates_queue.put(current_batch)
 
     def _generate_requests(self):
         """
@@ -69,8 +89,19 @@ class Broker:
         print(f"[Broker] Enqueued order: {order_type} {side} {volume}@{price} for stock {stock_id}")
 
     def get_raw_update(self, block=True, timeout=1.0):
+        # First, try to get an already unpacked update
         try:
-            return self.incoming_updates_queue.get(block=block, timeout=timeout)
+            return self._unpacked_updates_queue.get(block=False)
+        except queue.Empty:
+            pass # No unpacked updates, proceed to get a batch
+
+        # If no unpacked updates, try to get a batch
+        try:
+            batch = self.incoming_updates_queue.get(block=block, timeout=timeout)
+            for update in batch:
+                self._unpacked_updates_queue.put(update)
+            # Now that we've unpacked a batch, try to get an update again
+            return self._unpacked_updates_queue.get(block=False)
         except queue.Empty:
             return None
 

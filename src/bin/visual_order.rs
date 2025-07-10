@@ -70,8 +70,8 @@ struct AgentVisualizer {
     last_update: Instant,
     theme_dark: bool,
     animation_time: f64,
-    ath: f64,
-    atl: f64,
+    all_time_highs: HashMap<u64, f64>,
+    all_time_lows: HashMap<u64, f64>,
     debug_counter: u32,
     show_candlestick: bool, // Add this
 }
@@ -312,12 +312,16 @@ impl AgentVisualizer {
             self.candle_history.insert(key, value.into_iter().collect());
         }
 
-        // Only update ATH/ATL for the selected stock
-        if let Some(hist) = self.price_histories.get(&self.selected_id) {
-            if let Some((&last, tail)) = hist.split_last() {
-                self.ath = tail.iter().fold(last, |a, &p| a.max(p));
-                self.atl = tail.iter().fold(last, |a, &p| p.min(a));
-            }
+        // Update ATH/ATL for all stocks
+        for (&id, &px) in &market_state.last_traded_price {
+            self.all_time_highs
+                .entry(id)
+                .and_modify(|ath| *ath = ath.max(px))
+                .or_insert(px);
+            self.all_time_lows
+                .entry(id)
+                .and_modify(|atl| *atl = atl.min(px))
+                .or_insert(px);
         }
     }
 
@@ -504,10 +508,11 @@ impl AgentVisualizer {
                         );
                     });
 
-                    Plot::new("depth_plot")
+                    Plot::new(format!("depth_plot_{}", self.selected_id))
                         .legend(Legend::default())
                         .show_axes([true, true])
                         .show_grid([true, true])
+                        .auto_bounds(egui::Vec2b::new(true, false))
                         .show(ui, |p| {
                             // ASKS curve + fill
                             if !order_book.asks.is_empty() {
@@ -908,14 +913,26 @@ impl AgentVisualizer {
             metric_fixed_width(
                 ui,
                 "ATH",
-                &format!("${:.2}", self.ath),
+                &format!(
+                    "${:.2}",
+                    self.all_time_highs
+                        .get(&self.selected_id)
+                        .copied()
+                        .unwrap_or(0.0)
+                ),
                 Color32::from_rgb(40, 167, 69),
                 80.0,
             );
             metric_fixed_width(
                 ui,
                 "ATL",
-                &format!("${:.2}", self.atl),
+                &format!(
+                    "${:.2}",
+                    self.all_time_lows
+                        .get(&self.selected_id)
+                        .copied()
+                        .unwrap_or(0.0)
+                ),
                 Color32::from_rgb(220, 53, 69),
                 80.0,
             );
@@ -968,6 +985,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::CustomerAgent, // This agent will host the gRPC server
         AgentType::MarketMaker,
         AgentType::MomentumAgent,
+        AgentType::Astrologer,
         AgentType::Thermodynamic {
             initial_temperature: 0.2,
             specific_heat: 0.1,
@@ -1008,13 +1026,19 @@ fn main() -> Result<(), eframe::Error> {
         .get(&first_id)
         .unwrap_or(&0.0);
 
-    let mut hist = HashMap::new();
-    hist.insert(first_id, vec![first_px]);
+    let mut price_histories = HashMap::new();
+    price_histories.insert(first_id, vec![first_px]);
+
+    let mut all_time_highs = HashMap::new();
+    all_time_highs.insert(first_id, first_px);
+
+    let mut all_time_lows = HashMap::new();
+    all_time_lows.insert(first_id, first_px);
 
     let app_state = AgentVisualizer {
         shadow_handle,
         candle_data_handle,
-        price_histories: hist,
+        price_histories,
         candle_history: HashMap::new(),
         selected_id: first_id,
         selected_timeframe: TimeFrame::TenSeconds,
@@ -1022,8 +1046,8 @@ fn main() -> Result<(), eframe::Error> {
         last_update: Instant::now(),
         theme_dark: true,
         animation_time: 0.0,
-        ath: first_px,
-        atl: first_px,
+        all_time_highs,
+        all_time_lows,
         debug_counter: 0,
         show_candlestick: false,
     };

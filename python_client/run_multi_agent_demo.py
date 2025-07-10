@@ -1,13 +1,14 @@
 import time
 import random
 import threading
+import os
 from market_gateway_client.rl_gateway import RLGateway
 
 # --- Configuration ---
 NUM_AGENTS = 2
 STOCK_IDS = list(range(1, 21)) # Stocks from 1 to 20
-MIN_VOLUME = 100
-MAX_VOLUME = 10000
+MIN_VOLUME = 10000
+MAX_VOLUME = 10000000
 BASE_PRICE = 150.0
 PRICE_VARIATION = 10.0
 ORDER_TYPES = ["Market", "Limit"]
@@ -21,8 +22,8 @@ def run_agent_activity(agent_id: str, gateway: RLGateway):
             stock_id = random.choice(STOCK_IDS)
             #order_type = random.choice(ORDER_TYPES)
             order_type= ORDER_TYPES[0]
-            side = random.choice(SIDES)
-            #side = SIDES[1]
+            #side = random.choice(SIDES)
+            side = SIDES[0]
             volume = random.randint(MIN_VOLUME, MAX_VOLUME)
             price = 0.0
 
@@ -59,8 +60,15 @@ if __name__ == "__main__":
     print("--- Starting Multi-Agent Demo ---")
     print("Make sure the Rust gRPC server is running in a separate terminal.")
 
+    # --- Connection Configuration ---
+    # Read host and port from environment variables, with fallbacks for local development.
+    host = os.environ.get("GRPC_HOST", "localhost")
+    port = int(os.environ.get("GRPC_PORT", 50051))
+    print(f"Attempting to connect to gRPC server at {host}:{port}...")
+
+
     # Initialize the RLGateway (it's a singleton)
-    gateway = RLGateway()
+    gateway = RLGateway(host=host, port=port)
 
     agent_threads = []
     agent_ids = []

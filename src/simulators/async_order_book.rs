@@ -33,9 +33,16 @@ impl AsyncOrderBook {
     /// The main loop for the order book thread.
     fn run(mut self) {
         thread::spawn(move || {
+            //let mut ntrades:u64 = 0;
             while let Ok(req) = self.order_rx.recv() {
                 let trades = self.process_request(req);
                 for trade in trades {
+                    //ntrades += 1;
+                    // Log every 10000 trades upto the first 100k
+                    /* 
+                    if (ntrades % 10000 == 0) && (ntrades < 100000) {
+                        println!("Processed {} trades", ntrades);
+                    } */
                     if self.trade_tx.send(trade).is_err() {
                         // If the receiver is dropped, the market is likely shutting down.
                         break;
