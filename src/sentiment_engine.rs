@@ -6,31 +6,33 @@ use std::io;
 use std::net::UdpSocket;
 use std::thread;
 
+use std::net::{IpAddr, Ipv4Addr};
+
 /// The SentimentEngine is responsible for listening to external sentiment data
 /// and broadcasting it into the simulation's central event bus.
 pub struct SentimentEngine;
 
 impl SentimentEngine {
-    /// Creates a UDP socket with SO_REUSEPORT enabled for multiple processes
-    fn create_reusable_socket(port: u16) -> io::Result<UdpSocket> {
+    /// Joins a multicast group on a specific port.
+    fn join_multicast_group(port: u16) -> io::Result<UdpSocket> {
+        let multicast_addr: Ipv4Addr = "224.0.0.123".parse().unwrap();
+        let bind_addr: Ipv4Addr = "0.0.0.0".parse().unwrap(); // Bind to all interfaces
+
         let socket = socket2::Socket::new(
             socket2::Domain::IPV4,
             socket2::Type::DGRAM,
             Some(socket2::Protocol::UDP),
         )?;
 
-        // Enable SO_REUSEPORT for multiple processes
+        socket.set_reuse_address(true)?;
+        #[cfg(unix)] // SO_REUSEPORT is not available on all platforms
         socket.set_reuse_port(true)?;
 
-        // Optional: also set SO_REUSEADDR
-        socket.set_reuse_address(true)?;
+        let addr = std::net::SocketAddr::new(IpAddr::V4(bind_addr), port);
+        socket.bind(&addr.into())?;
 
-        // Bind to the address
-        let addr = format!("127.0.0.1:{}", port);
-        let socket_addr: std::net::SocketAddr = addr.parse().unwrap();
-        socket.bind(&socket_addr.into())?;
+        socket.join_multicast_v4(&multicast_addr, &bind_addr)?;
 
-        // Convert to std::net::UdpSocket
         Ok(socket.into())
     }
 
@@ -40,7 +42,7 @@ impl SentimentEngine {
     /// * `stock_market` - A reference to the stock market definitions to get port info.
     /// * `event_tx` - The sender for the main event bus.
     pub fn run(stock_market: &StockMarket, event_tx: Sender<MarketEvent>) {
-        println!("[SentimentEngine] Starting sentiment listeners...");
+        println!("[SentimentEngine] Starting multicast sentiment listeners...");
         for stock in &stock_market.stocks {
             let tx_clone = event_tx.clone();
             let port = stock.sentiment_port as u16;
@@ -48,11 +50,11 @@ impl SentimentEngine {
             let stock_ticker = stock.ticker.clone();
 
             thread::spawn(move || {
-                let socket = match Self::create_reusable_socket(port) {
+                let socket = match Self::join_multicast_group(port) {
                     Ok(s) => s,
                     Err(e) => {
                         eprintln!(
-                            "[SentimentEngine] Failed to create reusable socket for {} on port {}: {}",
+                            "[SentimentEngine] Failed to join multicast group for {} on port {}: {}",
                             stock_ticker, port, e
                         );
                         return;
@@ -60,7 +62,7 @@ impl SentimentEngine {
                 };
 
                 println!(
-                    "[SentimentEngine] Process {} listening for {} sentiment on 127.0.0.1:{}",
+                    "[SentimentEngine] Process {} listening for {} multicast on 224.0.0.123:{}",
                     std::process::id(),
                     stock_ticker,
                     port
@@ -72,14 +74,6 @@ impl SentimentEngine {
                         Ok((size, _src)) => {
                             if let Ok(s) = std::str::from_utf8(&buf[..size]) {
                                 if let Ok(score) = s.trim().parse::<f64>() {
-                                    /*
-                                    println!(
-                                        "[SentimentEngine] PID {} received sentiment {} for {} from {}",
-                                        std::process::id(),
-                                        score,
-                                        stock_ticker,
-                                        src
-                                    ); */
                                     let event = MarketEvent::SentimentUpdate { stock_id, score };
                                     if tx_clone.send(event).is_err() {
                                         // Main bus closed, shut down thread

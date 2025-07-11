@@ -20,7 +20,7 @@ pub const MM_INITIAL_INVENTORY: i64 = 1_000_000;
 pub const MM_INITIAL_CENTER_PRICE: u64 = 15_000; // $150.00
 
 // A tighter spread for a more competitive market
-pub const MM_DESIRED_SPREAD: u64 = 8; // $0.08
+pub const MM_DESIRED_SPREAD: u64 = 80; // $0.08
 
 pub const MM_SKEW_FACTOR: f64 = 0.00001;
 
@@ -43,7 +43,7 @@ pub const MM_QUOTE_VOL_MAX: u64 = 20_000;
 pub const MM_REQUOTE_THRESHOLD_BPS: u64 = 10; // 10 BPS = 0.1%
 
 // --- MomentumAgent ---
-pub const MOMENTUM_AGENT_NUM_TRADERS: u32 = 50;
+pub const MOMENTUM_AGENT_NUM_TRADERS: u32 = 5000;
 pub const MOMENTUM_AGENT_ACTION_PROB: f64 = 0.4;
 pub const MOMENTUM_AGENT_VOL_MIN: u64 = 100;
 pub const MOMENTUM_AGENT_VOL_MAX: u64 = 1000;
@@ -102,10 +102,10 @@ pub const WHALE_ACTION_PROB: f64 = 0.8;
 pub const WHALE_ORDER_VOLUME: u64 = 100_000;
 
 // Reduced price offset to be aggressive but not completely unrealistic.
-pub const WHALE_PRICE_OFFSET_MAX: u64 = 2000; // $20.00
+pub const WHALE_PRICE_OFFSET_MAX: u64 = 5000; // $20.00
 pub const WHALE_PRICE_OFFSET_MIN: u64 = 100; // $1.00
 
-pub const WHALE_REFRESH_THRESHOLD_BPS: u64 = 20; // 0.20%
+pub const WHALE_REFRESH_THRESHOLD_BPS: u64 = 200; // 2.0%
 
 pub const CRAZY_WHALE: f64 = 0.001;
 pub const WHALE_TAPER_ORDERS: u64 = 100;

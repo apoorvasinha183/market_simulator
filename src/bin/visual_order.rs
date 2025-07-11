@@ -591,7 +591,7 @@ impl AgentVisualizer {
                             };
 
                             // Set plot bounds dynamically
-                            let x_range = 20.0; // Adjust this value to control the visible price range
+                            let x_range = 50.0; // Adjust this value to control the visible price range
                             p.set_plot_bounds(PlotBounds::from_min_max(
                                 [mid_price - x_range, 0.0],
                                 [mid_price + x_range, max_cum_volume * 1.1], // Add 10% buffer to max volume
@@ -1003,7 +1003,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::IPO,
     ];*/
 
-    let orchestra = Orchestra::new(participants, 10, 10);
+    let orchestra = Orchestra::new(participants, 1000, 10);
     let shadow_handle = orchestra.get_shadow_handle();
 
     let candle_data_handle = orchestra.get_candle_data_handle();
