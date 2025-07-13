@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" href="./favicon.svg" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+		
+		<link href="./_app/immutable/assets/2.CD7Lkqpj.css" rel="stylesheet">
+		<link rel="modulepreload" href="./_app/immutable/entry/start.CjcPC1B5.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/U16kaxHt.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/DlbM9PS4.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/Bd9Vpji8.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/U1LcbJ9J.js">
+		<link rel="modulepreload" href="./_app/immutable/entry/app.CpP9QKhe.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/D9Z9MdNV.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/NZTpNUN0.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/DFgM3nMz.js">
+		<link rel="modulepreload" href="./_app/immutable/nodes/0.uZ0GQ_Mo.js">
+		<link rel="modulepreload" href="./_app/immutable/nodes/2.bL2VT9x5.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/CQIUzcky.js">
+		<link rel="modulepreload" href="./_app/immutable/chunks/C9_H5Iza.js">
+	</head>
+	<body data-sveltekit-preload-data="hover" class="neo-brutalism-body">
+		<div style="display: contents"><!--[--><!--[--><!----><!----><main class="neo-brutalism-theme svelte-murmlu"><div class="header svelte-murmlu"><div class="title-section svelte-murmlu"><h1 class="svelte-murmlu">Market Visualizer</h1> <div class="stock-info svelte-murmlu"><h2 class="svelte-murmlu">N/A</h2> <p class="svelte-murmlu">N/A</p></div></div> <div class="controls svelte-murmlu"><a href="./orderbook" class="button svelte-murmlu">Order Book</a> <div class="select-wrapper svelte-murmlu"><label for="stock-select" class="svelte-murmlu">Stock:</label> <select id="stock-select" class="svelte-murmlu"><!--[--><!--]--></select></div> <div class="select-wrapper svelte-murmlu"><label for="timeframe-select" class="svelte-murmlu">Timeframe:</label> <select id="timeframe-select" class="svelte-murmlu"><!--[--><option value="TenSeconds" selected>TenSeconds</option><option value="OneMinute">OneMinute</option><option value="FiveMinutes">FiveMinutes</option><option value="ThirtyMinutes">ThirtyMinutes</option><!--]--></select></div> <button class="button svelte-murmlu">Show Line Chart</button></div></div> <div class="market-summary-cards svelte-murmlu"><div class="card summary-card svelte-murmlu"><span class="label svelte-murmlu">Last:</span> <span class="value svelte-murmlu">$N/A</span></div> <div class="card summary-card svelte-murmlu"><span class="label svelte-murmlu">Volume:</span> <span class="value svelte-murmlu">N/A</span></div> <div class="card summary-card svelte-murmlu"><span class="label svelte-murmlu">Mid:</span> <span class="value svelte-murmlu">$N/A</span></div> <div class="card summary-card svelte-murmlu"><span class="label svelte-murmlu">Spread:</span> <span class="value svelte-murmlu">$N/A</span></div></div> <div class="content-grid svelte-murmlu"><div class="card chart-container svelte-murmlu"><div style="display: block"><h2 class="svelte-murmlu">Candlestick Chart (N/A - TenSeconds)</h2> <canvas></canvas></div> <div style="display: none"><h2 class="svelte-murmlu">Price Chart (N/A)</h2> <canvas></canvas></div></div></div></main><!----><!----><!----><!--]--> <!--[!--><!--]--><!--]-->
+			
+			<script>
+				{
+					__sveltekit_1uf44mr = {
+						base: new URL(".", location).pathname.slice(0, -1),
+						assets: "/market_simulator"
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import("./_app/immutable/entry/start.CjcPC1B5.js"),
+						import("./_app/immutable/entry/app.CpP9QKhe.js")
+					]).then(([kit, app]) => {
+						kit.start(app, element, {
+							node_ids: [0, 2],
+							data: [null,null],
+							form: null,
+							error: null
+						});
+					});
+				}
+			</script>
+		</div>
+	</body>
+</html>

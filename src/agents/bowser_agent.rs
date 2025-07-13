@@ -1,6 +1,6 @@
 // src/agents/bowser_agent.rs
 
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -25,6 +25,7 @@ use crate::{
         candle_analyzer::CandleDataHandle,
         orchestra::{MarketState, ShadowBookHandle},
     },
+    simulators::order_book::PriceLevel,
     types::order::{Order, OrderRequest, Trade},
 };
 
@@ -126,11 +127,34 @@ impl Agent for BowserAgent {
                             }
                         }
 
+                        let mut filtered_order_books = HashMap::new();
+                        for (stock_id, order_book) in market_state.order_books.iter() {
+                            if let Some(mid_price) = market_state.get_mid_price(*stock_id) {
+                                let lower_bound = (mid_price as f64 * 0.7) as u64;
+                                let upper_bound = (mid_price as f64 * 1.3) as u64;
+
+                                let filtered_bids: BTreeMap<u64, PriceLevel> = order_book.bids.iter()
+                                    .filter(|&(&price, _)| price >= lower_bound && price <= upper_bound)
+                                    .map(|(&price, level)| (price, level.clone()))
+                                    .collect();
+
+                                let filtered_asks: BTreeMap<u64, PriceLevel> = order_book.asks.iter()
+                                    .filter(|&(&price, _)| price >= lower_bound && price <= upper_bound)
+                                    .map(|(&price, level)| (price, level.clone()))
+                                    .collect();
+
+                                let mut filtered_book = order_book.clone();
+                                filtered_book.bids = filtered_bids;
+                                filtered_book.asks = filtered_asks;
+                                filtered_order_books.insert(*stock_id, filtered_book);
+                            }
+                        }
+
                         let market_state_payload = json!({
                             "stocks": market_state.stocks,
                             "last_traded_price": market_state.last_traded_price,
                             "cumulative_volume": market_state.cumulative_volume,
-                            "order_books": market_state.order_books,
+                            "order_books": filtered_order_books,
                             "mid_prices": mid_prices,
                             "spreads": spreads
                         });
@@ -270,10 +294,33 @@ async fn websocket(stream: WebSocket, state: Arc<AppState>) {
         }
     }
 
+    let mut filtered_order_books = HashMap::new();
+    for (stock_id, order_book) in market_state.order_books.iter() {
+        if let Some(mid_price) = market_state.get_mid_price(*stock_id) {
+            let lower_bound = (mid_price as f64 * 0.7) as u64;
+            let upper_bound = (mid_price as f64 * 1.3) as u64;
+
+            let filtered_bids: BTreeMap<u64, PriceLevel> = order_book.bids.iter()
+                .filter(|&(&price, _)| price >= lower_bound && price <= upper_bound)
+                .map(|(&price, level)| (price, level.clone()))
+                .collect();
+
+            let filtered_asks: BTreeMap<u64, PriceLevel> = order_book.asks.iter()
+                .filter(|&(&price, _)| price >= lower_bound && price <= upper_bound)
+                .map(|(&price, level)| (price, level.clone()))
+                .collect();
+
+            let mut filtered_book = order_book.clone();
+            filtered_book.bids = filtered_bids;
+            filtered_book.asks = filtered_asks;
+            filtered_order_books.insert(*stock_id, filtered_book);
+        }
+    }
+
     let initial_payload = json!({
         "type": "snapshot",
         "market_state": {
-            "order_books": market_state.order_books,
+            "order_books": filtered_order_books,
             "stocks": market_state.stocks,
             "last_traded_price": market_state.last_traded_price,
             "cumulative_volume": market_state.cumulative_volume,
