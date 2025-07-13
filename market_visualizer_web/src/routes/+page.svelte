@@ -31,10 +31,10 @@
 
   $: {
     if (marketState && selectedStockId) {
-        lastTradedPrice = marketState.last_traded_price?.[selectedStockId] ?? null;
-        cumulativeVolume = marketState.cumulative_volume?.[selectedStockId] ?? null;
-        midPrice = marketState.mid_prices?.[selectedStockId] ? formatNumber(marketState.mid_prices[selectedStockId]) : 'N/A';
-        spread = marketState.spreads?.[selectedStockId] ? formatNumber(marketState.spreads[selectedStockId]) : 'N/A';
+      lastTradedPrice = marketState.last_traded_price?.[selectedStockId] ?? null;
+      cumulativeVolume = marketState.cumulative_volume?.[selectedStockId] ?? null;
+      midPrice = marketState.mid_prices?.[selectedStockId] ? formatNumber(marketState.mid_prices[selectedStockId]) : 'N/A';
+      spread = marketState.spreads?.[selectedStockId] ? formatNumber(marketState.spreads[selectedStockId]) : 'N/A';
     }
   }
 
@@ -90,10 +90,10 @@
   });
 
   onDestroy(() => {
-      if (reconnectInterval) clearInterval(reconnectInterval);
-      socket?.close();
-      priceChart?.destroy();
-      candlestickChart?.destroy();
+    if (reconnectInterval) clearInterval(reconnectInterval);
+    socket?.close();
+    priceChart?.destroy();
+    candlestickChart?.destroy();
   });
 
   function initializeCharts() {
@@ -111,14 +111,14 @@
       const newStockMap = new Map();
       marketState.stocks.stocks.forEach(s => newStockMap.set(s.id.toString(), s));
       stockMap = newStockMap;
-      
+
       stockTickers = Array.from(stockMap.values()).map(s => s.ticker).sort();
-      
+
       // Force-set to the first available stock on initial load to ensure UI consistency.
       if (stockTickers.length > 0) {
         const firstStock = Array.from(stockMap.values()).find(s => s.ticker === stockTickers[0]);
         if (firstStock) {
-            selectedStockId = firstStock.id.toString();
+          selectedStockId = firstStock.id.toString();
         }
       }
     }
@@ -130,43 +130,43 @@
   function processUpdate(data: any) {
     const updateData = data;
     if (updateData.market_state) {
-        marketState = updateData.market_state;
-        if (priceHistoryData && marketState) {
-            for (const stockId in marketState.last_traded_price) {
-                if (!priceHistoryData[stockId]) priceHistoryData[stockId] = [];
-                const newPrice = marketState.last_traded_price[stockId];
-                priceHistoryData[stockId].push([Date.now(), newPrice]);
-                if (priceHistoryData[stockId].length > MAX_PRICE_HISTORY) {
+      marketState = updateData.market_state;
+      if (priceHistoryData && marketState) {
+        for (const stockId in marketState.last_traded_price) {
+          if (!priceHistoryData[stockId]) priceHistoryData[stockId] = [];
+          const newPrice = marketState.last_traded_price[stockId];
+          priceHistoryData[stockId].push([Date.now(), newPrice]);
+          if (priceHistoryData[stockId].length > MAX_PRICE_HISTORY) {
             // This block is now effectively disabled but kept for clarity
             // priceHistoryData[stockId] = priceHistoryData[stockId].slice(-MAX_PRICE_HISTORY);
           }
-            }
         }
-        updateUIData();
+      }
+      updateUIData();
     }
     if (updateData.candle_data) {
-        if (!candleData) candleData = {}; // Initialize if null
-        Object.keys(updateData.candle_data).forEach(key => {
-            const newCandles: Candle[] = updateData.candle_data[key];
-            if (!candleData) return; // Type guard
+      if (!candleData) candleData = {}; // Initialize if null
+      Object.keys(updateData.candle_data).forEach(key => {
+        const newCandles: Candle[] = updateData.candle_data[key];
+        if (!candleData) return; // Type guard
 
-            if (!candleData[key]) {
-                candleData[key] = [];
-            }
+        if (!candleData[key]) {
+          candleData[key] = [];
+        }
 
-            newCandles.forEach((newCandle: Candle) => {
-                if (!candleData) return; // Type guard
-                const lastCandle = candleData[key][candleData[key].length - 1];
-                if (lastCandle && lastCandle.timestamp === newCandle.timestamp) {
-                    // Update the last candle
-                    candleData[key][candleData[key].length - 1] = newCandle;
-                } else {
-                    // Append as a new candle
-                    candleData[key].push(newCandle);
-                }
-            });
+        newCandles.forEach((newCandle: Candle) => {
+          if (!candleData) return; // Type guard
+          const lastCandle = candleData[key][candleData[key].length - 1];
+          if (lastCandle && lastCandle.timestamp === newCandle.timestamp) {
+            // Update the last candle
+            candleData[key][candleData[key].length - 1] = newCandle;
+          } else {
+            // Append as a new candle
+            candleData[key].push(newCandle);
+          }
         });
-        updateCandlestickChart(false); // Incremental update
+      });
+      updateCandlestickChart(false); // Incremental update
     }
   }
 
@@ -191,8 +191,26 @@
     if (chartCanvas && !priceChart) {
       priceChart = new Chart(chartCanvas, {
         type: 'line',
-        data: { datasets: [{ label: 'Price', data: [], borderColor: 'rgb(75, 192, 192)' }] },
-        options: { scales: { x: { type: 'time', ticks: { display: false } }, y: { beginAtZero: false } } }
+        data: {
+          datasets: [{
+            label: 'Price',
+            data: [],
+            borderColor: 'rgb(75, 192, 192)'
+          }]
+        },
+        options: {
+          scales: {
+            x: {
+              type: 'time',
+              ticks: {
+                display: false
+              }
+            },
+            y: {
+              beginAtZero: false
+            }
+          }
+        }
       });
     }
   }
@@ -201,8 +219,22 @@
     if (candlestickCanvas && !candlestickChart) {
       candlestickChart = new Chart(candlestickCanvas, {
         type: 'candlestick',
-        data: { datasets: [{ label: 'Candles', data: [] }] },
-        options: { scales: { x: { type: 'time' }, y: { beginAtZero: false } } }
+        data: {
+          datasets: [{
+            label: 'Candles',
+            data: []
+          }]
+        },
+        options: {
+          scales: {
+            x: {
+              type: 'time'
+            },
+            y: {
+              beginAtZero: false
+            }
+          }
+        }
       });
     }
   }
@@ -230,10 +262,10 @@
 
     const backendTimeFrame = timeFrameMap[selectedTimeFrame];
     if (!backendTimeFrame) {
-        // This case should ideally not happen if the enums are aligned
-        candlestickChart.data.datasets[0].data = [];
-        candlestickChart.update('none');
-        return;
+      // This case should ideally not happen if the enums are aligned
+      candlestickChart.data.datasets[0].data = [];
+      candlestickChart.update('none');
+      return;
     }
 
     const key = `${selectedStockId}-${backendTimeFrame}`;
@@ -261,7 +293,7 @@
 
 </script>
 
-<main>
+<main class="dark-theme">
   <div class="header">
     <div class="title-section">
       <h1>Market Visualizer</h1>
@@ -271,46 +303,61 @@
       </div>
     </div>
     <div class="controls">
-      <a href="/orderbook">Order Book</a>
-      <label for="stock-select">Select Stock:</label>
-      <select id="stock-select" bind:value={selectedStockId} on:change={(e) => {
-        selectedStockId = (e.target as HTMLSelectElement).value;
-        // No longer manually clearing history. Let the update functions handle it.
-        updateCandlestickChart(true); // full redraw
-        updateLineChart(true); // full redraw
-      }}>
-        {#each stockTickers as ticker}
-          <option value={getStockIdFromTicker(ticker)}>{ticker}</option>
-        {/each}
-      </select>
-      <label for="timeframe-select">Timeframe:</label>
-      <select id="timeframe-select" bind:value={selectedTimeFrame} on:change={() => updateCandlestickChart(true)}>
-        {#each Object.values(TimeFrame) as tf}
-          <option value={tf}>{tf}</option>
-        {/each}
-      </select>
-      <button on:click={() => showCandlestickChart = !showCandlestickChart}>
+      <a href="/orderbook" class="button">Order Book</a>
+      <div class="select-wrapper">
+        <label for="stock-select">Stock:</label>
+        <select id="stock-select" bind:value={selectedStockId} on:change={(e) => {
+          selectedStockId = (e.target as HTMLSelectElement).value;
+          updateCandlestickChart(true);
+          updateLineChart(true);
+        }}>
+          {#each stockTickers as ticker}
+            <option value={getStockIdFromTicker(ticker)}>{ticker}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="select-wrapper">
+        <label for="timeframe-select">Timeframe:</label>
+        <select id="timeframe-select" bind:value={selectedTimeFrame} on:change={() => updateCandlestickChart(true)}>
+          {#each Object.values(TimeFrame) as tf}
+            <option value={tf}>{tf}</option>
+          {/each}
+        </select>
+      </div>
+      <button class="button" on:click={() => showCandlestickChart = !showCandlestickChart}>
         {showCandlestickChart ? 'Show Line Chart' : 'Show Candlestick Chart'}
       </button>
     </div>
   </div>
 
-  <div class="market-summary">
-    <div>Last: <span class="value">${formatNumber(lastTradedPrice)}</span></div>
-    <div>Volume: <span class="value">{formatNumber(cumulativeVolume)}</span></div>
-    <div>Mid: <span class="value">${midPrice}</span></div>
-    <div>Spread: <span class="value">${spread}</span></div>
+  <div class="market-summary-cards">
+    <div class="card summary-card">
+      <span class="label">Last:</span>
+      <span class="value">${formatNumber(lastTradedPrice)}</span>
+    </div>
+    <div class="card summary-card">
+      <span class="label">Volume:</span>
+      <span class="value">{formatNumber(cumulativeVolume)}</span>
+    </div>
+    <div class="card summary-card">
+      <span class="label">Mid:</span>
+      <span class="value">${midPrice}</span>
+    </div>
+    <div class="card summary-card">
+      <span class="label">Spread:</span>
+      <span class="value">${spread}</span>
+    </div>
   </div>
 
   <div class="content-grid">
-    <div class="chart-container">
-      <div style="display: {showCandlestickChart ? 'block' : 'none'};">
-          <h2>Candlestick Chart ({selectedStockTicker} - {selectedTimeFrame})</h2>
-          <canvas bind:this={candlestickCanvas}></canvas>
+    <div class="card chart-container">
+      <div style="display: {showCandlestickChart ? 'block' : 'none'}">
+        <h2>Candlestick Chart ({selectedStockTicker} - {selectedTimeFrame})</h2>
+        <canvas bind:this={candlestickCanvas}></canvas>
       </div>
-      <div style="display: {!showCandlestickChart ? 'block' : 'none'};">
-          <h2>Price Chart ({selectedStockTicker})</h2>
-          <canvas bind:this={chartCanvas}></canvas>
+      <div style="display: {!showCandlestickChart ? 'block' : 'none'}">
+        <h2>Price Chart ({selectedStockTicker})</h2>
+        <canvas bind:this={chartCanvas}></canvas>
       </div>
     </div>
   </div>
@@ -319,105 +366,165 @@
 <style>
   :global(body) {
     margin: 0;
-    font-family: 'Arial', sans-serif;
-    background-color: #f0f2f5;
-    color: #333;
+    font-family: 'Inter', sans-serif;
+    background-color: #1a1a2e;
+    color: #e0e0e0;
+  }
+
+  .dark-theme {
+    background-color: #1a1a2e;
+    color: #e0e0e0;
   }
 
   .header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 1em 2em;
-    background-color: #fff;
-    border-bottom: 1px solid #eee;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    padding: 1.5em 2.5em;
+    background-color: #16213e;
+    border-bottom: 1px solid #0f3460;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   }
 
   .title-section {
     display: flex;
     align-items: baseline;
-    gap: 1em;
+    gap: 1.5em;
   }
 
   h1 {
-    color: #333;
+    color: #e0e0e0;
     margin: 0;
-    font-size: 1.8em;
+    font-size: 2.2em;
+    font-weight: 700;
   }
 
   .stock-info h2 {
     margin: 0;
-    font-size: 1.5em;
-    color: #007bff;
+    font-size: 1.8em;
+    color: #e94560;
+    font-weight: 600;
   }
 
   .stock-info p {
     margin: 0;
-    font-size: 0.9em;
-    color: #666;
+    font-size: 1em;
+    color: #a0a0a0;
   }
 
   .controls {
     display: flex;
     align-items: center;
-    gap: 1em;
+    gap: 1.2em;
   }
 
   .controls label {
-    font-weight: bold;
-    color: #555;
+    font-weight: 500;
+    color: #b0b0b0;
+    font-size: 0.95em;
   }
 
-  .controls select,
-  .controls button {
-    padding: 0.5em 1em;
-    border-radius: 5px;
-    border: 1px solid #ccc;
-    background-color: #f8f8f8;
+  .button {
+    padding: 0.6em 1.2em;
+    border-radius: 6px;
+    border: none;
+    background-color: #0f3460;
+    color: #e0e0e0;
     cursor: pointer;
-    font-size: 1em;
+    font-size: 0.95em;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .controls button:hover {
-    background-color: #e0e0e0;
+  .button:hover {
+    background-color: #1a527f;
   }
 
-  .market-summary {
+  .select-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+  }
+
+  .controls select {
+    padding: 0.5em 1em;
+    border-radius: 6px;
+    border: 1px solid #0f3460;
+    background-color: #16213e;
+    color: #e0e0e0;
+    cursor: pointer;
+    font-size: 0.95em;
+    appearance: none;
+    /* Remove default arrow */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23e0e0e0%22%20d%3D%22M287%2C197.3L159.3%2C69.6c-3.7-3.7-9.7-3.7-13.4%2C0L5.3%2C197.3c-3.7%2C3.7-3.7%2C9.7%2C0%2C13.4l13.4%2C13.4c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l110.7-110.7l110.7%2C110.7c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l13.4-13.4C290.7%2C207%2C290.7%2C201%2C287%2C197.3z%22%2F%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: right 0.7em top 50%;
+    background-size: 0.65em auto;
+  }
+
+  .market-summary-cards {
     display: flex;
     justify-content: space-around;
-    padding: 1em 2em;
-    background-color: #e9ecef;
-    border-bottom: 1px solid #dee2e6;
-    font-size: 1.1em;
-    font-weight: bold;
-    color: #555;
+    padding: 1.5em 2.5em;
+    background-color: #16213e;
+    border-bottom: 1px solid #0f3460;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    gap: 1.5em;
   }
 
-  .market-summary .value {
-    color: #007bff;
+  .summary-card {
+    flex: 1;
+    text-align: center;
+    padding: 1em;
+    background-color: #0f3460;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .summary-card .label {
+    font-size: 0.9em;
+    color: #b0b0b0;
+    margin-bottom: 0.3em;
+  }
+
+  .summary-card .value {
+    font-size: 1.6em;
+    font-weight: 700;
+    color: #e94560;
+    /* Accent color */
   }
 
   .content-grid {
     display: grid;
     grid-template-columns: 1fr;
     gap: 2em;
-    padding: 2em;
+    padding: 2.5em;
   }
 
-  .chart-container {
-    background-color: #fff;
-    padding: 1.5em;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  .card {
+    background-color: #16213e;
+    padding: 2em;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    border: 1px solid #0f3460;
   }
 
   h2 {
-    color: #555;
+    color: #e0e0e0;
     margin-top: 0;
-    margin-bottom: 1em;
-    font-size: 1.4em;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 0.5em;
+    margin-bottom: 1.5em;
+    font-size: 1.8em;
+    border-bottom: 1px solid #0f3460;
+    padding-bottom: 0.8em;
+    font-weight: 600;
   }
 </style>
