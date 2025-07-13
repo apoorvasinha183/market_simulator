@@ -10,6 +10,7 @@ use std::time::Duration;
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
 use crate::agents::astrologer_agent::AstrologerAgent;
+use crate::agents::bowser_agent::BowserAgent;
 use crate::agents::customer_agent::CustomerAgent;
 use crate::agents::dumb_agent::DumbAgent;
 use crate::agents::dumb_limit_agent::DumbLimitAgent;
@@ -51,7 +52,7 @@ pub struct ConcurrentMarketState {
 
 /// The shared, read-only state that agents see. This uses standard HashMaps
 /// for maximum read performance, as it's only ever written to in a single swap.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct MarketState {
     pub order_books: HashMap<u64, OrderBook>,
     pub stocks: StockMarket,
@@ -94,6 +95,17 @@ impl MarketState {
         let best_bid = book.bids.keys().next_back()?;
         let best_ask = book.asks.keys().next()?;
         Some((best_bid + best_ask) / 2)
+    }
+
+    pub fn get_spread(&self, stock_id: u64) -> Option<u64> {
+        let book = self.book(stock_id)?;
+        let best_bid = book.bids.keys().last()?;
+        let best_ask = book.asks.keys().next()?;
+        if *best_ask > *best_bid {
+            Some(best_ask - best_bid)
+        } else {
+            None // Or handle crossed market case
+        }
     }
 }
 
@@ -353,6 +365,14 @@ impl Orchestra {
                     rx_ack,
                     rx_trade,
                     view_handle,
+                )),
+                AgentType::BowserAgent => Box::new(BowserAgent::new(
+                    id,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                    candle_data_handle.clone(),
                 )),
                 AgentType::Thermodynamic {
                     initial_temperature,

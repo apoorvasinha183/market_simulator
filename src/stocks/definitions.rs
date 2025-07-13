@@ -37,7 +37,7 @@ impl Stock {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct StockMarket {
     pub stocks: Vec<Stock>,
     pub id_to_stock: std::collections::HashMap<u64, Stock>,

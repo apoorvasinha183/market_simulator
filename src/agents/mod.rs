@@ -1,6 +1,7 @@
 pub mod agent_trait;
 pub mod agent_type;
 pub mod astrologer_agent;
+pub mod bowser_agent;
 pub mod config;
 pub mod customer_agent;
 pub mod dumb_agent;
