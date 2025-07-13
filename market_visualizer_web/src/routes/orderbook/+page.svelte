@@ -77,8 +77,8 @@
     const book = marketState.order_books[selectedStockId];
     if (!book) return;
 
-    bids = Object.entries(book.bids).map(([p, l]) => [parseFloat(p) / 100, l.total_volume]).sort((a, b) => b[0] - a[0]);
-    asks = Object.entries(book.asks).map(([p, l]) => [parseFloat(p) / 100, l.total_volume]).sort((a, b) => a[0] - b[0]);
+    bids = Object.entries(book.bids).map(([p, l]) => [parseFloat(p) / 100, l.total_volume] as [number, number]).sort((a, b) => b[0] - a[0]);
+    asks = Object.entries(book.asks).map(([p, l]) => [parseFloat(p) / 100, l.total_volume] as [number, number]).sort((a, b) => a[0] - b[0]);
 
     let cumulativeVolume = 0;
     const askPoints = Object.entries(book.asks)

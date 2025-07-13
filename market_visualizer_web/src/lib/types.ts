@@ -1,8 +1,6 @@
 // src/lib/types.ts
 
 export enum TimeFrame {
-    HundredMillis = "HundredMillis",
-    OneSecond = "OneSecond",
     TenSeconds = "TenSeconds",
     OneMinute = "OneMinute",
     FiveMinutes = "FiveMinutes",

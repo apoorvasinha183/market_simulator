@@ -15,7 +15,7 @@
   let reconnectInterval: number | null = null;
 
   let selectedStockId: string = '1';
-  let selectedTimeFrame: TimeFrame = TimeFrame.OneMinute;
+  let selectedTimeFrame: TimeFrame = TimeFrame.TenSeconds;
   let stockMap: Map<string, Stock> = new Map();
   let stockTickers: string[] = [];
 
@@ -46,7 +46,7 @@
   let candlestickCanvas: HTMLCanvasElement;
   let showCandlestickChart: boolean = true;
 
-  const MAX_PRICE_HISTORY = 200;
+  const MAX_PRICE_HISTORY = Infinity; // Keep all history
 
   function connectWebSocket() {
     if (socket) socket.close();
@@ -128,33 +128,45 @@
   }
 
   function processUpdate(data: any) {
-    // The actual update data is nested inside a "data" object
     const updateData = data;
     if (updateData.market_state) {
-      marketState = updateData.market_state;
-      // Update all price histories in the background
-      if (priceHistoryData && marketState) {
-        for (const stockId in marketState.last_traded_price) {
-          if (!priceHistoryData[stockId]) {
-            priceHistoryData[stockId] = [];
+        marketState = updateData.market_state;
+        if (priceHistoryData && marketState) {
+            for (const stockId in marketState.last_traded_price) {
+                if (!priceHistoryData[stockId]) priceHistoryData[stockId] = [];
+                const newPrice = marketState.last_traded_price[stockId];
+                priceHistoryData[stockId].push([Date.now(), newPrice]);
+                if (priceHistoryData[stockId].length > MAX_PRICE_HISTORY) {
+            // This block is now effectively disabled but kept for clarity
+            // priceHistoryData[stockId] = priceHistoryData[stockId].slice(-MAX_PRICE_HISTORY);
           }
-          const newPrice = marketState.last_traded_price[stockId];
-          priceHistoryData[stockId].push([Date.now(), newPrice]);
-
-          if (priceHistoryData[stockId].length > MAX_PRICE_HISTORY) {
-            priceHistoryData[stockId] = priceHistoryData[stockId].slice(-MAX_PRICE_HISTORY);
-          }
+            }
         }
-      }
-      updateUIData();
+        updateUIData();
     }
     if (updateData.candle_data) {
-      Object.keys(updateData.candle_data).forEach(key => {
-        if (!candleData) candleData = {};
-        if (!candleData[key]) candleData[key] = [];
-        candleData[key].push(...updateData.candle_data[key]);
-      });
-      updateCandlestickChart(false); // Incremental update
+        if (!candleData) candleData = {}; // Initialize if null
+        Object.keys(updateData.candle_data).forEach(key => {
+            const newCandles: Candle[] = updateData.candle_data[key];
+            if (!candleData) return; // Type guard
+
+            if (!candleData[key]) {
+                candleData[key] = [];
+            }
+
+            newCandles.forEach((newCandle: Candle) => {
+                if (!candleData) return; // Type guard
+                const lastCandle = candleData[key][candleData[key].length - 1];
+                if (lastCandle && lastCandle.timestamp === newCandle.timestamp) {
+                    // Update the last candle
+                    candleData[key][candleData[key].length - 1] = newCandle;
+                } else {
+                    // Append as a new candle
+                    candleData[key].push(newCandle);
+                }
+            });
+        });
+        updateCandlestickChart(false); // Incremental update
     }
   }
 
@@ -167,7 +179,8 @@
         const newPricePoint = { x: Date.now(), y: lastTradedPrice };
         priceHistory = [...priceHistory, newPricePoint];
         if (priceHistory.length > MAX_PRICE_HISTORY) {
-          priceHistory = priceHistory.slice(-MAX_PRICE_HISTORY);
+          // This block is now effectively disabled
+          // priceHistory = priceHistory.slice(-MAX_PRICE_HISTORY);
         }
         updateLineChart(false);
       }
@@ -179,7 +192,7 @@
       priceChart = new Chart(chartCanvas, {
         type: 'line',
         data: { datasets: [{ label: 'Price', data: [], borderColor: 'rgb(75, 192, 192)' }] },
-        options: { scales: { x: { type: 'time' }, y: { beginAtZero: false } } }
+        options: { scales: { x: { type: 'time', ticks: { display: false } }, y: { beginAtZero: false } } }
       });
     }
   }

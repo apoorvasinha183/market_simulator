@@ -80,7 +80,7 @@ impl Agent for BowserAgent {
 
                 // Task to periodically gather and broadcast incremental updates
                 tokio::spawn(async move {
-                    let mut interval = tokio::time::interval(Duration::from_millis(250));
+                    let mut interval = tokio::time::interval(Duration::from_secs(1));
                     let mut sent_candles_count: HashMap<String, usize> = HashMap::new();
 
                     loop {
@@ -91,6 +91,11 @@ impl Agent for BowserAgent {
                             .iter()
                             .filter_map(|entry| {
                                 let (stock_id, timeframe) = entry.key();
+
+                                if matches!(timeframe, TimeFrame::HundredMillis | TimeFrame::OneSecond) {
+                                    return None; // Skip these timeframes
+                                }
+
                                 let key = format!("{}-{}", stock_id, timeframe);
                                 let candles = entry.value();
                                 let current_count = candles.len();
@@ -121,29 +126,20 @@ impl Agent for BowserAgent {
                             }
                         }
 
-                        let mut data_payload = serde_json::Map::new();
-                        data_payload.insert("stocks".to_string(), json!(market_state.stocks));
-                        data_payload.insert(
-                            "last_traded_price".to_string(),
-                            json!(market_state.last_traded_price),
-                        );
-                        data_payload.insert(
-                            "cumulative_volume".to_string(),
-                            json!(market_state.cumulative_volume),
-                        );
-                        data_payload
-                            .insert("order_books".to_string(), json!(market_state.order_books));
-                        data_payload.insert("mid_prices".to_string(), json!(mid_prices));
-                        data_payload.insert("spreads".to_string(), json!(spreads));
-
-                        if !new_candles.is_empty() {
-                            data_payload.insert("candle_data".to_string(), json!(new_candles));
-                        }
+                        let market_state_payload = json!({
+                            "stocks": market_state.stocks,
+                            "last_traded_price": market_state.last_traded_price,
+                            "cumulative_volume": market_state.cumulative_volume,
+                            "order_books": market_state.order_books,
+                            "mid_prices": mid_prices,
+                            "spreads": spreads
+                        });
 
                         let update_message = json!({
                             "type": "update",
                             "data": {
-                                "market_state": data_payload
+                                "market_state": market_state_payload,
+                                "candle_data": new_candles
                             }
                         });
 
@@ -221,6 +217,8 @@ struct ClientMessage {
 
 // ... (rest of the file is the same until the websocket function)
 
+use crate::types::candle::TimeFrame;
+
 async fn websocket(stream: WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = stream.split();
 
@@ -230,6 +228,13 @@ async fn websocket(stream: WebSocket, state: Arc<AppState>) {
     let candle_history: HashMap<String, Vec<Candle>> = state
         .candle_handle
         .iter()
+        .filter(|entry| {
+            let (_, timeframe) = entry.key();
+            !matches!(
+                timeframe,
+                TimeFrame::HundredMillis | TimeFrame::OneSecond
+            )
+        })
         .map(|entry| {
             let (id, timeframe) = entry.key();
             (
