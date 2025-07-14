@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { Chart, registerables } from 'chart.js';
   import type { MarketState, OrderBook, Stock, WebSocketData } from '../../lib/types';
+  import { base } from '$app/paths';
 
   Chart.register(...registerables);
 
@@ -109,18 +110,53 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          scales: {
-            x: { type: 'linear', title: { display: true, text: 'Price', color: '#e0e0e0' }, ticks: { color: '#b0b0b0' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
-            y: { title: { display: true, text: 'Cumulative Volume', color: '#e0e0e0' }, ticks: { color: '#b0b0b0' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } }
+          interaction: {
+            intersect: false,
+            mode: 'index'
           },
-          plugins: { legend: { labels: { color: '#e0e0e0' } } },
-          elements: { line: { borderWidth: 2 } }
+          scales: {
+            x: { 
+              type: 'linear', 
+              title: { display: true, text: 'Price', color: '#000' }, 
+              ticks: { color: '#000' }, 
+              grid: { color: 'rgba(0, 0, 0, 0.1)' }
+            },
+            y: { 
+              title: { display: true, text: 'Cumulative Volume', color: '#000' }, 
+              ticks: { color: '#000' }, 
+              grid: { color: 'rgba(0, 0, 0, 0.1)' }
+            }
+          },
+          plugins: { 
+            legend: { 
+              labels: { color: '#000' },
+              position: 'top'
+            }
+          },
+          elements: { 
+            line: { borderWidth: 2 },
+            point: { radius: 0 }
+          }
         },
         data: {
           labels: [],
           datasets: [
-            { label: 'Bids', data: [], borderColor: '#00b894', backgroundColor: 'rgba(0, 184, 148, 0.2)', fill: true, stepped: true },
-            { label: 'Asks', data: [], borderColor: '#ff7675', backgroundColor: 'rgba(255, 118, 117, 0.2)', fill: true, stepped: true }
+            { 
+              label: 'Bids', 
+              data: [], 
+              borderColor: '#00b894', 
+              backgroundColor: 'rgba(0, 184, 148, 0.2)', 
+              fill: true, 
+              stepped: true 
+            },
+            { 
+              label: 'Asks', 
+              data: [], 
+              borderColor: '#ff7675', 
+              backgroundColor: 'rgba(255, 118, 117, 0.2)', 
+              fill: true, 
+              stepped: true 
+            }
           ]
         }
       });
@@ -143,12 +179,12 @@
 
     // Process and sort bids (descending)
     bids = Object.entries(orderBook.bids)
-      .map(([price, level]) => [parseFloat(price), level.total_volume] as [number, number])
+      .map(([price, level]) => [parseFloat(price) / 100, level.total_volume] as [number, number])
       .sort((a, b) => b[0] - a[0]);
 
     // Process and sort asks (ascending)
     asks = Object.entries(orderBook.asks)
-      .map(([price, level]) => [parseFloat(price), level.total_volume] as [number, number])
+      .map(([price, level]) => [parseFloat(price) / 100, level.total_volume] as [number, number])
       .sort((a, b) => a[0] - b[0]);
 
     updateOrderBookChart();
@@ -189,7 +225,7 @@
 
 </script>
 
-<main class="dark-theme">
+<main class="neo-brutalism-theme">
   <div class="header">
     <div class="title-section">
       <h1>Order Book</h1>
@@ -199,7 +235,7 @@
       </div>
     </div>
     <div class="controls">
-      <a href="/" class="button">Market Overview</a>
+      <a href="{base}/" class="button">Market Overview</a>
       <div class="select-wrapper">
         <label for="stock-select">Stock:</label>
         <select id="stock-select" bind:value={selectedStockId} on:change={updateOrderBook}>
@@ -214,7 +250,9 @@
   <div class="content-grid">
     <div class="card chart-container">
       <h2>Order Book Depth</h2>
-      <canvas bind:this={orderBookCanvas}></canvas>
+      <div class="chart-wrapper">
+        <canvas bind:this={orderBookCanvas}></canvas>
+      </div>
     </div>
 
     <div class="order-book-tables">
@@ -270,35 +308,250 @@
 </main>
 
 <style>
-  :global(body) { margin: 0; font-family: 'Inter', sans-serif; background-color: #1a1a2e; color: #e0e0e0; }
-  .dark-theme { background-color: #1a1a2e; color: #e0e0e0; }
-  .header { display: flex; justify-content: space-between; align-items: center; padding: 1.5em 2.5em; background-color: #16213e; border-bottom: 1px solid #0f3460; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); }
-  .title-section { display: flex; align-items: baseline; gap: 1.5em; }
-  h1 { color: #e0e0e0; margin: 0; font-size: 2.2em; font-weight: 700; }
-  .stock-info h2 { margin: 0; font-size: 1.8em; color: #e94560; font-weight: 600; }
-  .stock-info p { margin: 0; font-size: 1em; color: #a0a0a0; }
-  .controls { display: flex; align-items: center; gap: 1.2em; }
-  .controls label { font-weight: 500; color: #b0b0b0; font-size: 0.95em; }
-  .button { padding: 0.6em 1.2em; border-radius: 6px; border: none; background-color: #0f3460; color: #e0e0e0; cursor: pointer; font-size: 0.95em; font-weight: 500; transition: background-color 0.2s ease; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
-  .button:hover { background-color: #1a527f; }
-  .select-wrapper { display: flex; align-items: center; gap: 0.5em; }
-  .controls select { padding: 0.5em 1em; border-radius: 6px; border: 1px solid #0f3460; background-color: #16213e; color: #e0e0e0; cursor: pointer; font-size: 0.95em; appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23e0e0e0%22%20d%3D%22M287%2C197.3L159.3%2C69.6c-3.7-3.7-9.7-3.7-13.4%2C0L5.3%2C197.3c-3.7%2C3.7-3.7%2C9.7%2C0%2C13.4l13.4%2C13.4c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l110.7-110.7l110.7%2C110.7c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l13.4-13.4C290.7%2C207%2C290.7%2C201%2C287%2C197.3z%22%2F%3E%3C%2Fsvg%3E'); background-repeat: no-repeat; background-position: right 0.7em top 50%; background-size: 0.65em auto; }
-  .content-grid { display: grid; grid-template-columns: 1fr; gap: 2.5em; padding: 2.5em; }
-  .card { background-color: #16213e; padding: 2em; border-radius: 10px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); border: 1px solid #0f3460; }
-  h2 { color: #e0e0e0; margin-top: 0; margin-bottom: 1.5em; font-size: 1.8em; border-bottom: 1px solid #0f3460; padding-bottom: 0.8em; font-weight: 600; }
-  .chart-container { height: 400px; }
-  .order-book-tables { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5em; margin-top: 2.5em; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.95em; }
-  th, td { padding: 0.8em 1em; text-align: left; border-bottom: 1px solid #0f3460; }
-  th { background-color: #0f3460; font-weight: 600; color: #e0e0e0; position: sticky; top: 0; z-index: 1; }
-  tbody tr:last-child td { border-bottom: none; }
-  .price-cell { display: flex; align-items: center; position: relative; }
-  .price-value { font-weight: 700; font-size: 1.1em; flex-shrink: 0; width: 80px; text-align: right; padding-right: 10px; }
-  .bid-price { color: #00b894; }
-  .ask-price { color: #ff7675; }
-  .volume-bar-bg { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: -1; }
-  .volume-bar { height: 100%; transition: width 0.1s ease-out; opacity: 0.2; }
-  .bid-bar { background-color: #00b894; }
-  .ask-bar { background-color: #ff7675; }
-  td { color: #c0c0c0; }
+  :global(body) {
+    margin: 0;
+    font-family: 'Inter', sans-serif;
+    background-color: #fff;
+    color: #000;
+  }
+
+  .neo-brutalism-theme {
+    background-color: #fff;
+    color: #000;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5em 2.5em;
+    background-color: #D4AF37; /* Muted gold */
+    border-bottom: 4px solid #000;
+    box-shadow: 8px 8px 0px #000;
+    margin-bottom: 2em;
+  }
+
+  .title-section {
+    display: flex;
+    align-items: baseline;
+    gap: 1.5em;
+  }
+
+  h1 {
+    color: #000;
+    margin: 0;
+    font-size: 2.8em;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .stock-info h2 {
+    margin: 0;
+    font-size: 2em;
+    color: #000;
+    font-weight: 700;
+  }
+
+  .stock-info p {
+    margin: 0;
+    font-size: 1.1em;
+    color: #333;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 1.5em;
+  }
+
+  .controls label {
+    font-weight: 700;
+    color: #000;
+    font-size: 1em;
+    text-transform: uppercase;
+  }
+
+  .button {
+    padding: 0.8em 1.5em;
+    border-radius: 0px;
+    border: 2px solid #000;
+    background-color: #00ff00;
+    color: #000;
+    cursor: pointer;
+    font-size: 1em;
+    font-weight: 700;
+    transition: all 0.1s ease-in-out;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 4px 4px 0px #000;
+  }
+
+  .button:hover {
+    background-color: #00cc00;
+    box-shadow: 2px 2px 0px #000;
+    transform: translate(2px, 2px);
+  }
+
+  .select-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+  }
+
+  .controls select {
+    padding: 0.7em 1.2em;
+    border-radius: 0px;
+    border: 2px solid #000;
+    background-color: #fff;
+    color: #000;
+    cursor: pointer;
+    font-size: 1em;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M287%2C197.3L159.3%2C69.6c-3.7-3.7-9.7-3.7-13.4%2C0L5.3%2C197.3c-3.7%2C3.7-3.7%2C9.7%2C0%2C13.4l13.4%2C13.4c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l110.7-110.7l110.7%2C110.7c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l13.4-13.4C290.7%2C207%2C290.7%2C201%2C287%2C197.3z%22%2F%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: right 0.7em top 50%;
+    background-size: 0.65em auto;
+    box-shadow: 2px 2px 0px #000;
+  }
+
+  .content-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.5em;
+    padding: 2.5em;
+  }
+
+  .card {
+    background-color: #fff;
+    padding: 1.5em 2.5em 2.5em 2.5em;
+    border-radius: 0px;
+    border: 4px solid #000;
+    box-shadow: 8px 8px 0px #000;
+  }
+
+  h2 {
+    color: #000;
+    margin-top: 0;
+    margin-bottom: 1.5em;
+    font-size: 2.2em;
+    border-bottom: 2px solid #000;
+    padding-bottom: 0.8em;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .chart-container {
+    height: 500px;
+    overflow: hidden;
+  }
+
+  .chart-wrapper {
+    position: relative;
+    height: calc(100% - 100px);
+    width: 100%;
+  }
+
+  .chart-wrapper canvas {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+    background-color: #fff;
+  }
+
+  .order-book-tables {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5em;
+    margin-top: 2.5em;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95em;
+  }
+
+  th, td {
+    padding: 0.8em 1em;
+    text-align: left;
+    border-bottom: 2px solid #000;
+  }
+
+  th {
+    background-color: #D4AF37; /* Muted gold */
+    font-weight: 900;
+    color: #000;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    text-transform: uppercase;
+  }
+
+  tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .price-cell {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    width: 100%;
+  }
+
+  .price-value {
+    font-weight: 900;
+    font-size: 1.2em;
+    flex-shrink: 0;
+    width: 80px;
+    text-align: right;
+    padding-right: 10px;
+    z-index: 1;
+  }
+
+  .bid-price {
+    color: #006400; /* Darker green */
+  }
+
+  .ask-price {
+    color: #B22222; /* Muted firebrick */
+  }
+
+  .volume-bar-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 0;
+    overflow: hidden;
+  }
+
+  .volume-bar {
+    height: 100%;
+    transition: width 0.1s ease-out;
+    opacity: 0.3;
+    position: absolute;
+    right: 0;
+  }
+
+  .bid-bar {
+    background-color: #008000;
+  }
+
+  .ask-bar {
+    background-color: #B22222;
+  }
+
+  td {
+    color: #333;
+    position: relative;
+    overflow: hidden;
+  }
 </style>
