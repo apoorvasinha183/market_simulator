@@ -19,12 +19,14 @@ class RLGateway:
             self.broker = Broker(host, port)
             self._agents = {}
             self._running = True
-            
+            self._l1_data = {}
+            self._l1_data_lock = threading.Lock()
+
             self.broker.connect()
-            
+
             self._dispatcher_thread = threading.Thread(target=self._dispatch_messages, daemon=True)
             self._dispatcher_thread.start()
-            
+
             self.is_initialized = True
 
     def register_agent(self):
@@ -46,6 +48,10 @@ class RLGateway:
         except queue.Empty:
             return None
 
+    def get_l1_data(self, stock_id):
+        with self._l1_data_lock:
+            return self._l1_data.get(stock_id)
+
     def _dispatch_messages(self):
         while self._running:
             message = self.broker.get_raw_update(block=True, timeout=1)
@@ -53,20 +59,20 @@ class RLGateway:
                 continue
 
             event_type = message.WhichOneof('event')
-            
+
             if event_type == "order_ack":
                 client_id = message.order_ack.client_id
                 if client_id in self._agents:
                     self._agents[client_id].put(message.order_ack)
-            
+
             elif event_type == "trade_update":
                 client_id = message.trade_update.client_id
                 if client_id in self._agents:
                     self._agents[client_id].put(message.trade_update)
 
             elif event_type == "market_update":
-                for agent_queue in self._agents.values():
-                    agent_queue.put(message.market_update)
+                with self._l1_data_lock:
+                    self._l1_data[message.market_update.stock_id] = message.market_update
 
     def shutdown(self):
         self._running = False

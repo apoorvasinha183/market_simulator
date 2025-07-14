@@ -20,7 +20,7 @@ pub mod market_gateway {
 }
 
 use market_gateway::market_gateway_server::{MarketGateway, MarketGatewayServer};
-use market_gateway::{FromPython, OrderAck, ToPython, TradeUpdate};
+use market_gateway::{FromPython, MarketUpdate, OrderAck, ToPython, TradeUpdate};
 
 // The gRPC server implementation.
 #[derive(Clone)]
@@ -180,12 +180,55 @@ impl CustomerAgent {
             grpc_response_sender: Arc::new(Mutex::new(None)),
         }
     }
+
+    fn run_market_data_broadcaster(
+        view_handle: ShadowBookHandle,
+        response_sender: Arc<Mutex<Option<tokio::sync::mpsc::Sender<Result<ToPython, Status>>>>>,
+    ) {
+        thread::spawn(move || {
+            loop {
+                thread::sleep(std::time::Duration::from_millis(100)); // Adjust interval as needed
+                let market_state = view_handle.read().unwrap();
+                if let Some(sender) = response_sender.lock().unwrap().as_ref() {
+                    for (stock_id, order_book) in market_state.order_books.iter() {
+                        let best_bid = order_book.bids.iter().next_back();
+                        let best_ask = order_book.asks.iter().next();
+
+                        if let (Some((bid_price, bid_level)), Some((ask_price, ask_level))) = (best_bid, best_ask) {
+                            let market_update = MarketUpdate {
+                                stock_id: *stock_id,
+                                best_bid_price: *bid_price as f64 / 100.0,
+                                best_bid_volume: bid_level.total_volume,
+                                best_ask_price: *ask_price as f64 / 100.0,
+                                best_ask_volume: ask_level.total_volume,
+                                last_traded_price: *market_state.last_traded_price.get(stock_id).unwrap_or(&0.0),
+                            };
+
+                            let response_msg = ToPython {
+                                event: Some(market_gateway::to_python::Event::MarketUpdate(market_update)),
+                            };
+
+                            if sender.blocking_send(Ok(response_msg)).is_err() {
+                                // eprintln!("[MarketDataBroadcaster] Error sending market data");
+                                break; // Stop if the client disconnects
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
 }
 
 impl Agent for CustomerAgent {
     fn run(&mut self) {
         //println!("[CustomerAgent {}] Starting...", self.id);
         let rt = Runtime::new().unwrap();
+
+        // --- Spawn Market Data Broadcaster ---
+        let view_handle_clone = self._view_handle.clone();
+        let broadcaster_response_sender_clone = self.grpc_response_sender.clone();
+        Self::run_market_data_broadcaster(view_handle_clone, broadcaster_response_sender_clone);
 
         let ack_rx_clone = self.ack_channel.clone();
         let map_clone = self.order_id_to_client_id.clone();

@@ -3,6 +3,7 @@
   import { Chart, registerables, type ChartConfiguration } from 'chart.js';
   import 'chartjs-adapter-date-fns';
   import { TimeFrame, type Candle, type MarketState, type WebSocketData, type Stock } from '../lib/types';
+  import { base } from '$app/paths';
 
   let CandlestickController, CandlestickElement;
 
@@ -46,7 +47,7 @@
   let candlestickCanvas: HTMLCanvasElement;
   let showCandlestickChart: boolean = true;
 
-  const MAX_PRICE_HISTORY = Infinity; // Keep all history
+  const MAX_PRICE_HISTORY = 100; // Keep all history
 
   function connectWebSocket() {
     if (socket) socket.close();
@@ -195,7 +196,9 @@
           datasets: [{
             label: 'Price',
             data: [],
-            borderColor: 'rgb(75, 192, 192)'
+            borderColor: 'rgb(75, 192, 192)',
+            pointRadius: 0, // Hide points by default
+            pointHitRadius: 10 // Make points easier to click/hover
           }]
         },
         options: {
@@ -244,7 +247,25 @@
     if (fullRedraw && priceHistoryData?.[selectedStockId]) {
       priceHistory = priceHistoryData[selectedStockId].map(([timestamp, price]) => ({ x: timestamp, y: price }));
     }
-    priceChart.data.datasets[0].data = priceHistory;
+
+    const dataset = priceChart.data.datasets[0];
+    dataset.data = priceHistory;
+
+    // Highlight the last data point
+    const pointBackgroundColors = new Array(priceHistory.length - 1).fill('transparent');
+    const pointBorderColors = new Array(priceHistory.length - 1).fill('transparent');
+    const pointRadii = new Array(priceHistory.length - 1).fill(0);
+
+    if (priceHistory.length > 0) {
+      pointBackgroundColors.push('red'); // Color for the last point
+      pointBorderColors.push('red');
+      pointRadii.push(8); // Larger radius for the last point
+    }
+
+    dataset.pointBackgroundColor = pointBackgroundColors;
+    dataset.pointBorderColor = pointBorderColors;
+    dataset.pointRadius = pointRadii;
+
     priceChart.update('none');
   }
 
@@ -293,7 +314,7 @@
 
 </script>
 
-<main class="dark-theme">
+<main class="neo-brutalism-theme">
   <div class="header">
     <div class="title-section">
       <h1>Market Visualizer</h1>
@@ -303,7 +324,8 @@
       </div>
     </div>
     <div class="controls">
-      <a href="/orderbook" class="button">Order Book</a>
+      <a href="{base}/orderbook" class="button">Order Book</a>
+      <a href="{base}/about" class="button">About</a>
       <div class="select-wrapper">
         <label for="stock-select">Stock:</label>
         <select id="stock-select" bind:value={selectedStockId} on:change={(e) => {
@@ -367,13 +389,13 @@
   :global(body) {
     margin: 0;
     font-family: 'Inter', sans-serif;
-    background-color: #1a1a2e;
-    color: #e0e0e0;
+    background-color: #fff; /* White background */
+    color: #000; /* Black text */
   }
 
-  .dark-theme {
-    background-color: #1a1a2e;
-    color: #e0e0e0;
+  .neo-brutalism-theme {
+    background-color: #fff;
+    color: #000;
   }
 
   .header {
@@ -381,9 +403,10 @@
     justify-content: space-between;
     align-items: center;
     padding: 1.5em 2.5em;
-    background-color: #16213e;
-    border-bottom: 1px solid #0f3460;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    background-color: #C2B280; /* Muted gold */
+    border-bottom: 4px solid #000; /* Strong black border */
+    box-shadow: 8px 8px 0px #000; /* Strong shadow */
+    margin-bottom: 2em;
   }
 
   .title-section {
@@ -393,55 +416,60 @@
   }
 
   h1 {
-    color: #e0e0e0;
+    color: #000;
     margin: 0;
-    font-size: 2.2em;
-    font-weight: 700;
+    font-size: 2.8em;
+    font-weight: 900; /* Extra bold */
+    text-transform: uppercase;
   }
 
   .stock-info h2 {
     margin: 0;
-    font-size: 1.8em;
-    color: #e94560;
-    font-weight: 600;
+    font-size: 2em;
+    color: #000;
+    font-weight: 700;
   }
 
   .stock-info p {
     margin: 0;
-    font-size: 1em;
-    color: #a0a0a0;
+    font-size: 1.1em;
+    color: #333;
   }
 
   .controls {
     display: flex;
     align-items: center;
-    gap: 1.2em;
+    gap: 1.5em;
   }
 
   .controls label {
-    font-weight: 500;
-    color: #b0b0b0;
-    font-size: 0.95em;
+    font-weight: 700;
+    color: #000;
+    font-size: 1em;
+    text-transform: uppercase;
   }
 
   .button {
-    padding: 0.6em 1.2em;
-    border-radius: 6px;
-    border: none;
-    background-color: #0f3460;
-    color: #e0e0e0;
+    padding: 0.8em 1.5em;
+    border-radius: 0px; /* Sharp corners */
+    border: 2px solid #000; /* Strong black border */
+    background-color: #008000; /* Muted green */
+    color: #000;
     cursor: pointer;
-    font-size: 0.95em;
-    font-weight: 500;
-    transition: background-color 0.2s ease;
+    font-size: 1em;
+    font-weight: 700;
+    transition: all 0.1s ease-in-out;
     text-decoration: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    box-shadow: 4px 4px 0px #000; /* Button shadow */
   }
 
   .button:hover {
-    background-color: #1a527f;
+    background-color: #00cc00;
+    box-shadow: 2px 2px 0px #000;
+    transform: translate(2px, 2px);
   }
 
   .select-wrapper {
@@ -451,80 +479,83 @@
   }
 
   .controls select {
-    padding: 0.5em 1em;
-    border-radius: 6px;
-    border: 1px solid #0f3460;
-    background-color: #16213e;
-    color: #e0e0e0;
+    padding: 0.7em 1.2em;
+    border-radius: 0px;
+    border: 2px solid #000;
+    background-color: #fff;
+    color: #000;
     cursor: pointer;
-    font-size: 0.95em;
+    font-size: 1em;
     appearance: none;
-    /* Remove default arrow */
     -webkit-appearance: none;
     -moz-appearance: none;
-    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23e0e0e0%22%20d%3D%22M287%2C197.3L159.3%2C69.6c-3.7-3.7-9.7-3.7-13.4%2C0L5.3%2C197.3c-3.7%2C3.7-3.7%2C9.7%2C0%2C13.4l13.4%2C13.4c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l110.7-110.7l110.7%2C110.7c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l13.4-13.4C290.7%2C207%2C290.7%2C201%2C287%2C197.3z%22%2F%3E%3C%2Fsvg%3E');
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23000%22%20d%3D%22M287%2C197.3L159.3%2C69.6c-3.7-3.7-9.7-3.7-13.4%2C0L5.3%2C197.3c-3.7%2C3.7-3.7%2C9.7%2C0%2C13.4l13.4%2C13.4c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l110.7-110.7l110.7%2C110.7c3.7%2C3.7%2C9.7%2C3.7%2C13.4%2C0l13.4-13.4C290.7%2C207%2C290.7%2C201%2C287%2C197.3z%22%2F%3E%3C%2Fsvg%3E');
     background-repeat: no-repeat;
     background-position: right 0.7em top 50%;
     background-size: 0.65em auto;
+    box-shadow: 2px 2px 0px #000;
   }
 
   .market-summary-cards {
     display: flex;
     justify-content: space-around;
     padding: 1.5em 2.5em;
-    background-color: #16213e;
-    border-bottom: 1px solid #0f3460;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    gap: 1.5em;
+    background-color: #fff;
+    border-bottom: 4px solid #000;
+    gap: 2em;
+    margin-bottom: 2em;
   }
 
   .summary-card {
     flex: 1;
     text-align: center;
-    padding: 1em;
-    background-color: #0f3460;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    padding: 1.5em;
+    background-color: #eee; /* Light grey background */
+    border-radius: 0px;
+    border: 2px solid #000;
+    box-shadow: 4px 4px 0px #000;
     display: flex;
     flex-direction: column;
     align-items: center;
   }
 
   .summary-card .label {
-    font-size: 0.9em;
-    color: #b0b0b0;
-    margin-bottom: 0.3em;
+    font-size: 1em;
+    color: #333;
+    margin-bottom: 0.5em;
+    font-weight: 700;
+    text-transform: uppercase;
   }
 
   .summary-card .value {
-    font-size: 1.6em;
-    font-weight: 700;
-    color: #e94560;
-    /* Accent color */
+    font-size: 2em;
+    font-weight: 900;
+    color: #B22222; /* Muted firebrick */
   }
 
   .content-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 2em;
-    padding: 2.5em;
+    gap: 2.5em;
+    padding: 0 2.5em 2.5em 2.5em; /* Adjust padding for overall layout */
   }
 
   .card {
-    background-color: #16213e;
-    padding: 2em;
-    border-radius: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    border: 1px solid #0f3460;
+    background-color: #fff;
+    padding: 2.5em;
+    border-radius: 0px;
+    border: 4px solid #000;
+    box-shadow: 8px 8px 0px #000;
   }
 
   h2 {
-    color: #e0e0e0;
+    color: #000;
     margin-top: 0;
     margin-bottom: 1.5em;
-    font-size: 1.8em;
-    border-bottom: 1px solid #0f3460;
+    font-size: 2.2em;
+    border-bottom: 2px solid #000;
     padding-bottom: 0.8em;
-    font-weight: 600;
+    font-weight: 900;
+    text-transform: uppercase;
   }
 </style>

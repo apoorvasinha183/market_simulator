@@ -102,10 +102,10 @@ pub const WHALE_ACTION_PROB: f64 = 0.8;
 pub const WHALE_ORDER_VOLUME: u64 = 100_000;
 
 // Reduced price offset to be aggressive but not completely unrealistic.
-pub const WHALE_PRICE_OFFSET_MAX: u64 = 5000; // $20.00
-pub const WHALE_PRICE_OFFSET_MIN: u64 = 100; // $1.00
+pub const WHALE_PRICE_OFFSET_MAX: u64 = 5000; // $50.00
+pub const WHALE_PRICE_OFFSET_MIN: u64 = 500; // $5.00
 
-pub const WHALE_REFRESH_THRESHOLD_BPS: u64 = 200; // 2.0%
+pub const WHALE_REFRESH_THRESHOLD_BPS: u64 = 500; // 5.0%
 
 pub const CRAZY_WHALE: f64 = 0.001;
 pub const WHALE_TAPER_ORDERS: u64 = 100;
@@ -131,7 +131,7 @@ pub const THERMO_AGENT_MIN_TEMP: f64 = 0.01;
 // --- Latency Simulation ---
 // These values control how many events are processed before the public-facing
 // market data (shadow book) is updated. Lower is faster/fresher.
-// Note: These are currently set in `grpc_server.rs` not here.
+// Note: These are currently set in `grpc_server.rs` not here. <-- aYY EYE DID THAT NOT ME
 pub const NORMAL_PROCESSING_LATENCY: usize = 500; // Normal agents
 pub const PREMIUM_PROCESSING_LATENCY: usize = 50; // Premium agents
 
