@@ -92,7 +92,10 @@ impl Agent for BowserAgent {
                             .filter_map(|entry| {
                                 let (stock_id, timeframe) = entry.key();
 
-                                if matches!(timeframe, TimeFrame::HundredMillis | TimeFrame::OneSecond) {
+                                if matches!(
+                                    timeframe,
+                                    TimeFrame::HundredMillis | TimeFrame::OneSecond
+                                ) {
                                     return None; // Skip these timeframes
                                 }
 
@@ -230,10 +233,7 @@ async fn websocket(stream: WebSocket, state: Arc<AppState>) {
         .iter()
         .filter(|entry| {
             let (_, timeframe) = entry.key();
-            !matches!(
-                timeframe,
-                TimeFrame::HundredMillis | TimeFrame::OneSecond
-            )
+            !matches!(timeframe, TimeFrame::HundredMillis | TimeFrame::OneSecond)
         })
         .map(|entry| {
             let (id, timeframe) = entry.key();

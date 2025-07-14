@@ -194,18 +194,25 @@ impl CustomerAgent {
                         let best_bid = order_book.bids.iter().next_back();
                         let best_ask = order_book.asks.iter().next();
 
-                        if let (Some((bid_price, bid_level)), Some((ask_price, ask_level))) = (best_bid, best_ask) {
+                        if let (Some((bid_price, bid_level)), Some((ask_price, ask_level))) =
+                            (best_bid, best_ask)
+                        {
                             let market_update = MarketUpdate {
                                 stock_id: *stock_id,
                                 best_bid_price: *bid_price as f64 / 100.0,
                                 best_bid_volume: bid_level.total_volume,
                                 best_ask_price: *ask_price as f64 / 100.0,
                                 best_ask_volume: ask_level.total_volume,
-                                last_traded_price: *market_state.last_traded_price.get(stock_id).unwrap_or(&0.0),
+                                last_traded_price: *market_state
+                                    .last_traded_price
+                                    .get(stock_id)
+                                    .unwrap_or(&0.0),
                             };
 
                             let response_msg = ToPython {
-                                event: Some(market_gateway::to_python::Event::MarketUpdate(market_update)),
+                                event: Some(market_gateway::to_python::Event::MarketUpdate(
+                                    market_update,
+                                )),
                             };
 
                             if sender.blocking_send(Ok(response_msg)).is_err() {
