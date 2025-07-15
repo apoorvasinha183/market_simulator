@@ -1,6 +1,7 @@
 import threading
 import queue
 import uuid
+from collections import defaultdict
 from .broker import Broker
 
 class RLGateway:
@@ -21,6 +22,9 @@ class RLGateway:
             self._running = True
             self._l1_data = {}
             self._l1_data_lock = threading.Lock()
+            self._agent_state = defaultdict(lambda: {'cash': 1_000_000.0, 'inventory': defaultdict(int)})
+            self._pending_orders = {}
+            self._state_lock = threading.Lock() # Lock for _agent_state and _pending_orders
 
             self.broker.connect()
 
@@ -31,7 +35,11 @@ class RLGateway:
 
     def register_agent(self):
         agent_id = str(uuid.uuid4())
-        self._agents[agent_id] = queue.Queue()
+        with self._state_lock:
+            self._agents[agent_id] = queue.Queue()
+            # Initialize cash and inventory for the new agent
+            self._agent_state[agent_id]['cash'] = 1_000_000.0 # Starting cash
+            self._agent_state[agent_id]['inventory'] = defaultdict(int)
         print(f"[Gateway] Registered new agent: {agent_id}")
         return agent_id
 
@@ -52,6 +60,24 @@ class RLGateway:
         with self._l1_data_lock:
             return self._l1_data.get(stock_id)
 
+    def evaluate_portfolio(self, agent_id):
+        with self._state_lock:
+            agent_data = self._agent_state[agent_id]
+            cash = agent_data['cash']
+            inventory_value = 0.0
+
+            for stock_id, quantity in agent_data['inventory'].items():
+                l1_data = self.get_l1_data(stock_id)
+                if l1_data:
+                    # Use mid-price for valuation if available, otherwise last traded
+                    if l1_data.best_bid_price > 0 and l1_data.best_ask_price > 0:
+                        mid_price = (l1_data.best_bid_price + l1_data.best_ask_price) / 2.0
+                    else:
+                        mid_price = l1_data.last_traded_price
+                    inventory_value += quantity * mid_price
+                # else: if no L1 data, that stock's value is not added to portfolio
+            return cash + inventory_value
+
     def _dispatch_messages(self):
         while self._running:
             message = self.broker.get_raw_update(block=True, timeout=1)
@@ -60,19 +86,52 @@ class RLGateway:
 
             event_type = message.WhichOneof('event')
 
-            if event_type == "order_ack":
-                client_id = message.order_ack.client_id
-                if client_id in self._agents:
-                    self._agents[client_id].put(message.order_ack)
+            with self._state_lock: # Lock for state updates
+                if event_type == "order_ack":
+                    ack = message.order_ack
+                    client_id = ack.client_id
+                    if client_id in self._agents:
+                        # Store pending order details for later trade processing
+                        self._pending_orders[ack.order_id] = {
+                            'stock_id': ack.stock_id,
+                            'side': ack.side,
+                            'volume': ack.volume,
+                            'filled_volume': 0 # Track filled volume for this order
+                        }
+                        self._agents[client_id].put(ack)
 
-            elif event_type == "trade_update":
-                client_id = message.trade_update.client_id
-                if client_id in self._agents:
-                    self._agents[client_id].put(message.trade_update)
+                elif event_type == "trade_update":
+                    trade = message.trade_update
+                    client_id = trade.client_id
+                    if client_id in self._agents:
+                        agent_data = self._agent_state[client_id]
+                        
+                        # Retrieve original order details
+                        original_order = self._pending_orders.get(trade.order_id)
+                        if original_order:
+                            stock_id = original_order['stock_id']
+                            side = original_order['side']
+                            volume_filled = trade.volume_filled
+                            trade_price = trade.price
 
-            elif event_type == "market_update":
-                with self._l1_data_lock:
-                    self._l1_data[message.market_update.stock_id] = message.market_update
+                            # Update cash and inventory
+                            if side == "Buy":
+                                agent_data['cash'] -= volume_filled * trade_price
+                                agent_data['inventory'][stock_id] += volume_filled
+                            elif side == "Sell":
+                                agent_data['cash'] += volume_filled * trade_price
+                                agent_data['inventory'][stock_id] -= volume_filled
+                            
+                            # Update filled volume for the pending order
+                            original_order['filled_volume'] += volume_filled
+                            if original_order['filled_volume'] >= original_order['volume']:
+                                del self._pending_orders[trade.order_id] # Order fully filled
+
+                        self._agents[client_id].put(trade)
+
+                elif event_type == "market_update":
+                    with self._l1_data_lock:
+                        self._l1_data[message.market_update.stock_id] = message.market_update
 
     def shutdown(self):
         self._running = False

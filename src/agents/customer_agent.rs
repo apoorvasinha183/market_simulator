@@ -260,6 +260,9 @@ impl Agent for CustomerAgent {
                             order_id: order_ack.id,
                             status: "Confirmed".to_string(),
                             details: "Order confirmed by market".to_string(),
+                            stock_id: order_ack.stock_id,
+                            side: format!("{:?}", order_ack.side),
+                            volume: order_ack.volume,
                         };
                         let response_msg = ToPython {
                             event: Some(market_gateway::to_python::Event::OrderAck(ack_msg)),

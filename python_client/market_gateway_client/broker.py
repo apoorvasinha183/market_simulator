@@ -32,7 +32,7 @@ class Broker:
         Runs in a separate thread, listening for messages from the server.
         Messages are batched before being put into the incoming_updates_queue.
         """
-        print("[Broker] Listening for messages from the server...")
+        # print("[Broker] Listening for messages from the server...")
         current_batch = []
         last_batch_time = time.time()
         batch_interval = 0.01  # 10 ms
@@ -52,7 +52,8 @@ class Broker:
 
         except grpc.RpcError as e:
             if self.is_running:
-                print(f"[Broker] Error listening for updates: {e}")
+                # print(f"[Broker] Error listening for updates: {e}")
+                pass
         finally:
             # Put any remaining messages in the batch when the stream ends
             if current_batch:
@@ -65,7 +66,7 @@ class Broker:
         while self.is_running:
             try:
                 message = self.outgoing_messages.get(timeout=1)
-                print(f"[Broker] _generate_requests yielding message for stock {message.submit_order.stock_id}")
+                # print(f"[Broker] _generate_requests yielding message for stock {message.submit_order.stock_id}")
                 yield message
             except queue.Empty:
                 continue
@@ -86,7 +87,7 @@ class Broker:
             submit_order=submit_order_request
         )
         self.outgoing_messages.put(from_python_message)
-        print(f"[Broker] Enqueued order: {order_type} {side} {volume}@{price} for stock {stock_id}")
+        # print(f"[Broker] Enqueued order: {order_type} {side} {volume}@{price} for stock {stock_id}")
 
     def get_raw_update(self, block=True, timeout=1.0):
         # First, try to get an already unpacked update
@@ -113,7 +114,7 @@ class Broker:
         Establishes the connection and starts the listener thread.
         """
         address = f"{self.host}:{self.port}"
-        print(f"[Broker] Connecting to gRPC server at {address}...")
+        # print(f"[Broker] Connecting to gRPC server at {address}...")
         import time
         time.sleep(2) # Give the server a moment to start
 
@@ -124,7 +125,7 @@ class Broker:
 
             # Start bidirectional stream
             server_stream = self.stub.EventStream(self._generate_requests())
-            print("[Broker] gRPC connection successful. Event stream established.")
+            # print("[Broker] gRPC connection successful. Event stream established.")
 
             # Listener for server updates
             listener_thread = threading.Thread(
@@ -133,7 +134,8 @@ class Broker:
             listener_thread.start()
 
         except grpc.RpcError as e:
-            print(f"[Broker] Failed to connect to gRPC server: {e.status()}")
+            # print(f"[Broker] Failed to connect to gRPC server: {e.status()}")
+            pass
 
     def stop(self):
         """
@@ -142,4 +144,4 @@ class Broker:
         self.is_running = False
         if self.channel:
             self.channel.close()
-        print("[Broker] Connection closed.")
+        # print("[Broker] Connection closed.")

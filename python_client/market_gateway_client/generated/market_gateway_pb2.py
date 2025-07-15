@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14market_gateway.proto\x12\x0emarket_gateway\"Q\n\nFromPython\x12:\n\x0csubmit_order\x18\x01 \x01(\x0b\x32\".market_gateway.SubmitOrderRequestH\x00\x42\x07\n\x05\x65vent\"\xae\x01\n\x08ToPython\x12-\n\torder_ack\x18\x01 \x01(\x0b\x32\x18.market_gateway.OrderAckH\x00\x12\x33\n\x0ctrade_update\x18\x02 \x01(\x0b\x32\x1b.market_gateway.TradeUpdateH\x00\x12\x35\n\rmarket_update\x18\x03 \x01(\x0b\x32\x1c.market_gateway.MarketUpdateH\x00\x42\x07\n\x05\x65vent\"z\n\x12SubmitOrderRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x10\n\x08stock_id\x18\x02 \x01(\x04\x12\x0c\n\x04side\x18\x03 \x01(\t\x12\r\n\x05price\x18\x04 \x01(\x01\x12\x0e\n\x06volume\x18\x05 \x01(\x04\x12\x12\n\norder_type\x18\x06 \x01(\t\"P\n\x08OrderAck\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x10\n\x08order_id\x18\x02 \x01(\x04\x12\x0e\n\x06status\x18\x03 \x01(\t\x12\x0f\n\x07\x64\x65tails\x18\x04 \x01(\t\"\x9d\x01\n\x0bTradeUpdate\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x10\n\x08order_id\x18\x02 \x01(\x04\x12\x10\n\x08stock_id\x18\x03 \x01(\x04\x12\r\n\x05price\x18\x04 \x01(\x01\x12\x15\n\rvolume_filled\x18\x05 \x01(\x04\x12\x18\n\x10new_total_filled\x18\x06 \x01(\x04\x12\x17\n\x0fis_fully_filled\x18\x07 \x01(\x08\"\x9d\x01\n\x0cMarketUpdate\x12\x10\n\x08stock_id\x18\x01 \x01(\x04\x12\x16\n\x0e\x62\x65st_bid_price\x18\x02 \x01(\x01\x12\x17\n\x0f\x62\x65st_bid_volume\x18\x03 \x01(\x04\x12\x16\n\x0e\x62\x65st_ask_price\x18\x04 \x01(\x01\x12\x17\n\x0f\x62\x65st_ask_volume\x18\x05 \x01(\x04\x12\x19\n\x11last_traded_price\x18\x06 \x01(\x01\x32X\n\rMarketGateway\x12G\n\x0b\x45ventStream\x12\x1a.market_gateway.FromPython\x1a\x18.market_gateway.ToPython(\x01\x30\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14market_gateway.proto\x12\x0emarket_gateway\"Q\n\nFromPython\x12:\n\x0csubmit_order\x18\x01 \x01(\x0b\x32\".market_gateway.SubmitOrderRequestH\x00\x42\x07\n\x05\x65vent\"\xae\x01\n\x08ToPython\x12-\n\torder_ack\x18\x01 \x01(\x0b\x32\x18.market_gateway.OrderAckH\x00\x12\x33\n\x0ctrade_update\x18\x02 \x01(\x0b\x32\x1b.market_gateway.TradeUpdateH\x00\x12\x35\n\rmarket_update\x18\x03 \x01(\x0b\x32\x1c.market_gateway.MarketUpdateH\x00\x42\x07\n\x05\x65vent\"z\n\x12SubmitOrderRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x10\n\x08stock_id\x18\x02 \x01(\x04\x12\x0c\n\x04side\x18\x03 \x01(\t\x12\r\n\x05price\x18\x04 \x01(\x01\x12\x0e\n\x06volume\x18\x05 \x01(\x04\x12\x12\n\norder_type\x18\x06 \x01(\t\"\x80\x01\n\x08OrderAck\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x10\n\x08order_id\x18\x02 \x01(\x04\x12\x0e\n\x06status\x18\x03 \x01(\t\x12\x0f\n\x07\x64\x65tails\x18\x04 \x01(\t\x12\x10\n\x08stock_id\x18\x05 \x01(\x04\x12\x0c\n\x04side\x18\x06 \x01(\t\x12\x0e\n\x06volume\x18\x07 \x01(\x04\"\x9d\x01\n\x0bTradeUpdate\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x10\n\x08order_id\x18\x02 \x01(\x04\x12\x10\n\x08stock_id\x18\x03 \x01(\x04\x12\r\n\x05price\x18\x04 \x01(\x01\x12\x15\n\rvolume_filled\x18\x05 \x01(\x04\x12\x18\n\x10new_total_filled\x18\x06 \x01(\x04\x12\x17\n\x0fis_fully_filled\x18\x07 \x01(\x08\"\x9d\x01\n\x0cMarketUpdate\x12\x10\n\x08stock_id\x18\x01 \x01(\x04\x12\x16\n\x0e\x62\x65st_bid_price\x18\x02 \x01(\x01\x12\x17\n\x0f\x62\x65st_bid_volume\x18\x03 \x01(\x04\x12\x16\n\x0e\x62\x65st_ask_price\x18\x04 \x01(\x01\x12\x17\n\x0f\x62\x65st_ask_volume\x18\x05 \x01(\x04\x12\x19\n\x11last_traded_price\x18\x06 \x01(\x01\x32X\n\rMarketGateway\x12G\n\x0b\x45ventStream\x12\x1a.market_gateway.FromPython\x1a\x18.market_gateway.ToPython(\x01\x30\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -27,12 +27,12 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_TOPYTHON']._serialized_end=298
   _globals['_SUBMITORDERREQUEST']._serialized_start=300
   _globals['_SUBMITORDERREQUEST']._serialized_end=422
-  _globals['_ORDERACK']._serialized_start=424
-  _globals['_ORDERACK']._serialized_end=504
-  _globals['_TRADEUPDATE']._serialized_start=507
-  _globals['_TRADEUPDATE']._serialized_end=664
-  _globals['_MARKETUPDATE']._serialized_start=667
-  _globals['_MARKETUPDATE']._serialized_end=824
-  _globals['_MARKETGATEWAY']._serialized_start=826
-  _globals['_MARKETGATEWAY']._serialized_end=914
+  _globals['_ORDERACK']._serialized_start=425
+  _globals['_ORDERACK']._serialized_end=553
+  _globals['_TRADEUPDATE']._serialized_start=556
+  _globals['_TRADEUPDATE']._serialized_end=713
+  _globals['_MARKETUPDATE']._serialized_start=716
+  _globals['_MARKETUPDATE']._serialized_end=873
+  _globals['_MARKETGATEWAY']._serialized_start=875
+  _globals['_MARKETGATEWAY']._serialized_end=963
 # @@protoc_insertion_point(module_scope)

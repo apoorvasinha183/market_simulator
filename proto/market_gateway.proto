@@ -40,6 +40,9 @@ message OrderAck {
   uint64 order_id = 2;
   string status = 3;
   string details = 4;
+  uint64 stock_id = 5;
+  string side = 6;
+  uint64 volume = 7;
 }
 
 message TradeUpdate {
