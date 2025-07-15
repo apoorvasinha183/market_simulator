@@ -6,6 +6,12 @@ The system models information asymmetry and concurrency to allow for the study o
 
 ## Features
 
+## Demo
+
+![Simulation Demo](simulation_demo.gif)
+
+*The different components of the trading simulator in action: CLI, Desktop GUI, Web Frontend and Python Client Integration*
+
 *   **Multi-threaded Core:** The simulation is built on an actor-based architecture in Rust. Components run in separate threads and communicate via channels.
 *   **Asynchronous Matching Engine:** The market manages a dedicated, asynchronous order book for each stock, allowing for parallel trade execution.
 *   **"Shadow Book" System:** Provides agents with high-speed, read-only snapshots of the market state. This includes a lower-latency data feed for designated agents to model information asymmetry.
