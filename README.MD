@@ -1,67 +1,78 @@
 # Market Simulation Platform
 
-This project provides a high-performance, distributed financial market simulator written in Rust. It is designed for research, testing, and analysis of trading strategies and market dynamics within a realistic limit order book environment. The platform enables the simulation of various market participants and their interactions, offering a robust tool for understanding complex market behaviors.
+This project is a financial market simulator written in Rust. It provides a multi-threaded environment for simulating the dynamics of a limit order book. The platform is designed to facilitate the development and analysis of trading strategies and market microstructure by modeling the interactions of multiple, concurrent market participants.
 
-## Key Features
+The system models information asymmetry and concurrency to allow for the study of emergent behaviors that result from agent interactions.
 
-*   **High-Performance Matching Engine:** Implements a true-to-life limit order book with price-time priority matching, partial fills, and cancellations, optimized for speed and concurrency in Rust.
-*   **Multi-threaded Event-Driven Architecture:** The market and agents operate in their own threads, communicating through a central event bus and high-speed channels for maximum performance and realism. Agents now react to specific market events rather than constantly polling.
-*   **Diverse Agent Ecosystem:** Populated by various agent types, each with distinct behaviors, including purely reactive market makers, and sophisticated **Thermodynamic Agents** that model emergent behavior based on sentiment and market momentum.
-*   **Pluggable Agent Framework:** An extensible `Agent` trait in Rust allows for easy development and integration of custom trading agents.
-*   **Real-time Communication via gRPC:** Utilizes gRPC for efficient, bi-directional streaming of market data and order flow between the Rust backend and Python clients, enabling external control and observation.
-*   **Configurable Market Parameters:** Provides extensive configuration options for tuning agent behaviors, liquidity levels, and other market parameters to simulate diverse market conditions.
-*   **Live Visualization:** Includes real-time GUI applications built with `egui` to observe market dynamics, order book depth, and price history as the simulation unfolds.
-*   **External Sentiment Integration:** Features a dedicated `SentimentEngine` that consumes real-time sentiment data from an external UDP source, influencing the behavior of Thermodynamic Agents and adding an additional layer of market realism.
-*   **Docker Support:** Comprehensive Docker configurations are provided for streamlined setup and deployment of the entire simulation environment.
+## Features
 
-## Demo
+*   **Multi-threaded Core:** The simulation is built on an actor-based architecture in Rust. Components run in separate threads and communicate via channels.
+*   **Asynchronous Matching Engine:** The market manages a dedicated, asynchronous order book for each stock, allowing for parallel trade execution.
+*   **"Shadow Book" System:** Provides agents with high-speed, read-only snapshots of the market state. This includes a lower-latency data feed for designated agents to model information asymmetry.
+*   **Concurrent Agents:** Agents are independent actors running in their own threads. Their decision-making logic is parallelized across the stock universe.
+*   **Extensible Agent Framework:** A base `Agent` trait allows for the creation of custom trading agents.
+*   **gRPC Interface:** A bidirectional gRPC stream allows external clients to programmatically interact with the simulation.
+*   **External Data Integration:** A UDP-based engine allows external data streams to be injected into the simulation as events.
+*   **Visualization Tools:** The project includes a native `egui`-based GUI for order book visualization and a Svelte-based web interface.
+*   **Tooling:** The repository includes Docker support, unit tests, and benchmarking suites.
 
-![Market Simulator Demo](output.gif)
+## System Design: The Lifecycle of an Order
 
-## Planned Features
-
-*   **Live Candle Generation:**
-    *   **`Candle` Struct:** A new struct will be created to hold OHLC (Open, High, Low, Close) prices and total volume.
-    *   **Live `MarketState` Integration:** The `MarketState` will be updated to include a `HashMap` of `Candle`s for each stock, making live candle data accessible to all agents and observers.
-    *   **`ShadowWorker` Updates:** The `ShadowWorker` will be enhanced to update the `Candle` for each trade it processes, building the candles in real-time.
+1.  **Decision:** An **Agent**, running in its own thread, reads from its local "Shadow Book" handle to get the current market state and decides to place an order.
+2.  **Submission:** The agent creates an `OrderRequest` and sends it to a central channel connected to the `Market`.
+3.  **Dispatch:** The **`Market`** actor receives the request. It assigns a unique ID, sends an `OrderAck` back to the agent, and forwards the request to the dedicated `AsyncOrderBook` actor for that stock.
+4.  **Notification:** The `Market` also publishes a `ShadowEvent` to the **`ShadowCoordinator`**, which updates its market view.
+5.  **Matching:** The **`AsyncOrderBook`** actor for the stock receives the order and processes it against its canonical order book, generating `Trade`s.
+6.  **Execution Report:** These `Trade`s are sent to a central **`TradeProcessor`** thread, which sends reports back to the agents involved (taker and maker).
+7.  **State Update:** The agents' portfolio-update threads receive these reports and update their internal state (e.g., cash and inventory).
 
 ## Architecture
 
-The platform employs a client-server architecture with a clear separation of concerns:
+The platform uses a multi-layered, decoupled architecture.
 
-*   **Rust Backend:** This is the core of the simulation, implemented in Rust for its performance and concurrency capabilities. It manages the central `Market` (the exchange), which handles order books, trade execution, and agent state updates. The backend also hosts the gRPC server, exposing the simulation's API.
-*   **Central Event Bus:** A `crossbeam-channel` based broadcast system that distributes `MarketEvent`s (Trade, Sentiment, Heartbeat) to all subscribed agents. This is the nervous system of the simulation, enabling efficient and reactive agent behavior.
-*   **Agent Ecosystem:**
-    *   **Reactive Agents:** Such as the `MarketMakerAgent`, respond directly and deterministically to market events (e.g., trades) to maintain liquidity.
-    *   **Thermodynamic Agents:** A new class of agents (`ThermoAgent`) that model complex, emergent behavior. Their internal state (temperature, chemical potential, specific heat) is influenced by external sentiment and market momentum, leading to probabilistic actions. These agents replace the previous "dumb" agents, offering a more nuanced and realistic simulation of retail and speculative traders.
-*   **External Sentiment Service:** An independent Rust microservice (located in `sentiment_service/`) that generates and broadcasts real-time sentiment data via UDP. This service acts as an external input to the simulation, providing a dynamic and realistic source of market "mood."
-*   **Python Client:** This component serves as the external interface to the simulation. It connects to the Rust gRPC server, allowing users to send various order types (Market, Limit) and receive real-time updates such as order acknowledgments and trade notifications. This enables flexible control and data consumption for external trading algorithms or analysis tools.
-*   **gRPC Communication:** Protocol Buffers define the service contract (`market_gateway.proto`), ensuring a language-agnostic and efficient communication layer. A bi-directional streaming RPC facilitates real-time data exchange between the Rust backend and Python clients.
+*   **Core Simulation Actors:**
+    *   **`Orchestra`:** The bootstrap module that constructs all components, connects them with communication channels, and launches each in its own thread.
+    *   **`Market`:** A central routing actor that directs order flow to the correct order book and broadcasts market-wide events.
+    *   **`AsyncOrderBook`:** A dedicated actor for each stock that owns the canonical order book and performs trade matching.
+    *   **`Agent`s:** Each agent is an independent actor, running its logic concurrently.
+
+*   **Market Data Subsystem (The Shadow Books):**
+    This system is designed to prevent data contention bottlenecks. Instead of giving agents direct access to the live order books, it provides read-only snapshots.
+    *   **`ShadowCoordinator`:** A background service that listens to events from the `Market` and builds a "back-buffer" view of the market state.
+    *   **`MarketState` Handle:** Periodically, the coordinator swaps this buffer into a front-buffer, which agents can read from with low contention. This provides an eventually consistent view of the market.
+
+*   **External Interfaces:**
+    *   **gRPC Server:** Hosted by the `CustomerAgent`, it provides the primary entry point for external clients.
+    *   **`SentimentEngine`:** Listens for UDP multicast messages, allowing external data to be injected into the simulation as `MarketEvent`s.
 
 ## Technologies Used
 
 *   **Rust:**
-    *   `tokio`: Asynchronous runtime for concurrent operations.
-    *   `tonic`, `prost`: gRPC framework and Protocol Buffer implementation.
-    *   `crossbeam-channel`: High-performance multi-producer, multi-consumer channels (including broadcast).
-    *   `parking_lot`, `once_cell`: Concurrency primitives for shared state management.
-    *   `eframe`, `egui_plot`: For GUI development and plotting in the visualizer.
-    *   `criterion`: Benchmarking framework.
+    *   `tokio`: Asynchronous runtime.
+    *   `tonic`, `prost`: gRPC framework.
+    *   `crossbeam-channel`: Channels for actor communication.
+    *   `dashmap`, `parking_lot`: Concurrent data structures.
+    *   `eframe`, `egui_plot`: For the native GUI visualizer.
+    *   `axum`: For the web server.
+    *   `criterion`: Benchmarking.
 *   **Python:**
-    *   `grpcio`, `grpcio-tools`: Python gRPC libraries.
+    *   `grpcio`, `grpcio-tools`: For the gRPC client.
     *   `pytest`: For testing the Python client.
-*   **Docker:** For containerization and simplified deployment using `docker-compose`.
+*   **Web:**
+    *   `Svelte`: For the web user interface.
+    *   `Vite`: Frontend tooling.
+*   **Docker:** For containerization with `docker-compose`.
 
-## Setup and Installation
+## Getting Started
 
 ### Prerequisites
 
 *   Rust (with Cargo)
 *   Python 3.10+
-*   Conda (recommended for Python environment management)
-*   Docker (if using Docker for deployment)
+*   Node.js and npm (for the web visualizer)
+*   Docker (optional, for containerized deployment)
 
-### Local Setup (without Docker)
+### Local Setup
 
 1.  **Clone the repository:**
     ```bash
@@ -69,113 +80,72 @@ The platform employs a client-server architecture with a clear separation of con
     cd market_simulator
     ```
 
-2.  **Rust Backend Setup:**
-    *   Build the Rust project:
-        ```bash
-        cargo build --release
-        ```
-    *   Run the gRPC server:
-        ```bash
-        cargo run --release --bin grpc_server
-        ```
-        Keep this terminal open as the server will run continuously.
+2.  **Run the Rust gRPC Server:**
+    This is the main simulation engine.
+    ```bash
+    cargo run --release --bin grpc_server
+    ```
+    Keep this terminal open.
 
-3.  **Run the External Sentiment Service:**
-    *   Navigate to the `sentiment_service/sentiment` directory:
-        ```bash
-        cd sentiment_service/sentiment
-        ```
-    *   Build and run the sentiment service:
-        ```bash
-        cargo run --release --bin sentiment_service
-        ```
-        This service will start broadcasting sentiment data via UDP. Keep this terminal open.
+3.  **Run the Python Client (Optional):**
+    This client connects to the server and submits orders.
+    ```bash
+    # Navigate to the python client directory
+    cd python_client
 
-4.  **Python Client Setup:**
-    *   Navigate back to the `python_client` directory:
-        ```bash
-        cd ../python_client
-        ```
-    *   Create and activate the Conda environment:
-        ```bash
-        conda env create -f environment.yml
-        conda activate market_simulator_env
-        ```
-    *   Install Python dependencies:
-        ```bash
-        pip install -r requirements.txt
-        ```
-    *   Generate gRPC Python stubs (if not already generated or if `.proto` files change):
-        ```bash
-        python -m grpc_tools.protoc -I../proto --python_out=./market_gateway_client/generated --grpc_python_out=./market_gateway_client/generated ../proto/market_gateway.proto
-        ```
-    *   Run the Python broker client:
-        ```bash
-        python run_broker.py
-        ```
-        This will connect to the Rust server and begin sending orders.
+    # Use a virtual environment
+    python -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+
+    # Run the broker
+    python run_broker.py
+    ```
+
+4.  **Run the Web Visualizer (Optional):**
+    This launches a web UI to view market data.
+    ```bash
+    # Navigate to the web visualizer directory
+    cd market_visualizer_web
+
+    # Install dependencies
+    npm install
+
+    # Start the development server
+    npm run dev
+    ```
+    Open your browser to the address shown in the terminal.
 
 ### Docker Setup
 
-1.  **Build and run services using Docker Compose:**
-    ```bash
-    docker-compose up --build
-    ```
-    This command will build the Docker images for both the Rust server and Python client, and then start them.
-    *Note: You may need to manually start the `sentiment_service` within its container or add it to the `docker-compose.yml` if you wish to run it via Docker.*
+To build and run the stack using Docker Compose:
 
-## Usage
-
-Once the Rust gRPC server, external sentiment service, and Python client are running:
-
-*   The Rust server's console will display market events, agent actions, and trade executions.
-*   The Python client's console will show the orders being sent and any acknowledgments or trade updates received from the server.
-*   To run the live market visualizer:
-    ```bash
-    cargo run --release --bin visual_order
-    ```
-    This will launch a GUI application providing a real-time view of the order book and price history.
-*   **Sending Sentiment:** You can send sentiment data to the `sentiment_service` via UDP. For example, if a stock's sentiment port is `80` (as defined in `stock.csv`), you can use `netcat` or a simple Python script:
-    ```bash
-    # Using netcat (Linux/macOS)
-    echo "0.75" | nc -u -w0 127.0.0.1 80
-    ```
-    The `ThermoAgent`s will react to these sentiment inputs.
+```bash
+docker-compose up --build
+```
 
 ## Project Structure
 
-*   `./`: Root directory, containing `Cargo.toml`, `docker-compose.yml`, `README.md`, etc.
-*   `proto/`: Defines the gRPC service contract in `market_gateway.proto`.
-*   `src/`: Rust source code for the simulation backend.
-    *   `src/agents/`: Implementations of various agent behaviors and configurations, including the new `ThermoAgent`.
-    *   `src/bin/`: Executable binaries, including the gRPC server and visualizer.
-    *   `src/events/`: Defines the `MarketEvent` enum for the central event bus.
-    *   `src/pricing/`: Modules for pricing models.
-    *   `src/sentiment_engine/`: Components for consuming external sentiment data.
-    *   `src/simulation/`: Core orchestration logic for the simulation.
-    *   `src/simulators/`: Implementations of the market and order book.
-    *   `src/stocks/`: Definitions and management of stock instruments.
-    *   `src/types/`: Fundamental data structures for orders, trades, and other market entities.
-*   `sentiment_service/`: An independent Rust project that generates and broadcasts sentiment data via UDP.
-*   `python_client/`: Python client application.
-    *   `python_client/market_gateway_client/`: Python client logic and generated gRPC files.
-    *   `python_client/tests/`: Unit and integration tests for the Python client.
-    *   `python_client/environment.yml`, `python_client/requirements.txt`: Python dependency management files.
-*   `benches/`: Rust benchmarking code.
-*   `tests/`: Rust integration tests.
-
-## Project Roadmap
-
-| Phase | Description | Status |
-| :--- | :--- | :--- |
-| **Foundation** | Core architecture, multi-threaded orchestra, agent framework | Complete |
-| **Core Actors** | Implementation of all major agent types | Complete |
-| **Visualization** | Real-time order book and price history visualizer | Complete |
-| **Event-Driven Core** | Central event bus, sentiment integration, Thermodynamic Agents | Complete |
-| **Testing** | Comprehensive unit and integration tests | In Progress |
-| **RL Integration** | A streaming interface (e.g., gRPC) for external policy control | Planned |
-| **Options Market** | Dedicated infrastructure for options pricing and trading | Planned |
+*   `./`: Root directory, containing `Cargo.toml`, `docker-compose.yml`, etc.
+*   `src/`: The core Rust simulation backend.
+    *   `agents/`: Implementations of agent behaviors.
+    *   `bin/`: Entry points for executable binaries (`grpc_server`, visualizers).
+    *   `market/`: The core market routing logic.
+    *   `simulation/`: The `Orchestra` and the "Shadow Book" architecture.
+    *   `simulators/`: The `OrderBook` implementation.
+*   `proto/`: The gRPC service contract (`market_gateway.proto`).
+*   `python_client/`: The Python client for interacting with the simulation.
+*   `market_visualizer_web/`: The Svelte-based web frontend.
+*   `sentiment_service/`: A separate Rust project that can broadcast sentiment data.
+*   `benches/`: Performance benchmarks for the Rust core.
+*   `tests/`: Integration tests for the Rust core.
 
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
+
+
+---
+
+### A Note on Tooling
+The architecture and core system design of this project are my own. To accelerate development and focus on the higher-level design, AI assistants were used for generating boilerplate code, documentation, and unit tests.

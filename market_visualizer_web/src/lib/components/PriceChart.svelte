@@ -10,8 +10,10 @@
   export let priceHistoryData: { [key: string]: [number, number][] } = {};
   export let isCandlestick: boolean;
 
-  let chartCanvas: HTMLCanvasElement;
-  let chart: Chart | null = null;
+  let priceCanvas: HTMLCanvasElement;
+  let volumeCanvas: HTMLCanvasElement;
+  let priceChart: Chart | null = null;
+  let volumeChart: Chart | null = null;
 
   const timeFrameMap: { [key: string]: string } = {
     "HundredMillis": "100ms",
@@ -22,16 +24,25 @@
     "ThirtyMinutes": "30m",
   };
 
+  let blinkOn = true;
+  let blinker: NodeJS.Timeout;
+
   onMount(async () => {
+    blinker = setInterval(() => {
+      blinkOn = !blinkOn;
+      updateCharts();
+    }, 500);
+
     const { Chart: ChartJS, registerables } = await import('chart.js');
     const { CandlestickController, CandlestickElement } = await import('chartjs-chart-financial');
+    const { BarController, BarElement } = await import('chart.js');
     await import('chartjs-adapter-date-fns');
-    ChartJS.register(...registerables, CandlestickController, CandlestickElement);
+    ChartJS.register(...registerables, CandlestickController, CandlestickElement, BarController, BarElement);
 
-    if (chartCanvas && !chart) {
-      const ctx = chartCanvas.getContext('2d');
-      if (ctx) {
-        chart = new ChartJS(ctx, {
+    if (priceCanvas && !priceChart) {
+      const priceCtx = priceCanvas.getContext('2d');
+      if (priceCtx) {
+        priceChart = new ChartJS(priceCtx, {
           type: 'line', // Default type
           data: { datasets: [] },
           options: {
@@ -39,69 +50,147 @@
             maintainAspectRatio: false,
             scales: {
               x: { type: 'time', grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { display: false } },
-              y: { grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#d1d4dc' } },
+              y: { position: 'right', grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#d1d4dc' } },
             },
-            plugins: { legend: { display: false } },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(context: any) {
+                    const raw = context.raw;
+                    if (raw && typeof raw === 'object' && 'o' in raw) {
+                      return [
+                        `Open: ${raw.o.toFixed(2)}`,
+                        `High: ${raw.h.toFixed(2)}`,
+                        `Low: ${raw.l.toFixed(2)}`,
+                        `Close: ${raw.c.toFixed(2)}`,
+                      ];
+                    }
+                    return `${context.dataset.label}: ${context.formattedValue}`;
+                  }
+                }
+              }
+            },
           },
         });
-        updateChart(); // Initial data load
       }
     }
+
+    if (volumeCanvas && !volumeChart) {
+      const volumeCtx = volumeCanvas.getContext('2d');
+      if (volumeCtx) {
+        volumeChart = new ChartJS(volumeCtx, {
+          type: 'bar',
+          data: { datasets: [] },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: { type: 'time', grid: { display: false }, ticks: { color: '#d1d4dc', maxRotation: 0, minRotation: 0 } },
+              y: { position: 'right', grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#d1d4dc', maxTicksLimit: 5 } },
+            },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: function(context: any) {
+                    return `Volume: ${context.raw.y.toLocaleString()}`;
+                  }
+                }
+              }
+            },
+          },
+        });
+      }
+    }
+    updateCharts();
   });
 
   afterUpdate(() => {
-    if (chart) {
-      updateChart();
-    }
+    updateCharts();
   });
 
   onDestroy(() => {
-    chart?.destroy();
+    priceChart?.destroy();
+    volumeChart?.destroy();
+    clearInterval(blinker);
   });
 
-  function updateChart() {
-    if (!chart) return;
+  function updateCharts() {
+    if (!priceChart || !volumeChart) return;
 
     if (isCandlestick) {
-      chart.config.type = 'candlestick';
+      priceChart.config.type = 'candlestick';
       const backendTimeFrame = timeFrameMap[selectedTimeFrame];
       const key = `${selectedStockId}-${backendTimeFrame}`;
       const candles = candleData[key] || [];
-      chart.data.datasets = [{
+      
+      priceChart.data.datasets = [{
         label: 'Price',
-        data: candles.map(c => ({ x: c.timestamp, o: c.open, h: c.high, l: c.low, c: c.close }))
+        data: candles.map(c => ({ x: c.timestamp, o: c.open, h: c.high, l: c.low, c: c.close })),
       }];
+
+      volumeChart.data.datasets = [{
+        label: 'Volume',
+        data: candles.map(c => ({ x: c.timestamp, y: c.volume })),
+        backgroundColor: candles.map(c => c.close >= c.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'),
+      }];
+
     } else {
-      chart.config.type = 'line';
+      priceChart.config.type = 'line';
       const history = (priceHistoryData?.[selectedStockId] || []).map(([timestamp, price]) => ({ x: timestamp, y: price }));
       
-      // Logic to emphasize the last point
       const pointRadii = new Array(history.length).fill(0);
+      const pointColors = new Array(history.length).fill('rgba(0,0,0,0)');
+
       if (history.length > 0) {
-        pointRadii[history.length - 1] = 5; // Larger radius for the last point
+        pointRadii[history.length - 1] = blinkOn ? 5 : 0;
+        pointColors[history.length - 1] = 'rgb(255, 99, 132)';
       }
 
-      chart.data.labels = history.map(d => d.x); // Explicitly set labels for the line chart
-
-      chart.data.datasets = [{
+      priceChart.data.datasets = [{
         label: 'Price',
         data: history,
         borderColor: 'rgb(75, 192, 192)',
+        tension: 0.1,
         pointRadius: pointRadii,
-        pointBackgroundColor: 'rgb(255, 99, 132)',
-        pointBorderColor: 'rgb(255, 99, 132)',
+        pointBackgroundColor: pointColors,
+        pointBorderColor: pointColors,
       }];
+      
+      // Clear volume chart when in line mode
+      volumeChart.data.datasets = [{ label: 'Volume', data: [] }];
     }
-    chart.update('none');
+
+    // Synchronize charts
+    if (priceChart.options.scales?.x) {
+        volumeChart.options.scales.x.min = priceChart.options.scales.x.min;
+        volumeChart.options.scales.x.max = priceChart.options.scales.x.max;
+    }
+
+    priceChart.update('none');
+    volumeChart.update('none');
   }
 </script>
 
-<div class="chart-container">
-  <canvas bind:this={chartCanvas}></canvas>
+<div class="chart-grid-container">
+  <div class="price-chart-container">
+    <canvas bind:this={priceCanvas}></canvas>
+  </div>
+  <div class="volume-chart-container">
+    <canvas bind:this={volumeCanvas}></canvas>
+  </div>
 </div>
 
 <style>
-  .chart-container {
+  .chart-grid-container {
+    display: grid;
+    grid-template-rows: 70% 30%;
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+  .price-chart-container, .volume-chart-container {
     position: relative;
     width: 100%;
     height: 100%;

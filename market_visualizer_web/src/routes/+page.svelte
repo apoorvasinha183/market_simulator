@@ -1,3 +1,4 @@
+
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import Header from '$lib/components/Header.svelte';
@@ -20,6 +21,8 @@
   let stockMap: Map<string, Stock> = new Map();
   
   let showCandlestickChart: boolean = true;
+
+  const MAX_DATA_POINTS = 1000; // Define the window size
 
   // Reactive UI-bound variables
   $: selectedStock = stockMap.get(selectedStockId);
@@ -90,7 +93,6 @@
         spreads: { ...marketState?.spreads, ...data.market_state.spreads },
       };
 
-      // *** FIX: Append new price points to history ***
       if (priceHistoryData && data.market_state.last_traded_price) {
           for (const stockId in data.market_state.last_traded_price) {
               if (Object.prototype.hasOwnProperty.call(data.market_state.last_traded_price, stockId)) {
@@ -98,6 +100,11 @@
                       priceHistoryData[stockId] = [];
                   }
                   const newPrice = data.market_state.last_traded_price[stockId];
+                  
+                  // Sliding window logic for price history
+                  if (priceHistoryData[stockId].length >= MAX_DATA_POINTS) {
+                      priceHistoryData[stockId] = priceHistoryData[stockId].slice(-MAX_DATA_POINTS); // Keep only the last N points
+                  }
                   priceHistoryData[stockId].push([Date.now(), newPrice]);
               }
           }
@@ -111,6 +118,11 @@
           candleData[key] = [];
         }
         newCandles.forEach((newCandle: Candle) => {
+          // Sliding window logic for candle data
+          if (candleData[key].length >= MAX_DATA_POINTS) {
+              candleData[key] = candleData[key].slice(-MAX_DATA_POINTS); // Keep only the last N points
+          }
+
           const lastCandle = candleData[key][candleData[key].length - 1];
           if (lastCandle && lastCandle.timestamp === newCandle.timestamp) {
             candleData[key][candleData[key].length - 1] = newCandle; // Update last candle
