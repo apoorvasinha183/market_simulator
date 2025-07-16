@@ -100,6 +100,13 @@ impl ThermoAgent {
         let new_temp = current_temp + (score.abs() / self.specific_heat);
         self.temperature
             .insert(stock_id, new_temp.max(0.0).min(1.0));
+
+        // Update chemical potential based on the sentiment score (sign and magnitude).
+        // This creates the buy/sell pressure.
+        let current_chem_pot = *self.chemical_potential.entry(stock_id).or_insert(0.0);
+        let new_chem_pot = current_chem_pot + score; // Add the score as an impulse
+        self.chemical_potential
+            .insert(stock_id, new_chem_pot.max(-1.0).min(1.0));
     }
 
     fn handle_trade(&mut self, trade: &Trade) {
@@ -115,18 +122,7 @@ impl ThermoAgent {
         history.push_back(current_price);
         self.last_price.insert(trade.stock_id, current_price);
 
-        // Update chemical potential based on momentum for the specific stock
-        if history.len() < MOMENTUM_WINDOW / 2 {
-            return;
-        } // Not enough data for meaningful momentum
-
-        let avg_price: f64 = history.iter().sum::<f64>() / history.len() as f64;
-        let momentum = (current_price - avg_price) / avg_price;
-
-        let current_chem_pot = *self.chemical_potential.entry(trade.stock_id).or_insert(0.0);
-        let new_chem_pot = current_chem_pot + (momentum * 5.0); // Sensitivity factor
-        self.chemical_potential
-            .insert(trade.stock_id, new_chem_pot.max(-1.0).min(1.0));
+        // NOTE: Chemical potential is now driven by sentiment, not trade-based momentum.
     }
 
     fn handle_heartbeat(&mut self) {

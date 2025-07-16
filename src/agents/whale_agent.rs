@@ -1,14 +1,14 @@
-// src/agents/whale_agent.rs
 use crossbeam_channel::{Receiver, Sender};
 use rand::Rng;
+use rand_distr::{Distribution, Normal};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
 use super::agent_trait::Agent;
 use super::config::{
-    WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX, WHALE_PRICE_OFFSET_MIN,
-    WHALE_REFRESH_THRESHOLD_BPS, WHALE_TAPER_ORDERS,
+    WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX, WHALE_REFRESH_THRESHOLD_BPS,
+    WHALE_TAPER_ORDERS,
 };
 use super::latency::WHALE_TICKS_UNTIL_ACTIVE;
 use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
@@ -169,52 +169,32 @@ impl WhaleAgent {
                             * 10000.0;
 
                         if price_diff_bps > WHALE_REFRESH_THRESHOLD_BPS as f64 {
-                            // Full reset
-                            let mut open_orders_lock = open_orders.write().unwrap();
-                            let orders_to_cancel: Vec<u64> = open_orders_lock
-                                .values()
-                                .filter(|o| o.stock_id == stock_id)
-                                .map(|o| o.id)
-                                .collect();
+                            // Full reset: Post new quotes *before* canceling old ones to avoid a liquidity vacuum.
 
-                            for order_id in orders_to_cancel {
-                                order_channel
-                                    .send(OrderRequest::CancelOrder {
-                                        agent_id: id,
-                                        order_id,
-                                    })
-                                    .expect("Failed to send cancel order");
-                                open_orders_lock.remove(&order_id);
-                            }
+                            // 1. Get a snapshot of the order IDs to be canceled later.
+                            //    Use a read lock to avoid blocking other threads for long.
+                            let orders_to_cancel: Vec<u64> = {
+                                let open_orders_lock = open_orders.read().unwrap();
+                                open_orders_lock
+                                    .values()
+                                    .filter(|o| o.stock_id == stock_id)
+                                    .map(|o| o.id)
+                                    .collect()
+                            };
 
-                            // Place new orders with tapering
-                            let volume_per_tapered_order = WHALE_ORDER_VOLUME / WHALE_TAPER_ORDERS;
+                            // 2. Place all the new orders.
+                            //    The ack listener will start adding these to the `open_orders` map in the background.
+                            let volume_per_order = WHALE_ORDER_VOLUME / WHALE_TAPER_ORDERS;
+                            let std_dev = WHALE_PRICE_OFFSET_MAX as f64;
+                            let normal = Normal::new(0.0, std_dev).unwrap();
 
-                            for i in 0..WHALE_TAPER_ORDERS {
-                                let taper_factor = if WHALE_TAPER_ORDERS > 1 {
-                                    i as f64 / (WHALE_TAPER_ORDERS - 1) as f64
-                                } else {
-                                    0.0
-                                };
+                            for _ in 0..WHALE_TAPER_ORDERS {
+                                let offset = normal.sample(&mut rng).abs();
 
-                                // For buy orders, price decreases as offset increases (further from mid)
-                                // So, offset goes from MAX to MIN
-                                let buy_offset = WHALE_PRICE_OFFSET_MAX as f64
-                                    - (WHALE_PRICE_OFFSET_MAX - WHALE_PRICE_OFFSET_MIN) as f64
-                                        * taper_factor;
+                                // Place buy order
                                 let bid_px = crate::agents::quantize_price(
-                                    current_mid_price.saturating_sub(buy_offset.round() as u64),
+                                    current_mid_price.saturating_sub(offset.round() as u64),
                                 );
-
-                                // For sell orders, price increases as offset increases (further from mid)
-                                // So, offset goes from MIN to MAX
-                                let sell_offset = WHALE_PRICE_OFFSET_MIN as f64
-                                    + (WHALE_PRICE_OFFSET_MAX - WHALE_PRICE_OFFSET_MIN) as f64
-                                        * taper_factor;
-                                let ask_px = crate::agents::quantize_price(
-                                    current_mid_price.saturating_add(sell_offset.round() as u64),
-                                );
-
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
                                         order_id: 0,
@@ -222,10 +202,14 @@ impl WhaleAgent {
                                         stock_id,
                                         side: Side::Buy,
                                         price: bid_px,
-                                        volume: volume_per_tapered_order,
+                                        volume: volume_per_order,
                                     })
                                     .expect("Failed to send whale limit order");
 
+                                // Place sell order
+                                let ask_px = crate::agents::quantize_price(
+                                    current_mid_price.saturating_add(offset.round() as u64),
+                                );
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
                                         order_id: 0,
@@ -233,14 +217,30 @@ impl WhaleAgent {
                                         stock_id,
                                         side: Side::Sell,
                                         price: ask_px,
-                                        volume: volume_per_tapered_order,
+                                        volume: volume_per_order,
                                     })
                                     .expect("Failed to send whale limit order");
                             }
 
+                            // 3. Now, cancel the old orders that were identified in the initial snapshot.
+                            //    This is safe because `orders_to_cancel` only contains the old order IDs.
+                            if !orders_to_cancel.is_empty() {
+                                let mut open_orders_lock = open_orders.write().unwrap();
+                                for order_id in orders_to_cancel {
+                                    order_channel
+                                        .send(OrderRequest::CancelOrder {
+                                            agent_id: id,
+                                            order_id,
+                                        })
+                                        .expect("Failed to send cancel order");
+                                    // Optimistically remove from our local state.
+                                    open_orders_lock.remove(&order_id);
+                                }
+                            }
+
                             *last_price = current_mid_price;
                         } else {
-                            // Partial refresh
+                            // Partial refresh (simplified for brevity, can be enhanced)
                             let open_orders_lock = open_orders.read().unwrap();
                             let has_bids = open_orders_lock
                                 .values()
@@ -249,20 +249,15 @@ impl WhaleAgent {
                                 .values()
                                 .any(|o| o.stock_id == stock_id && o.side == Side::Sell);
 
+                            let std_dev = WHALE_PRICE_OFFSET_MAX as f64;
+                            let normal = Normal::new(0.0, std_dev).unwrap();
+                            let volume_per_order = WHALE_ORDER_VOLUME / WHALE_TAPER_ORDERS;
+
                             if !has_bids {
-                                let volume_per_tapered_order =
-                                    WHALE_ORDER_VOLUME / WHALE_TAPER_ORDERS;
-                                for i in 0..WHALE_TAPER_ORDERS {
-                                    let taper_factor = if WHALE_TAPER_ORDERS > 1 {
-                                        i as f64 / (WHALE_TAPER_ORDERS - 1) as f64
-                                    } else {
-                                        0.0
-                                    };
-                                    let buy_offset = WHALE_PRICE_OFFSET_MAX as f64
-                                        - (WHALE_PRICE_OFFSET_MAX - WHALE_PRICE_OFFSET_MIN) as f64
-                                            * taper_factor;
+                                for _ in 0..WHALE_TAPER_ORDERS {
+                                    let offset = normal.sample(&mut rng).abs();
                                     let bid_px = crate::agents::quantize_price(
-                                        current_mid_price.saturating_sub(buy_offset.round() as u64),
+                                        current_mid_price.saturating_sub(offset.round() as u64),
                                     );
                                     order_channel
                                         .send(OrderRequest::LimitOrder {
@@ -271,27 +266,17 @@ impl WhaleAgent {
                                             stock_id,
                                             side: Side::Buy,
                                             price: bid_px,
-                                            volume: volume_per_tapered_order,
+                                            volume: volume_per_order,
                                         })
                                         .expect("Failed to send whale limit order");
                                 }
                             }
 
                             if !has_asks {
-                                let volume_per_tapered_order =
-                                    WHALE_ORDER_VOLUME / WHALE_TAPER_ORDERS;
-                                for i in 0..WHALE_TAPER_ORDERS {
-                                    let taper_factor = if WHALE_TAPER_ORDERS > 1 {
-                                        i as f64 / (WHALE_TAPER_ORDERS - 1) as f64
-                                    } else {
-                                        0.0
-                                    };
-                                    let sell_offset = WHALE_PRICE_OFFSET_MIN as f64
-                                        + (WHALE_PRICE_OFFSET_MAX - WHALE_PRICE_OFFSET_MIN) as f64
-                                            * taper_factor;
+                                for _ in 0..WHALE_TAPER_ORDERS {
+                                    let offset = normal.sample(&mut rng).abs();
                                     let ask_px = crate::agents::quantize_price(
-                                        current_mid_price
-                                            .saturating_add(sell_offset.round() as u64),
+                                        current_mid_price.saturating_add(offset.round() as u64),
                                     );
                                     order_channel
                                         .send(OrderRequest::LimitOrder {
@@ -300,7 +285,7 @@ impl WhaleAgent {
                                             stock_id,
                                             side: Side::Sell,
                                             price: ask_px,
-                                            volume: volume_per_tapered_order,
+                                            volume: volume_per_order,
                                         })
                                         .expect("Failed to send whale limit order");
                                 }

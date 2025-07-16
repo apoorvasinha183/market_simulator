@@ -105,7 +105,7 @@ pub const WHALE_ORDER_VOLUME: u64 = 100_000;
 pub const WHALE_PRICE_OFFSET_MAX: u64 = 5000; // $50.00
 pub const WHALE_PRICE_OFFSET_MIN: u64 = 500; // $5.00
 
-pub const WHALE_REFRESH_THRESHOLD_BPS: u64 = 500; // 5.0%
+pub const WHALE_REFRESH_THRESHOLD_BPS: u64 = 50; // 0.5%
 
 pub const CRAZY_WHALE: f64 = 0.001;
 pub const WHALE_TAPER_ORDERS: u64 = 100;
