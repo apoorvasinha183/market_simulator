@@ -20,7 +20,6 @@ fn main() {
         }, // Value Trader
         AgentType::WhaleAgent,
         AgentType::Astrologer,
-        
     ];
 
     let orchestra = Orchestra::new(participants, 10, 1);

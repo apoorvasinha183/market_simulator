@@ -1,22 +1,19 @@
 // src/agents/web_server.rs
 
 use crate::{
-    agents::web_proxy_agent::ProxyRequest,
-    simulation::candle_analyzer::CandleDataHandle,
-    simulation::orchestra::ShadowBookHandle,
-    types::order::Side,
-    types::candle::TimeFrame,
+    agents::web_proxy_agent::ProxyRequest, simulation::candle_analyzer::CandleDataHandle,
+    simulation::orchestra::ShadowBookHandle, types::candle::TimeFrame, types::order::Side,
 };
 use axum::{
+    Router,
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
         State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::IntoResponse,
     routing::get,
-    Router,
 };
-use crossbeam_channel::{unbounded, Sender};
+use crossbeam_channel::{Sender, unbounded};
 use futures_util::{sink::SinkExt, stream::StreamExt};
 use serde::Deserialize;
 use serde_json::json;
@@ -104,21 +101,28 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
 
     // --- Send initial snapshot ---
     let initial_market_state = state.view_handle.read().unwrap().clone();
-    let initial_candle_data = state.candle_handle.iter().map(|entry| {
-        let (stock_id, timeframe) = *entry.key();
-        let key = format!("{}-{}", stock_id, timeframe);
-        (key, entry.value().iter().cloned().collect::<Vec<_>>()) // Convert VecDeque to Vec
-    }).collect::<HashMap<String, Vec<_>>>();
+    let initial_candle_data = state
+        .candle_handle
+        .iter()
+        .map(|entry| {
+            let (stock_id, timeframe) = *entry.key();
+            let key = format!("{}-{}", stock_id, timeframe);
+            (key, entry.value().iter().cloned().collect::<Vec<_>>()) // Convert VecDeque to Vec
+        })
+        .collect::<HashMap<String, Vec<_>>>();
 
     let mut initial_price_history = HashMap::new();
     for (key, candles) in &initial_candle_data {
         if let Some(stock_id_str) = key.split('-').next() {
             if let Ok(stock_id) = stock_id_str.parse::<u64>() {
-                let history = initial_price_history.entry(stock_id).or_insert_with(Vec::new);
+                let history = initial_price_history
+                    .entry(stock_id)
+                    .or_insert_with(Vec::new);
                 for candle in candles {
                     history.push([candle.timestamp as f64, candle.close]);
                 }
-                history.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
+                history
+                    .sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
             }
         }
     }
@@ -193,7 +197,10 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
                             response_tx: client_response_tx.clone(),
                         };
                         if let Err(e) = state.proxy_request_tx.send(req) {
-                            eprintln!("[WebServer] Failed to send register request to proxy agent: {}", e);
+                            eprintln!(
+                                "[WebServer] Failed to send register request to proxy agent: {}",
+                                e
+                            );
                         }
                     }
                     ClientMessage::SubmitOrder(payload) => {
@@ -207,7 +214,10 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
                                 price: payload.price,
                             };
                             if let Err(e) = state.proxy_request_tx.send(req) {
-                                eprintln!("[WebServer] Failed to send submit order request to proxy agent: {}", e);
+                                eprintln!(
+                                    "[WebServer] Failed to send submit order request to proxy agent: {}",
+                                    e
+                                );
                             }
                         } else {
                             eprintln!("[WebServer] Received order before client was registered.");
@@ -215,7 +225,10 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
                     }
                 },
                 Err(e) => {
-                    eprintln!("[WebServer] Failed to parse client message: {}. Raw: '{}'", e, text);
+                    eprintln!(
+                        "[WebServer] Failed to parse client message: {}. Raw: '{}'",
+                        e, text
+                    );
                 }
             }
         } else if matches!(msg, Message::Close(_)) {
@@ -235,7 +248,9 @@ async fn run_broadcast_loop(
 
     loop {
         interval.tick().await;
-        if tx.receiver_count() == 0 { continue; }
+        if tx.receiver_count() == 0 {
+            continue;
+        }
 
         let market_state = view_handle.read().unwrap().clone();
         let new_candles: HashMap<String, Vec<_>> = candle_handle
@@ -252,7 +267,11 @@ async fn run_broadcast_loop(
                 let last_count = sent_candles_count.entry(key.clone()).or_insert(0);
 
                 if current_count > *last_count {
-                    let new_slice = candles.iter().skip(*last_count).cloned().collect::<Vec<_>>();
+                    let new_slice = candles
+                        .iter()
+                        .skip(*last_count)
+                        .cloned()
+                        .collect::<Vec<_>>();
                     *last_count = current_count;
                     Some((key, new_slice))
                 } else {

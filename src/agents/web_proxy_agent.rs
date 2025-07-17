@@ -4,9 +4,9 @@ use crate::agents::agent_trait::Agent;
 use crate::simulation::orchestra::MarketState;
 use crate::types::order::{Order, OrderRequest, Side, Trade};
 use crossbeam_channel::{Receiver, Sender};
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use dashmap::DashMap;
 
 // --- Message types for communication between WebServer and WebProxyAgent ---
 
@@ -138,17 +138,33 @@ impl WebProxyAgent {
 
     fn handle_proxy_request(&mut self, request: ProxyRequest) {
         match request {
-            ProxyRequest::Register { client_uuid, response_tx } => {
+            ProxyRequest::Register {
+                client_uuid,
+                response_tx,
+            } => {
                 println!("[WebProxyAgent] Registering client: {}", client_uuid);
-                self.clients.insert(client_uuid.clone(), response_tx.clone());
-                let portfolio = self.portfolios.entry(client_uuid).or_insert_with(|| Portfolio::new(10_000.0));
-                
+                self.clients
+                    .insert(client_uuid.clone(), response_tx.clone());
+                let portfolio = self
+                    .portfolios
+                    .entry(client_uuid)
+                    .or_insert_with(|| Portfolio::new(10_000.0));
+
                 // Send initial portfolio state
-                let _ = response_tx.send(ClientResponse::PortfolioUpdate(SerializablePortfolio::from(&*portfolio)));
-            },
-            ProxyRequest::SubmitOrder { client_uuid, stock_id, side, order_type, volume, price } => {
+                let _ = response_tx.send(ClientResponse::PortfolioUpdate(
+                    SerializablePortfolio::from(&*portfolio),
+                ));
+            }
+            ProxyRequest::SubmitOrder {
+                client_uuid,
+                stock_id,
+                side,
+                order_type,
+                volume,
+                price,
+            } => {
                 let price_in_cents = price.map_or(0, |p| (p * 100.0).round() as u64);
-                
+
                 let order_request = if order_type.to_lowercase() == "limit" {
                     OrderRequest::LimitOrder {
                         order_id: 0, // Market will assign this
@@ -169,9 +185,15 @@ impl WebProxyAgent {
                 };
 
                 if self.order_tx.send(order_request).is_err() {
-                    eprintln!("[WebProxyAgent] Failed to send order to market for client {}", client_uuid);
+                    eprintln!(
+                        "[WebProxyAgent] Failed to send order to market for client {}",
+                        client_uuid
+                    );
                 } else {
-                    self.client_id_queues.entry(stock_id).or_default().push_back(client_uuid.clone());
+                    self.client_id_queues
+                        .entry(stock_id)
+                        .or_default()
+                        .push_back(client_uuid.clone());
                 }
             }
         }
@@ -183,14 +205,23 @@ impl WebProxyAgent {
                 self.order_to_client_map.insert(ack.id, client_id.clone());
                 if let Some(client_tx) = self.clients.get(&client_id) {
                     if client_tx.send(ClientResponse::OrderAck(ack)).is_err() {
-                        eprintln!("[WebProxyAgent] Failed to send OrderAck to client {}. Client disconnected?", client_id);
+                        eprintln!(
+                            "[WebProxyAgent] Failed to send OrderAck to client {}. Client disconnected?",
+                            client_id
+                        );
                     }
                 }
             } else {
-                eprintln!("[WebProxyAgent] Queue for stock_id {} was empty, but received ACK. This should not happen.", ack.stock_id);
+                eprintln!(
+                    "[WebProxyAgent] Queue for stock_id {} was empty, but received ACK. This should not happen.",
+                    ack.stock_id
+                );
             }
         } else {
-            eprintln!("[WebProxyAgent] No queue found for stock_id {}. This should not happen.", ack.stock_id);
+            eprintln!(
+                "[WebProxyAgent] No queue found for stock_id {}. This should not happen.",
+                ack.stock_id
+            );
         }
     }
 
@@ -214,12 +245,23 @@ impl WebProxyAgent {
             if let Some(portfolio) = self.portfolios.get_mut(&client_id) {
                 portfolio.update_on_trade(&trade);
                 if let Some(client_tx) = self.clients.get(&client_id) {
-                    if client_tx.send(ClientResponse::PortfolioUpdate(SerializablePortfolio::from(&*portfolio))).is_err() {
-                        eprintln!("[WebProxyAgent] Failed to send PortfolioUpdate to client {}. Client disconnected?", client_id);
+                    if client_tx
+                        .send(ClientResponse::PortfolioUpdate(
+                            SerializablePortfolio::from(&*portfolio),
+                        ))
+                        .is_err()
+                    {
+                        eprintln!(
+                            "[WebProxyAgent] Failed to send PortfolioUpdate to client {}. Client disconnected?",
+                            client_id
+                        );
                     }
                     // Also send the trade update
                     if client_tx.send(ClientResponse::TradeUpdate(trade)).is_err() {
-                        eprintln!("[WebProxyAgent] Failed to send TradeUpdate to client {}. Client disconnected?", client_id);
+                        eprintln!(
+                            "[WebProxyAgent] Failed to send TradeUpdate to client {}. Client disconnected?",
+                            client_id
+                        );
                     }
                 }
             }
@@ -252,19 +294,29 @@ impl Agent for WebProxyAgent {
             }
         }
     }
-    
+
     fn decide_actions(&mut self) {}
-    fn get_id(&self) -> usize { self.id }
-    fn clone_agent(&self) -> Box<dyn Agent> { Box::new(self.clone()) }
+    fn get_id(&self) -> usize {
+        self.id
+    }
+    fn clone_agent(&self) -> Box<dyn Agent> {
+        Box::new(self.clone())
+    }
     fn buy_stock(&mut self, _stock_id: u64, _volume: u64) {}
     fn sell_stock(&mut self, _stock_id: u64, _volume: u64) {}
     fn acknowledge_order(&mut self) {}
     fn margin_call(&mut self) {}
     fn update_portfolio(&mut self) {}
-    fn evaluate_port(&mut self, _market_view: &MarketState) -> f64 { 0.0 }
-    fn get_pending_orders(&self) -> Vec<Order> { vec![] }
+    fn evaluate_port(&mut self, _market_view: &MarketState) -> f64 {
+        0.0
+    }
+    fn get_pending_orders(&self) -> Vec<Order> {
+        vec![]
+    }
     fn cancel_open_order(&mut self, _order_id: u64) {}
-    fn get_inventory(&self) -> i64 { 0 }
+    fn get_inventory(&self) -> i64 {
+        0
+    }
 }
 
 impl Clone for WebProxyAgent {
