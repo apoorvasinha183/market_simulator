@@ -243,22 +243,55 @@ async fn run_broadcast_loop(
     candle_handle: CandleDataHandle,
     tx: broadcast::Sender<String>,
 ) {
-    let mut interval = tokio::time::interval(Duration::from_millis(1));
+    let mut price_interval = tokio::time::interval(Duration::from_millis(50)); // Fast price updates
     let mut sent_candles_count: HashMap<String, usize> = HashMap::new();
 
     loop {
-        interval.tick().await;
+        // Wait for the shorter interval (50ms for price updates)
+        price_interval.tick().await;
+
         if tx.receiver_count() == 0 {
             continue;
         }
 
-        // Minimize lock time by reading state quickly
-        let market_state = {
+        // Quick read for price data only
+        let (last_traded_price, mid_prices, spreads, cumulative_volume) = {
             let state = view_handle.read().unwrap();
-            state.clone()
+            let mut mid_prices = HashMap::new();
+            let mut spreads = HashMap::new();
+
+            for stock in state.stocks.get_all_stocks() {
+                if let Some(mid) = state.get_mid_price(stock.id) {
+                    mid_prices.insert(stock.id, mid as f64 / 100.0);
+                }
+                if let Some(spread) = state.get_spread(stock.id) {
+                    spreads.insert(stock.id, spread as f64 / 100.0);
+                }
+            }
+
+            (
+                state.last_traded_price.clone(),
+                mid_prices,
+                spreads,
+                state.cumulative_volume.clone(),
+            )
         };
-        let stocks_for_calc = market_state.stocks.get_all_stocks();
-        
+
+        // Send lightweight price update
+        let price_update = json!({
+            "type": "price_update",
+            "data": {
+                "last_traded_price": last_traded_price,
+                "mid_prices": mid_prices,
+                "spreads": spreads,
+                "cumulative_volume": cumulative_volume,
+            }
+        });
+
+        let price_msg = serde_json::to_string(&price_update).unwrap();
+        let _ = tx.send(price_msg);
+
+        // Check for new candles and send if available
         let new_candles: HashMap<String, Vec<_>> = candle_handle
             .iter()
             .filter(|entry| {
@@ -286,35 +319,41 @@ async fn run_broadcast_loop(
             })
             .collect();
 
-        let mut mid_prices = HashMap::new();
-        let mut spreads = HashMap::new();
-        for stock in stocks_for_calc {
-            if let Some(mid) = market_state.get_mid_price(stock.id) {
-                mid_prices.insert(stock.id, mid as f64 / 100.0);
-            }
-            if let Some(spread) = market_state.get_spread(stock.id) {
-                spreads.insert(stock.id, spread as f64 / 100.0);
-            }
+        if !new_candles.is_empty() {
+            let candle_update = json!({
+                "type": "candle_update",
+                "data": {
+                    "candle_data": new_candles
+                }
+            });
+            let candle_msg = serde_json::to_string(&candle_update).unwrap();
+            let _ = tx.send(candle_msg);
         }
 
-        let update_message = json!({
-            "type": "update",
-            "data": {
-                "market_state": {
-                    "order_books": market_state.order_books,
-                    "stocks": market_state.stocks,
-                    "last_traded_price": market_state.last_traded_price,
-                    "cumulative_volume": market_state.cumulative_volume,
-                    "mid_prices": mid_prices,
-                    "spreads": spreads,
-                },
-                "candle_data": new_candles
-            }
-        });
+        // Check if it's time for order book update (every 4th iteration = 200ms)
+        static mut ORDERBOOK_COUNTER: u32 = 0;
+        unsafe {
+            ORDERBOOK_COUNTER += 1;
+            if ORDERBOOK_COUNTER >= 4 {
+                // 4 * 50ms = 200ms
+                ORDERBOOK_COUNTER = 0;
 
-        if !update_message["data"].is_null() {
-            let msg = serde_json::to_string(&update_message).unwrap();
-            let _ = tx.send(msg);
+                // Read order books less frequently
+                let order_books = {
+                    let state = view_handle.read().unwrap();
+                    state.order_books.clone()
+                };
+
+                let orderbook_update = json!({
+                    "type": "orderbook_update",
+                    "data": {
+                        "order_books": order_books
+                    }
+                });
+
+                let orderbook_msg = serde_json::to_string(&orderbook_update).unwrap();
+                let _ = tx.send(orderbook_msg);
+            }
         }
     }
 }

@@ -104,9 +104,9 @@
     updateCharts();
   });
 
-  afterUpdate(() => {
+  $: if (priceChart && volumeChart) {
     updateCharts();
-  });
+  }
 
   onDestroy(() => {
     priceChart?.destroy();
@@ -125,18 +125,18 @@
       
       priceChart.data.datasets = [{
         label: 'Price',
-        data: candles.map(c => ({ x: c.timestamp * 1000, o: c.open, h: c.high, l: c.low, c: c.close })),
+        data: candles.map(c => ({ x: c.timestamp * 1000, o: c.open, h: c.high, l: c.low, c: c.close })).sort((a, b) => a.x - b.x),
       }];
 
       volumeChart.data.datasets = [{
         label: 'Volume',
-        data: candles.map(c => ({ x: c.timestamp * 1000, y: c.volume })),
+        data: candles.map(c => ({ x: c.timestamp * 1000, y: c.volume })).sort((a, b) => a.x - b.x),
         backgroundColor: candles.map(c => c.close >= c.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'),
       }];
 
     } else {
       priceChart.config.type = 'line';
-      const history = (priceHistoryData?.[selectedStockId] || []).map(([timestamp, price]) => ({ x: timestamp * 1000, y: price }));
+      const history = (priceHistoryData?.[selectedStockId] || []).map(([timestamp, price]) => ({ x: timestamp * 1000, y: price })).sort((a, b) => a.x - b.x);
       
       const pointRadii = new Array(history.length).fill(0);
       const pointColors = new Array(history.length).fill('rgba(0,0,0,0)');
