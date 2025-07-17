@@ -174,7 +174,7 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
                 _ = tokio::time::sleep(tokio::time::Duration::from_millis(10)) => {
                     if let Ok(response) = client_response_rx.try_recv() {
                         let msg = serde_json::to_string(&response).unwrap();
-                        println!("[WebServer] Sending ClientResponse: {}", msg);
+                        //println!("[WebServer] Sending ClientResponse: {}", msg);
                         if sender.send(Message::Text(msg)).await.is_err() {
                             break;
                         }
@@ -243,7 +243,7 @@ async fn run_broadcast_loop(
     candle_handle: CandleDataHandle,
     tx: broadcast::Sender<String>,
 ) {
-    let mut interval = tokio::time::interval(Duration::from_millis(500));
+    let mut interval = tokio::time::interval(Duration::from_millis(1));
     let mut sent_candles_count: HashMap<String, usize> = HashMap::new();
 
     loop {
@@ -252,7 +252,13 @@ async fn run_broadcast_loop(
             continue;
         }
 
-        let market_state = view_handle.read().unwrap().clone();
+        // Minimize lock time by reading state quickly
+        let market_state = {
+            let state = view_handle.read().unwrap();
+            state.clone()
+        };
+        let stocks_for_calc = market_state.stocks.get_all_stocks();
+        
         let new_candles: HashMap<String, Vec<_>> = candle_handle
             .iter()
             .filter(|entry| {
@@ -282,7 +288,7 @@ async fn run_broadcast_loop(
 
         let mut mid_prices = HashMap::new();
         let mut spreads = HashMap::new();
-        for stock in market_state.stocks.get_all_stocks() {
+        for stock in stocks_for_calc {
             if let Some(mid) = market_state.get_mid_price(stock.id) {
                 mid_prices.insert(stock.id, mid as f64 / 100.0);
             }

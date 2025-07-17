@@ -57,102 +57,122 @@ function connect() {
         socket?.send(JSON.stringify({ type: 'Register', payload: { client_id: clientId } }));
     };
 
-    // Message batching for performance
-    let updateQueue: any[] = [];
-    let batchTimeout: number | null = null;
+    // Immediate processing with smart throttling - no batching barriers
+    let lastUpdateTime = 0;
+    let isProcessing = false;
     
-    function processBatchedUpdates() {
-        if (updateQueue.length === 0) return;
+    function processUpdateImmediately(updateData: any) {
+        if (isProcessing) return; // Skip if already processing
+        
+        const now = performance.now();
+        // Throttle to max 120fps (8.33ms) to prevent overwhelming but stay responsive
+        if (now - lastUpdateTime < 8.33) return;
+        
+        isProcessing = true;
+        lastUpdateTime = now;
         
         marketState.update(currentState => {
-            if (!currentState) return null;
+            if (!currentState) {
+                isProcessing = false;
+                return null;
+            }
             
-            // Process all queued updates efficiently
-            let hasMarketStateChanges = false;
-            let hasCandleChanges = false;
-            let hasPriceHistoryChanges = false;
+            let needsUpdate = false;
             
-            for (const update of updateQueue) {
-                if (update.market_state) {
-                    // Shallow merge market state changes
-                    Object.assign(currentState.market_state, update.market_state);
-                    hasMarketStateChanges = true;
-                }
-                
-                if (update.candle_data) {
-                    for (const key in update.candle_data) {
-                        const newCandles = update.candle_data[key];
-                        if (!newCandles || newCandles.length === 0) continue;
-                        
-                        // Efficient append without full array copy
-                        if (!currentState.candle_data[key]) {
-                            currentState.candle_data[key] = [];
-                        }
-                        currentState.candle_data[key].push(...newCandles);
-                        hasCandleChanges = true;
-                        
-                        // Update price history with fixed window (last 1000 points to prevent screen pollution)
-                        const stockId = newCandles[0].stock_id;
-                        if (stockId) {
-                            if (!currentState.price_history[stockId]) {
-                                currentState.price_history[stockId] = [];
-                            }
-                            const newHistoryPoints = newCandles.map(c => [c.timestamp, c.close]);
-                            
-                            // Only append if timestamps are in order, otherwise we need to sort
-                            const lastTimestamp = currentState.price_history[stockId].length > 0 
-                                ? currentState.price_history[stockId][currentState.price_history[stockId].length - 1][0]
-                                : 0;
-                            
-                            const firstNewTimestamp = newHistoryPoints[0]?.[0] || 0;
-                            
-                            if (firstNewTimestamp >= lastTimestamp) {
-                                // Safe to append - timestamps are in order
-                                currentState.price_history[stockId].push(...newHistoryPoints);
-                            } else {
-                                // Need to merge and sort to maintain chronological order
-                                currentState.price_history[stockId].push(...newHistoryPoints);
-                                currentState.price_history[stockId].sort((a, b) => a[0] - b[0]);
-                            }
-                            
-                            // Maintain fixed window - keep only last 1000 points
-                            const MAX_HISTORY_POINTS = 1000;
-                            if (currentState.price_history[stockId].length > MAX_HISTORY_POINTS) {
-                                currentState.price_history[stockId] = currentState.price_history[stockId].slice(-MAX_HISTORY_POINTS);
-                            }
-                            
-                            hasPriceHistoryChanges = true;
-                        }
+            // Process single update immediately
+            if (updateData.market_state) {
+                // Direct property assignment - fastest possible
+                for (const key in updateData.market_state) {
+                    if (currentState.market_state[key] !== updateData.market_state[key]) {
+                        currentState.market_state[key] = updateData.market_state[key];
+                        needsUpdate = true;
                     }
                 }
             }
             
-            // Only create new state reference if there were actual changes
-            if (hasMarketStateChanges || hasCandleChanges || hasPriceHistoryChanges) {
-                return { ...currentState }; // Shallow clone to trigger reactivity
+            if (updateData.candle_data) {
+                for (const key in updateData.candle_data) {
+                    const newCandles = updateData.candle_data[key];
+                    if (!newCandles?.length) continue;
+                    
+                    // Initialize arrays if needed
+                    if (!currentState.candle_data[key]) {
+                        currentState.candle_data[key] = [];
+                    }
+                    
+                    // Direct append candles
+                    const existingCandles = currentState.candle_data[key];
+                    const startLength = existingCandles.length;
+                    
+                    // Direct array extension - fastest method
+                    for (let i = 0; i < newCandles.length; i++) {
+                        existingCandles[startLength + i] = newCandles[i];
+                    }
+                    existingCandles.length = startLength + newCandles.length;
+                    
+                    // Update price history efficiently
+                    const stockId = newCandles[0].stock_id;
+                    if (stockId) {
+                        if (!currentState.price_history[stockId]) {
+                            currentState.price_history[stockId] = [];
+                        }
+                        
+                        const priceHistory = currentState.price_history[stockId];
+                        const lastTimestamp = priceHistory.length > 0 ? priceHistory[priceHistory.length - 1][0] : 0;
+                        
+                        // Fast path: append in order
+                        let needsSort = false;
+                        for (const candle of newCandles) {
+                            if (candle.timestamp >= lastTimestamp) {
+                                priceHistory.push([candle.timestamp, candle.close]);
+                            } else {
+                                priceHistory.push([candle.timestamp, candle.close]);
+                                needsSort = true;
+                            }
+                        }
+                        
+                        // Only sort if necessary
+                        if (needsSort) {
+                            priceHistory.sort((a, b) => a[0] - b[0]);
+                        }
+                        
+                        // Maintain window efficiently
+                        const MAX_HISTORY = 1000;
+                        if (priceHistory.length > MAX_HISTORY) {
+                            const excess = priceHistory.length - MAX_HISTORY;
+                            priceHistory.splice(0, excess);
+                        }
+                    }
+                    
+                    needsUpdate = true;
+                }
             }
             
-            return currentState;
+            isProcessing = false;
+            
+            // Only trigger reactivity if there were actual changes
+            return needsUpdate ? { ...currentState } : currentState;
         });
-        
-        updateQueue = [];
-        batchTimeout = null;
     }
 
     socket.onmessage = (event) => {
-        const message = JSON.parse(event.data);
+        // Fast path: parse JSON only once
+        let message;
+        try {
+            message = JSON.parse(event.data);
+        } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
+            return;
+        }
+
         switch (message.type) {
             case 'snapshot':
                 // Initial snapshot - set directly
                 marketState.set(message.data);
                 break;
             case 'update':
-                // Batch updates for performance
-                updateQueue.push(message.data);
-                
-                if (!batchTimeout) {
-                    batchTimeout = window.setTimeout(processBatchedUpdates, 16); // ~60fps
-                }
+                // Process updates immediately with smart throttling - no batching barriers
+                processUpdateImmediately(message.data);
                 break;
             case 'OrderAck':
                 orderConfirmations.update(acks => [message.OrderAck, ...acks].slice(0, 10));
