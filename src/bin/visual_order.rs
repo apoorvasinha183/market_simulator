@@ -997,7 +997,7 @@ fn main() -> Result<(), eframe::Error> {
             initial_chemical_potential: 0.0,
         }, // Value Trader
         AgentType::WhaleAgent,
-        AgentType::BowserAgent,
+        AgentType::WebProxyAgent,
     ];
 
     /*let participants = vec![

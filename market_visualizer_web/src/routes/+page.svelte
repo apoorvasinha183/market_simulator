@@ -1,77 +1,31 @@
-
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import Header from '$lib/components/Header.svelte';
   import PriceChart from '$lib/components/PriceChart.svelte';
   import OrderBook from '$lib/components/OrderBook.svelte';
+  import DepthChart from '$lib/components/DepthChart.svelte';
   import OrderEntry from '$lib/components/OrderEntry.svelte';
   import TradeHistory from '$lib/components/TradeHistory.svelte';
   import MarketInfoBar from '$lib/components/MarketInfoBar.svelte';
-  import { TimeFrame, type WebSocketData, type MarketState, type Stock, type Candle } from '../lib/types';
+  import TradingPanel from '$lib/components/TradingPanel.svelte';
+  import { marketState, actions } from '../lib/store';
+  import { TimeFrame, type Stock } from '../lib/types';
 
-  // State variables
-  let marketState: MarketState | null = null;
-  let candleData: { [key: string]: Candle[] } = {};
-  let priceHistoryData: { [key: string]: [number, number][] } = {};
-  let socket: WebSocket | null = null;
-  let reconnectInterval: number | null = null;
-
+  // --- Component State ---
   let selectedStockId: string = '1';
   let selectedTimeFrame: TimeFrame = TimeFrame.TenSeconds;
-  let stockMap: Map<string, Stock> = new Map();
-  
   let showCandlestickChart: boolean = true;
+  let stockMap: Map<string, Stock> = new Map();
+  let isDarkTheme: boolean = true;
+  let showDepthChart: boolean = true;
 
-  const MAX_DATA_POINTS = 1000; // Define the window size
+  // --- Lifecycle ---
 
-  // Reactive UI-bound variables
-  $: selectedStock = stockMap.get(selectedStockId);
-
-  // --- WebSocket and Data Processing ---
-
-  function connectWebSocket() {
-    if (socket) socket.close();
-    socket = new WebSocket('ws://127.0.0.1:6969/ws');
-
-    socket.onopen = () => {
-      console.log('WebSocket connection established.');
-      if (reconnectInterval) {
-        clearInterval(reconnectInterval);
-        reconnectInterval = null;
-      }
-    };
-
-    socket.onmessage = (event) => {
-      const message: WebSocketData = JSON.parse(event.data);
-      if (message.type === 'snapshot') {
-        processSnapshot(message);
-      } else if (message.type === 'update') {
-        processUpdate(message.data);
-      }
-    };
-
-    socket.onclose = () => {
-      console.log('WebSocket closed. Reconnecting...');
-      if (!reconnectInterval) {
-        reconnectInterval = window.setInterval(connectWebSocket, 3000);
-      }
-    };
-
-    socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      socket?.close();
-    };
-  }
-
-  // Correctly process the initial full state snapshot
-  function processSnapshot(data: WebSocketData) {
-    marketState = data.market_state;
-    candleData = data.candle_data || {};
-    priceHistoryData = data.price_history || {};
-
-    if (marketState?.stocks?.stocks) {
+  // --- Reactive Derivations ---
+  $: {
+    if ($marketState?.market_state?.stocks?.stocks) {
       const newStockMap = new Map<string, Stock>();
-      marketState.stocks.stocks.forEach(s => newStockMap.set(s.id.toString(), s));
+      $marketState.market_state.stocks.stocks.forEach(s => newStockMap.set(s.id.toString(), s));
       stockMap = newStockMap;
       if (!stockMap.has(selectedStockId) && stockMap.size > 0) {
         selectedStockId = stockMap.keys().next().value;
@@ -79,73 +33,7 @@
     }
   }
 
-  // Correctly process incremental updates
-  function processUpdate(data: any) {
-    if (data.market_state) {
-      // Use a functional update for reactivity with deep objects
-      marketState = {
-        ...marketState,
-        ...data.market_state,
-        order_books: { ...marketState?.order_books, ...data.market_state.order_books },
-        last_traded_price: { ...marketState?.last_traded_price, ...data.market_state.last_traded_price },
-        cumulative_volume: { ...marketState?.cumulative_volume, ...data.market_state.cumulative_volume },
-        mid_prices: { ...marketState?.mid_prices, ...data.market_state.mid_prices },
-        spreads: { ...marketState?.spreads, ...data.market_state.spreads },
-      };
-
-      if (priceHistoryData && data.market_state.last_traded_price) {
-          for (const stockId in data.market_state.last_traded_price) {
-              if (Object.prototype.hasOwnProperty.call(data.market_state.last_traded_price, stockId)) {
-                  if (!priceHistoryData[stockId]) {
-                      priceHistoryData[stockId] = [];
-                  }
-                  const newPrice = data.market_state.last_traded_price[stockId];
-                  
-                  // Sliding window logic for price history
-                  if (priceHistoryData[stockId].length >= MAX_DATA_POINTS) {
-                      priceHistoryData[stockId] = priceHistoryData[stockId].slice(-MAX_DATA_POINTS); // Keep only the last N points
-                  }
-                  priceHistoryData[stockId].push([Date.now(), newPrice]);
-              }
-          }
-          priceHistoryData = { ...priceHistoryData }; // Trigger reactivity
-      }
-    }
-    if (data.candle_data) {
-      Object.keys(data.candle_data).forEach(key => {
-        const newCandles: Candle[] = data.candle_data[key];
-        if (!candleData[key]) {
-          candleData[key] = [];
-        }
-        newCandles.forEach((newCandle: Candle) => {
-          // Sliding window logic for candle data
-          if (candleData[key].length >= MAX_DATA_POINTS) {
-              candleData[key] = candleData[key].slice(-MAX_DATA_POINTS); // Keep only the last N points
-          }
-
-          const lastCandle = candleData[key][candleData[key].length - 1];
-          if (lastCandle && lastCandle.timestamp === newCandle.timestamp) {
-            candleData[key][candleData[key].length - 1] = newCandle; // Update last candle
-          } else {
-            candleData[key].push(newCandle); // Append new candle
-          }
-        });
-      });
-      candleData = { ...candleData }; // Trigger reactivity
-    }
-  }
-
-  onMount(() => {
-    connectWebSocket();
-  });
-
-  onDestroy(() => {
-    if (reconnectInterval) clearInterval(reconnectInterval);
-    socket?.close();
-  });
-
   // --- Event Handlers ---
-
   function handleStockChange(event: CustomEvent<{ stockId: string }>) {
     selectedStockId = event.detail.stockId;
   }
@@ -157,40 +45,97 @@
   function handleChartTypeToggle() {
     showCandlestickChart = !showCandlestickChart;
   }
+
+  function toggleTheme() {
+    isDarkTheme = !isDarkTheme;
+    // Store theme preference in localStorage
+    localStorage.setItem('darkTheme', isDarkTheme.toString());
+  }
+
+  // Load theme preference on mount
+  onMount(() => {
+    const savedTheme = localStorage.getItem('darkTheme');
+    if (savedTheme !== null) {
+      isDarkTheme = savedTheme === 'true';
+    }
+    actions.connect();
+    
+    // Keyboard shortcuts for professional traders
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case 'b':
+            e.preventDefault();
+            // Focus buy order entry
+            break;
+          case 's':
+            e.preventDefault();
+            // Focus sell order entry
+            break;
+          case 'd':
+            e.preventDefault();
+            showDepthChart = !showDepthChart;
+            break;
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  });
+
+  function toggleDepthChart() {
+    showDepthChart = !showDepthChart;
+  }
 </script>
 
-<div class="trading-cockpit">
+<div class="trading-cockpit" class:dark-theme={isDarkTheme}>
   <Header 
     {stockMap} 
     {selectedStockId} 
     {selectedTimeFrame}
+    {isDarkTheme}
     on:stockChange={handleStockChange}
     on:timeframeChange={handleTimeFrameChange}
     on:chartTypeToggle={handleChartTypeToggle}
+    on:themeToggle={toggleTheme}
+    on:depthToggle={toggleDepthChart}
     isCandlestick={showCandlestickChart}
+    {showDepthChart}
   />
 
-  <MarketInfoBar {marketState} {selectedStockId} />
+  <MarketInfoBar marketState={$marketState?.market_state} {selectedStockId} />
 
   <main class="main-content">
-    <div class="chart-panel">
-      <PriceChart 
-        {selectedStockId} 
-        {selectedTimeFrame}
-        {candleData}
-        {priceHistoryData}
-        isCandlestick={showCandlestickChart}
-      />
+    <div class="left-panel">
+      <div class="chart-container">
+        <PriceChart 
+          {selectedStockId} 
+          {selectedTimeFrame}
+          candleData={$marketState?.candle_data || {}}
+          priceHistoryData={$marketState?.price_history || {}}
+          isCandlestick={showCandlestickChart}
+        />
+      </div>
+      {#if showDepthChart}
+        <div class="depth-container">
+          <DepthChart 
+            marketState={$marketState?.market_state} 
+            {selectedStockId}
+          />
+        </div>
+      {/if}
     </div>
-    <div class="side-panel">
-      <OrderBook {marketState} {selectedStockId} />
+    
+    <div class="center-panel">
+      <OrderBook marketState={$marketState?.market_state} {selectedStockId} />
+    </div>
+    
+    <div class="right-panel">
+      <TradingPanel {selectedStockId} />
       <TradeHistory />
     </div>
   </main>
-
-  <footer class="action-panel">
-    <OrderEntry />
-  </footer>
 </div>
 
 <style>
@@ -207,34 +152,101 @@
     flex-direction: column;
     height: 100vh;
     width: 100vw;
+    background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+  }
+
+  .trading-cockpit.dark-theme {
+    --bg-primary: #0f1419;
+    --bg-secondary: #1a1f2e;
+    --bg-tertiary: #252a3a;
+    --border-color: #2a2e39;
+    --text-primary: #d1d4dc;
+    --text-secondary: #848e9c;
+    --accent-green: #26a69a;
+    --accent-red: #ef5350;
+    --accent-blue: #42a5f5;
+  }
+
+  .trading-cockpit:not(.dark-theme) {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --bg-tertiary: #e9ecef;
+    --border-color: #dee2e6;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --accent-green: #198754;
+    --accent-red: #dc3545;
+    --accent-blue: #0d6efd;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
   }
 
   .main-content {
     flex-grow: 1;
     display: grid;
-    grid-template-columns: 1fr 350px;
-    gap: 8px;
-    padding: 8px;
+    grid-template-columns: 2fr 300px 280px;
+    gap: 6px;
+    padding: 6px;
     overflow: hidden;
+    min-height: 0;
   }
 
-  .chart-panel {
+  .left-panel {
     display: flex;
     flex-direction: column;
-    background-color: #1c212e;
-    border-radius: 4px;
-    border: 1px solid #2a2e39;
+    gap: 6px;
+    min-height: 0;
   }
 
-  .side-panel {
-    display: grid;
-    grid-template-rows: 1fr auto;
-    gap: 8px;
+  .chart-container {
+    flex: 2;
+    background: var(--bg-secondary, #1a1f2e);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #2a2e39);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     overflow: hidden;
   }
 
-  .action-panel {
-    flex-shrink: 0;
-    padding: 0 8px 8px 8px;
+  .depth-container {
+    flex: 1;
+    background: var(--bg-secondary, #1a1f2e);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #2a2e39);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    min-height: 200px;
+  }
+
+  .center-panel {
+    background: var(--bg-secondary, #1a1f2e);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #2a2e39);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+  }
+
+  .right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  /* Professional scrollbars */
+  :global(::-webkit-scrollbar) {
+    width: 6px;
+    height: 6px;
+  }
+
+  :global(::-webkit-scrollbar-track) {
+    background: var(--bg-primary, #0f1419);
+  }
+
+  :global(::-webkit-scrollbar-thumb) {
+    background: var(--border-color, #2a2e39);
+    border-radius: 3px;
+  }
+
+  :global(::-webkit-scrollbar-thumb:hover) {
+    background: var(--text-secondary, #848e9c);
   }
 </style>

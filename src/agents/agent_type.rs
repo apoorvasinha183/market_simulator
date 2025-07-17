@@ -9,8 +9,8 @@ pub enum AgentType {
     WhaleAgent,
     Astrologer,
     MomentumAgent,
-    CustomerAgent, // We can add more here later, like MarketMaker, Institutional, etc.
-    BowserAgent,
+    CustomerAgent,
+    WebProxyAgent,
     Thermodynamic {
         initial_temperature: f64,
         specific_heat: f64,

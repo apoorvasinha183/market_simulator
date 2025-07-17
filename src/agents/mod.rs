@@ -1,7 +1,7 @@
 pub mod agent_trait;
 pub mod agent_type;
 pub mod astrologer_agent;
-pub mod bowser_agent;
+pub mod web_server;
 pub mod config;
 pub mod customer_agent;
 pub mod dumb_agent;
@@ -12,6 +12,7 @@ pub mod market_maker_agent;
 pub mod momentum_agent;
 pub mod thermo_agent;
 pub mod whale_agent;
+pub mod web_proxy_agent;
 
 /// Quantizes a price to the nearest 5-cent increment.
 #[inline]

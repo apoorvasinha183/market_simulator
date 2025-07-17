@@ -2,7 +2,7 @@
 <script lang="ts">
   import { onMount, onDestroy, afterUpdate } from 'svelte';
   import type { Chart } from 'chart.js';
-  import type { Candle, TimeFrame } from '../../lib/types';
+  import { TimeFrame, type Candle } from '../../lib/types';
 
   export let selectedStockId: string;
   export let selectedTimeFrame: TimeFrame;
@@ -15,13 +15,11 @@
   let priceChart: Chart | null = null;
   let volumeChart: Chart | null = null;
 
-  const timeFrameMap: { [key: string]: string } = {
-    "HundredMillis": "100ms",
-    "OneSecond": "1s",
-    "TenSeconds": "10s",
-    "OneMinute": "1m",
-    "FiveMinutes": "5m",
-    "ThirtyMinutes": "30m",
+  const timeFrameMap = {
+    [TimeFrame.TenSeconds]: "10s",
+    [TimeFrame.OneMinute]: "1m",
+    [TimeFrame.FiveMinutes]: "5m",
+    [TimeFrame.ThirtyMinutes]: "30m",
   };
 
   let blinkOn = true;
@@ -127,18 +125,18 @@
       
       priceChart.data.datasets = [{
         label: 'Price',
-        data: candles.map(c => ({ x: c.timestamp, o: c.open, h: c.high, l: c.low, c: c.close })),
+        data: candles.map(c => ({ x: c.timestamp * 1000, o: c.open, h: c.high, l: c.low, c: c.close })),
       }];
 
       volumeChart.data.datasets = [{
         label: 'Volume',
-        data: candles.map(c => ({ x: c.timestamp, y: c.volume })),
+        data: candles.map(c => ({ x: c.timestamp * 1000, y: c.volume })),
         backgroundColor: candles.map(c => c.close >= c.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'),
       }];
 
     } else {
       priceChart.config.type = 'line';
-      const history = (priceHistoryData?.[selectedStockId] || []).map(([timestamp, price]) => ({ x: timestamp, y: price }));
+      const history = (priceHistoryData?.[selectedStockId] || []).map(([timestamp, price]) => ({ x: timestamp * 1000, y: price }));
       
       const pointRadii = new Array(history.length).fill(0);
       const pointColors = new Array(history.length).fill('rgba(0,0,0,0)');

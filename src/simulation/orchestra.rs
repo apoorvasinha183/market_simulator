@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::agents::agent_trait::Agent;
 use crate::agents::agent_type::AgentType;
 use crate::agents::astrologer_agent::AstrologerAgent;
-use crate::agents::bowser_agent::BowserAgent;
+use crate::agents::web_server::WebServerRunner;
 use crate::agents::customer_agent::CustomerAgent;
 use crate::agents::dumb_agent::DumbAgent;
 use crate::agents::dumb_limit_agent::DumbLimitAgent;
@@ -19,6 +19,7 @@ use crate::agents::market_maker_agent::MarketMakerAgent;
 use crate::agents::momentum_agent::MomentumAgent;
 use crate::agents::thermo_agent::ThermoAgent;
 use crate::agents::whale_agent::WhaleAgent;
+use crate::agents::web_proxy_agent::{ProxyRequest, WebProxyAgent};
 use crate::default_stock_universe;
 use crate::events::MarketEvent;
 use crate::market::Market;
@@ -289,6 +290,7 @@ impl Orchestra {
 
         println!("[Orchestra] Shadow Coordinators launched.");
 
+        let (proxy_request_tx, proxy_request_rx) = unbounded::<ProxyRequest>();
         let mut agents: Vec<Box<dyn Agent>> = Vec::new();
         let mut registration_data: HashMap<usize, AgentResponseChannels> = HashMap::new();
 
@@ -366,13 +368,12 @@ impl Orchestra {
                     rx_trade,
                     view_handle,
                 )),
-                AgentType::BowserAgent => Box::new(BowserAgent::new(
+                AgentType::WebProxyAgent => Box::new(WebProxyAgent::new(
                     id,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
-                    view_handle,
-                    candle_data_handle.clone(),
+                    proxy_request_rx.clone(),
                 )),
                 AgentType::Thermodynamic {
                     initial_temperature,
@@ -408,6 +409,13 @@ impl Orchestra {
             trade_to_candle_tx,
         );
         println!("[Orchestra] Market instantiated.");
+
+        let view_handle_clone = normal_shadow_book.clone();
+        let candle_handle_clone = candle_data_handle.clone();
+
+        thread::spawn(move || {
+            WebServerRunner::run(view_handle_clone, candle_handle_clone, proxy_request_tx);
+        });
 
         Orchestra {
             agents,
