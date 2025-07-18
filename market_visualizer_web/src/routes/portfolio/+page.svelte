@@ -46,6 +46,14 @@
 
   onMount(async () => {
     actions.connect();
+    
+    // Trigger context change for portfolio page
+    const portfolioStocks = calculatedHoldings.map(h => h.stock_id);
+    actions.changeContext({
+      page: 'portfolio',
+      selected_stocks: portfolioStocks.length > 0 ? portfolioStocks : undefined
+    });
+    
     await initializeCharts();
     updateCharts();
   });

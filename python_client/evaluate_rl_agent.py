@@ -1,7 +1,8 @@
 import os
 import torch
 import time
-from tqdm import tqdm # Corrected import
+from tqdm import tqdm
+import argparse
 
 from market_gateway_client.rl_gateway import RLGateway
 from rl_agent.environment import MarketEnv
@@ -10,11 +11,21 @@ from rl_agent.ppo_agent import PPOAgent
 if __name__ == "__main__":
     print("--- Starting RL Agent Evaluation ---")
 
+    # --- Argument Parsing ---
+    parser = argparse.ArgumentParser(description="Evaluate a PPO agent in the Market Simulation Environment.")
+    parser.add_argument('--model-path', type=str, default="./rl_agent_models/ppo_model_10.pth", 
+                        help='Path to the trained model file.')
+    parser.add_argument('--num-eval-steps', type=int, default=10000, 
+                        help='Number of steps to run the evaluation for.')
+    parser.add_argument('--stock-id', type=int, default=None, 
+                        help='Optional: Evaluate on a specific stock ID. If not provided, evaluate on all stocks.')
+    args = parser.parse_args()
+
     # --- Configuration ---
     host = os.environ.get("GRPC_HOST", "localhost")
     port = int(os.environ.get("GRPC_PORT", 50051))
-    model_path = "./rl_agent_models/ppo_model_10.pth" # CHANGE THIS to the model you want to evaluate
-    num_eval_steps = 10_000
+    model_path = args.model_path
+    num_eval_steps = args.num_eval_steps
 
     # --- Initialization ---
     if not os.path.exists(model_path):
@@ -23,7 +34,7 @@ if __name__ == "__main__":
 
     print(f"Connecting to gRPC server at {host}:{port}...")
     gateway = RLGateway(host=host, port=port)
-    env = MarketEnv(gateway)
+    env = MarketEnv(gateway, target_stock_id=args.stock_id)
 
     agent = PPOAgent(
         input_dims=env.observation_space.shape[1],
@@ -37,8 +48,8 @@ if __name__ == "__main__":
     total_reward = 0
 
     # Wrap the loop with tqdm and set postfix
-    pbar = tqdm(range(num_eval_steps), desc="Evaluating Agent") # Assign tqdm instance to pbar
-    for i in pbar: # Iterate over pbar
+    pbar = tqdm(range(num_eval_steps), desc="Evaluating Agent")
+    for i in pbar:
         state_tensor = torch.from_numpy(state).float().unsqueeze(0).to(agent.device)
         
         # We don't need gradients during evaluation

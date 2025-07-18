@@ -8,6 +8,7 @@ fn main() {
         AgentType::CustomerAgent, // This agent will host the gRPC server
         AgentType::MarketMaker,
         AgentType::MomentumAgent,
+        AgentType::Astrologer,
         AgentType::Thermodynamic {
             initial_temperature: 0.2,
             specific_heat: 0.1,
@@ -19,7 +20,7 @@ fn main() {
             initial_chemical_potential: 0.0,
         }, // Value Trader
         AgentType::WhaleAgent,
-        AgentType::Astrologer,
+        AgentType::WebProxyAgent,
     ];
 
     let orchestra = Orchestra::new(participants, 10, 1);

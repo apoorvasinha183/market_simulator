@@ -94,6 +94,7 @@ function connect() {
                     marketState.update(currentState => {
                         if (!currentState) return null;
 
+                        // Only update candle data - price history is handled separately
                         for (const key in message.data.candle_data) {
                             const newCandles = message.data.candle_data[key];
                             if (!newCandles?.length) continue;
@@ -103,22 +104,6 @@ function connect() {
                             }
                             
                             currentState.candle_data[key].push(...newCandles);
-
-                            const stockId = newCandles[0].stock_id;
-                            if (stockId) {
-                                if (!currentState.price_history[stockId]) {
-                                    currentState.price_history[stockId] = [];
-                                }
-                                
-                                for (const candle of newCandles) {
-                                    currentState.price_history[stockId].push([candle.timestamp, candle.close]);
-                                }
-                                
-                                const MAX_HISTORY = 1000;
-                                if (currentState.price_history[stockId].length > MAX_HISTORY) {
-                                    currentState.price_history[stockId] = currentState.price_history[stockId].slice(currentState.price_history[stockId].length - MAX_HISTORY);
-                                }
-                            }
                         }
 
                         return { ...currentState };
@@ -144,6 +129,31 @@ function connect() {
                     break;
                 case 'TradeUpdate':
                     tradeHistory.update(trades => [message.TradeUpdate, ...trades].slice(0, 50));
+                    break;
+                case 'price_history_update':
+                    marketState.update(currentState => {
+                        if (!currentState) return null;
+                        
+                        // Merge new price history data
+                        for (const stockId in message.data.price_history) {
+                            const newPricePoints = message.data.price_history[stockId];
+                            if (!currentState.price_history[stockId]) {
+                                currentState.price_history[stockId] = [];
+                            }
+                            currentState.price_history[stockId].push(...newPricePoints);
+                            
+                            // Keep only the last 1000 points to prevent memory issues
+                            const MAX_HISTORY = 1000;
+                            if (currentState.price_history[stockId].length > MAX_HISTORY) {
+                                currentState.price_history[stockId] = currentState.price_history[stockId].slice(-MAX_HISTORY);
+                            }
+                        }
+                        
+                        return { ...currentState };
+                    });
+                    break;
+                case 'context_changed':
+                    console.log('Context change acknowledged:', message.data);
                     break;
             }
         });
@@ -172,9 +182,37 @@ function submitOrder(payload: any) {
     }
 }
 
+function requestSnapshot(context?: { page?: string; selected_stocks?: number[]; timeframe?: string }) {
+    if (socket?.readyState === WebSocket.OPEN) {
+        console.log('Requesting fresh snapshot with context:', context);
+        socket.send(JSON.stringify({ 
+            type: 'RequestSnapshot', 
+            payload: { context } 
+        }));
+    } else {
+        console.error('Cannot request snapshot, WebSocket is not connected.');
+    }
+}
+
+function changeContext(context: { page?: string; selected_stocks?: number[]; timeframe?: string }) {
+    if (socket?.readyState === WebSocket.OPEN) {
+        console.log('Changing context:', context);
+        socket.send(JSON.stringify({ 
+            type: 'ChangeContext', 
+            payload: context 
+        }));
+        // Also request a fresh snapshot with the new context
+        requestSnapshot(context);
+    } else {
+        console.error('Cannot change context, WebSocket is not connected.');
+    }
+}
+
 // --- Exports ---
 
 export const actions = {
     connect,
     submitOrder,
+    requestSnapshot,
+    changeContext,
 };

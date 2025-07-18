@@ -24,13 +24,20 @@ class MarketEnv(gym.Env):
         - num_stocks * (1 Market Buy + 1 Market Sell) actions
         - num_stocks * (NUM_LIMIT_PRICE_LEVELS Limit Buy + NUM_LIMIT_PRICE_LEVELS Limit Sell) actions
     """
-    def __init__(self, gateway: RLGateway, num_stocks=20, history_length=30):
+    def __init__(self, gateway: RLGateway, num_stocks=20, history_length=30, target_stock_id: int = None):
         super().__init__()
         self.gateway = gateway
         self.agent_id = self.gateway.register_agent()
-        self.num_stocks = num_stocks
         self.history_length = history_length
-        self.stock_ids = list(range(1, self.num_stocks + 1))
+
+        if target_stock_id is not None:
+            self.num_stocks = 1
+            self.stock_ids = [target_stock_id]
+            print(f"MarketEnv initialized for single stock: {target_stock_id}")
+        else:
+            self.num_stocks = num_stocks
+            self.stock_ids = list(range(1, self.num_stocks + 1))
+            print(f"MarketEnv initialized for {self.num_stocks} stocks.")
 
         # Calculate total features per step
         # 5 L1 features per stock + 1 cash feature + 1 inventory feature per stock
@@ -55,7 +62,7 @@ class MarketEnv(gym.Env):
         """Constructs the observation vector from the latest L1 data, cash, and inventory."""
         obs_vector = []
         
-        # Add L1 market data for all stocks
+        # Add L1 market data for the relevant stock(s)
         for stock_id in self.stock_ids:
             l1_data = self.gateway.get_l1_data(stock_id)
             if l1_data:
@@ -74,9 +81,9 @@ class MarketEnv(gym.Env):
         agent_state = self.gateway._agent_state[self.agent_id]
         obs_vector.append(agent_state['cash'])
 
-        # Add agent's inventory for each stock
+        # Add agent's inventory for each relevant stock
         for stock_id in self.stock_ids:
-            obs_vector.append(agent_state['inventory'][stock_id])
+            obs_vector.append(agent_state['inventory'].get(stock_id, 0)) # Use .get with default 0
 
         return np.array(obs_vector, dtype=np.float32)
 
@@ -109,8 +116,15 @@ class MarketEnv(gym.Env):
         if action > 0: # Action 0 is "Hold"
             # Decode the action
             action_idx_in_group = action - 1 # Adjust for the global Hold action
-            stock_idx = action_idx_in_group // self.num_actions_per_stock
-            action_type_idx = action_idx_in_group % self.num_actions_per_stock
+            
+            # If single stock, stock_idx is always 0
+            if self.num_stocks == 1:
+                stock_idx = 0
+                action_type_idx = action_idx_in_group
+            else:
+                stock_idx = action_idx_in_group // self.num_actions_per_stock
+                action_type_idx = action_idx_in_group % self.num_actions_per_stock
+            
             stock_id = self.stock_ids[stock_idx]
 
             # Determine order type, side, and price level
@@ -143,7 +157,7 @@ class MarketEnv(gym.Env):
             
             # --- Financial Constraint Checks ---
             current_cash = self.gateway._agent_state[self.agent_id]['cash']
-            current_inventory = self.gateway._agent_state[self.agent_id]['inventory'][stock_id]
+            current_inventory = self.gateway._agent_state[self.agent_id]['inventory'].get(stock_id, 0) # Use .get with default 0
             l1_data = self.gateway.get_l1_data(stock_id)
 
             if side == "Buy":

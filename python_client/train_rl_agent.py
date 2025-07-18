@@ -20,6 +20,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a PPO agent in the Market Simulation Environment.")
     parser.add_argument('--history_length', type=int, default=30, 
                         help='Number of past observations to include in the state (agent memory).')
+    parser.add_argument('--stock-id', type=int, default=None, 
+                        help='Optional: Train on a specific stock ID. If not provided, train on all stocks.')
     args = parser.parse_args()
 
     # --- Configuration ---
@@ -44,8 +46,8 @@ if __name__ == "__main__":
     print(f"Connecting to gRPC server at {host}:{port}...")
     gateway = RLGateway(host=host, port=port)
     
-    # Pass history_length to the environment constructor
-    env = MarketEnv(gateway, history_length=args.history_length)
+    # Pass history_length and target_stock_id to the environment constructor
+    env = MarketEnv(gateway, history_length=args.history_length, target_stock_id=args.stock_id)
 
     agent = PPOAgent(
         input_dims=env.observation_space.shape[1],

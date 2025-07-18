@@ -10,3 +10,4 @@ planned_update.txt
 vcs.xml
 workspace.xml
 workspace.xml.idea
+**/*.pyc

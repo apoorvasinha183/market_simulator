@@ -36,10 +36,24 @@
   // --- Event Handlers ---
   function handleStockChange(event: CustomEvent<{ stockId: string }>) {
     selectedStockId = event.detail.stockId;
+    
+    // Trigger context change to get fresh data for the new stock
+    actions.changeContext({
+      page: 'main',
+      selected_stocks: [parseInt(selectedStockId)],
+      timeframe: selectedTimeFrame
+    });
   }
 
   function handleTimeFrameChange(event: CustomEvent<{ timeframe: TimeFrame }>) {
     selectedTimeFrame = event.detail.timeframe;
+    
+    // Trigger context change to get fresh data for the new timeframe
+    actions.changeContext({
+      page: 'main',
+      selected_stocks: [parseInt(selectedStockId)],
+      timeframe: selectedTimeFrame
+    });
   }
 
   function handleChartTypeToggle() {

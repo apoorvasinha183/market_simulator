@@ -1,8 +1,12 @@
 // src/agents/web_server.rs
 
 use crate::{
-    agents::web_proxy_agent::ProxyRequest, simulation::candle_analyzer::CandleDataHandle,
-    simulation::orchestra::ShadowBookHandle, types::candle::TimeFrame, types::order::Side,
+    agents::web_proxy_agent::ProxyRequest, 
+    simulation::candle_analyzer::CandleDataHandle,
+    simulation::orchestra::ShadowBookHandle, 
+    simulation::price_history_tracker::PriceHistoryTracker,
+    types::candle::TimeFrame, 
+    types::order::Side,
 };
 use axum::{
     Router,
@@ -19,7 +23,6 @@ use serde::Deserialize;
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::broadcast;
-
 pub struct WebServerRunner;
 
 impl WebServerRunner {
@@ -28,6 +31,10 @@ impl WebServerRunner {
         candle_handle: CandleDataHandle,
         proxy_request_tx: Sender<ProxyRequest>,
     ) {
+        println!("[WebServerRunner] Starting web server with price history tracking...");
+        
+        // Create price history tracker (keep 10,000 price points per stock)
+        let price_history_handle = Arc::new(PriceHistoryTracker::new(10_000, 200));
         println!("[WebServerRunner] Starting web server...");
 
         tokio::runtime::Builder::new_multi_thread()
@@ -41,10 +48,11 @@ impl WebServerRunner {
                     broadcast_tx: broadcast_tx.clone(),
                     view_handle: view_handle.clone(),
                     candle_handle: candle_handle.clone(),
+                    price_history_handle: price_history_handle.clone(),
                     proxy_request_tx,
                 });
 
-                tokio::spawn(run_broadcast_loop(view_handle, candle_handle, broadcast_tx));
+                tokio::spawn(run_broadcast_loop(view_handle, candle_handle, price_history_handle, broadcast_tx));
 
                 let router = Router::new()
                     .route("/ws", get(websocket_handler))
@@ -66,6 +74,7 @@ struct AppState {
     broadcast_tx: broadcast::Sender<String>,
     view_handle: ShadowBookHandle,
     candle_handle: CandleDataHandle,
+    price_history_handle: Arc<PriceHistoryTracker>,
     proxy_request_tx: Sender<ProxyRequest>,
 }
 
@@ -82,6 +91,22 @@ async fn websocket_handler(
 enum ClientMessage {
     Register { client_id: String },
     SubmitOrder(SubmitOrderPayload),
+    RequestSnapshot { context: Option<SnapshotContext> },
+    ChangeContext(ContextChangePayload),
+}
+
+#[derive(Deserialize, Debug)]
+struct ContextChangePayload {
+    page: Option<String>,
+    selected_stocks: Option<Vec<u64>>,
+    timeframe: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct SnapshotContext {
+    page: Option<String>,
+    selected_stocks: Option<Vec<u64>>,
+    timeframe: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -96,6 +121,7 @@ struct SubmitOrderPayload {
 async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = stream.split();
     let (client_response_tx, client_response_rx) = unbounded();
+    let (snapshot_request_tx, mut snapshot_request_rx) = tokio::sync::mpsc::unbounded_channel::<Option<SnapshotContext>>();
     let mut broadcast_rx = state.broadcast_tx.subscribe();
     let client_uuid = Arc::new(tokio::sync::Mutex::new(None));
 
@@ -111,21 +137,8 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
         })
         .collect::<HashMap<String, Vec<_>>>();
 
-    let mut initial_price_history = HashMap::new();
-    for (key, candles) in &initial_candle_data {
-        if let Some(stock_id_str) = key.split('-').next() {
-            if let Ok(stock_id) = stock_id_str.parse::<u64>() {
-                let history = initial_price_history
-                    .entry(stock_id)
-                    .or_insert_with(Vec::new);
-                for candle in candles {
-                    history.push([candle.timestamp as f64, candle.close]);
-                }
-                history
-                    .sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
-            }
-        }
-    }
+    // Use the proper price history tracker instead of deriving from candles
+    let initial_price_history = state.price_history_handle.get_all_price_histories();
 
     let mut initial_mid_prices = HashMap::new();
     let mut initial_spreads = HashMap::new();
@@ -161,6 +174,7 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
     }
 
     // Spawn a task to handle messages from the proxy agent and market data broadcasts
+    let state_clone = state.clone();
     tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -168,6 +182,18 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
                 Ok(msg) = broadcast_rx.recv() => {
                     if sender.send(Message::Text(msg)).await.is_err() {
                         break;
+                    }
+                },
+                // Handle snapshot requests
+                context = snapshot_request_rx.recv() => {
+                    let context = match context {
+                        Some(ctx) => ctx,
+                        None => break,
+                    };
+                    if let Ok(snapshot) = generate_snapshot(&state_clone, context.as_ref()).await {
+                        if sender.send(Message::Text(snapshot)).await.is_err() {
+                            break;
+                        }
                     }
                 },
                 // Non-blocking check for proxy agent responses
@@ -223,6 +249,28 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
                             eprintln!("[WebServer] Received order before client was registered.");
                         }
                     }
+                    ClientMessage::RequestSnapshot { context } => {
+                        println!("[WebServer] Client requested snapshot with context: {:?}", context);
+                        // Send snapshot request to the spawned task
+                        if snapshot_request_tx.send(context).is_err() {
+                            break;
+                        }
+                    }
+                    ClientMessage::ChangeContext(payload) => {
+                        println!("[WebServer] Client changed context: page={:?}, stocks={:?}, timeframe={:?}", 
+                                payload.page, payload.selected_stocks, payload.timeframe);
+                        
+                        // Convert payload to SnapshotContext and request fresh snapshot
+                        let context = SnapshotContext {
+                            page: payload.page.clone(),
+                            selected_stocks: payload.selected_stocks.clone(),
+                            timeframe: payload.timeframe.clone(),
+                        };
+                        
+                        if snapshot_request_tx.send(Some(context)).is_err() {
+                            break;
+                        }
+                    }
                 },
                 Err(e) => {
                     eprintln!(
@@ -237,13 +285,94 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
     }
 }
 
-// This function remains largely the same, broadcasting general market data
+async fn generate_snapshot(state: &AppState, context: Option<&SnapshotContext>) -> Result<String, String> {
+    let market_state = state.view_handle.read().unwrap().clone();
+    
+    // Filter data based on context if provided
+    let (candle_data, price_history) = if let Some(ctx) = context {
+        // Filter by selected stocks if specified
+        let stock_filter = ctx.selected_stocks.as_ref();
+        
+        let filtered_candles = state
+            .candle_handle
+            .iter()
+            .filter(|entry| {
+                let (stock_id, _) = *entry.key();
+                stock_filter.map_or(true, |stocks| stocks.contains(&stock_id))
+            })
+            .map(|entry| {
+                let (stock_id, timeframe) = *entry.key();
+                let key = format!("{}-{}", stock_id, timeframe);
+                (key, entry.value().iter().cloned().collect::<Vec<_>>())
+            })
+            .collect::<HashMap<String, Vec<_>>>();
+
+        let filtered_price_history = if let Some(stocks) = stock_filter {
+            let all_histories = state.price_history_handle.get_all_price_histories();
+            stocks.iter()
+                .filter_map(|&stock_id| {
+                    all_histories.get(&stock_id).map(|history| (stock_id, history.clone()))
+                })
+                .collect::<HashMap<u64, Vec<[f64; 2]>>>()
+        } else {
+            state.price_history_handle.get_all_price_histories()
+        };
+
+        (filtered_candles, filtered_price_history)
+    } else {
+        // No context filtering - send everything
+        let all_candles = state
+            .candle_handle
+            .iter()
+            .map(|entry| {
+                let (stock_id, timeframe) = *entry.key();
+                let key = format!("{}-{}", stock_id, timeframe);
+                (key, entry.value().iter().cloned().collect::<Vec<_>>())
+            })
+            .collect::<HashMap<String, Vec<_>>>();
+
+        let all_price_history = state.price_history_handle.get_all_price_histories();
+        (all_candles, all_price_history)
+    };
+
+    let mut mid_prices = HashMap::new();
+    let mut spreads = HashMap::new();
+    for stock in market_state.stocks.get_all_stocks() {
+        if let Some(mid) = market_state.get_mid_price(stock.id) {
+            mid_prices.insert(stock.id, mid as f64 / 100.0);
+        }
+        if let Some(spread) = market_state.get_spread(stock.id) {
+            spreads.insert(stock.id, spread as f64 / 100.0);
+        }
+    }
+
+    let snapshot = json!({
+        "type": "snapshot",
+        "data": {
+            "market_state": {
+                "order_books": market_state.order_books,
+                "stocks": market_state.stocks,
+                "last_traded_price": market_state.last_traded_price,
+                "cumulative_volume": market_state.cumulative_volume,
+                "mid_prices": mid_prices,
+                "spreads": spreads,
+            },
+            "candle_data": candle_data,
+            "price_history": price_history,
+        }
+    });
+
+    serde_json::to_string(&snapshot).map_err(|e| e.to_string())
+}
+
+// Updated broadcast loop with price history tracking
 async fn run_broadcast_loop(
     view_handle: ShadowBookHandle,
     candle_handle: CandleDataHandle,
+    price_history_handle: Arc<PriceHistoryTracker>,
     tx: broadcast::Sender<String>,
 ) {
-    let mut price_interval = tokio::time::interval(Duration::from_millis(50)); // Fast price updates
+    let mut price_interval = tokio::time::interval(Duration::from_millis(200));  // Slower price updates
     let mut sent_candles_count: HashMap<String, usize> = HashMap::new();
 
     loop {
@@ -254,7 +383,7 @@ async fn run_broadcast_loop(
             continue;
         }
 
-        // Quick read for price data only
+        // Quick read for price data and record mid prices for history
         let (last_traded_price, mid_prices, spreads, cumulative_volume) = {
             let state = view_handle.read().unwrap();
             let mut mid_prices = HashMap::new();
@@ -262,7 +391,11 @@ async fn run_broadcast_loop(
 
             for stock in state.stocks.get_all_stocks() {
                 if let Some(mid) = state.get_mid_price(stock.id) {
-                    mid_prices.insert(stock.id, mid as f64 / 100.0);
+                    let mid_price_dollars = mid as f64 / 100.0;
+                    mid_prices.insert(stock.id, mid_price_dollars);
+                    
+                    // Record this mid price in our price history tracker
+                    price_history_handle.update_price(stock.id, mid);
                 }
                 if let Some(spread) = state.get_spread(stock.id) {
                     spreads.insert(stock.id, spread as f64 / 100.0);
@@ -330,13 +463,44 @@ async fn run_broadcast_loop(
             let _ = tx.send(candle_msg);
         }
 
-        // Check if it's time for order book update (every 4th iteration = 200ms)
-        static mut ORDERBOOK_COUNTER: u32 = 0;
+        // Check if it's time for order book and price history updates
+        static mut UPDATE_COUNTER: u32 = 0;
+        static mut PRICE_HISTORY_COUNTER: u32 = 0;
+        static mut LAST_PRICE_HISTORY_TIMESTAMP: u64 = 0;
+        
         unsafe {
-            ORDERBOOK_COUNTER += 1;
-            if ORDERBOOK_COUNTER >= 4 {
-                // 4 * 50ms = 200ms
-                ORDERBOOK_COUNTER = 0;
+            UPDATE_COUNTER += 1;
+            PRICE_HISTORY_COUNTER += 1;
+            
+            // Send price history updates every 10 intervals (2 seconds) - much less frequent for line charts
+            if PRICE_HISTORY_COUNTER >= 10 {
+                PRICE_HISTORY_COUNTER = 0;
+                
+                let current_timestamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as u64;
+                
+                let price_history_updates = price_history_handle.get_price_updates_since(LAST_PRICE_HISTORY_TIMESTAMP as f64 / 1000.0);
+                
+                if !price_history_updates.is_empty() {
+                    let price_history_update = json!({
+                        "type": "price_history_update",
+                        "data": {
+                            "price_history": price_history_updates
+                        }
+                    });
+
+                    let price_history_msg = serde_json::to_string(&price_history_update).unwrap();
+                    let _ = tx.send(price_history_msg);
+                }
+                
+                LAST_PRICE_HISTORY_TIMESTAMP = current_timestamp;
+            }
+            
+            // Send order book updates less frequently (every 5 intervals = 1 second)
+            if UPDATE_COUNTER >= 5 {
+                UPDATE_COUNTER = 0;
 
                 // Read order books less frequently
                 let order_books = {

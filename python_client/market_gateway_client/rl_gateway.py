@@ -36,7 +36,7 @@ class RLGateway:
     def register_agent(self):
         agent_id = str(uuid.uuid4())
         with self._state_lock:
-            self._agents[agent_id] = queue.Queue()
+            self._agents[agent_id] = queue.Queue() #????????
             # Initialize cash and inventory for the new agent
             self._agent_state[agent_id]['cash'] = 1_000_000.0 # Starting cash
             self._agent_state[agent_id]['inventory'] = defaultdict(int)
@@ -124,7 +124,7 @@ class RLGateway:
                             
                             # Update filled volume for the pending order
                             original_order['filled_volume'] += volume_filled
-                            if original_order['filled_volume'] >= original_order['volume']:
+                            if original_order['filled_volume'] >= original_order['volume']: #Such slippages might occur if for instance you cancelled an order and it was partially filled before the cancel could hit.
                                 del self._pending_orders[trade.order_id] # Order fully filled
 
                         self._agents[client_id].put(trade)

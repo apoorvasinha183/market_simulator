@@ -119,7 +119,7 @@ class Broker:
         time.sleep(2) # Give the server a moment to start
 
         try:
-            self.channel = grpc.insecure_channel(address)
+            self.channel = grpc.insecure_channel(address) # This is because I am exposing stuff via ngrok.
             self.stub = market_gateway_pb2_grpc.MarketGatewayStub(self.channel)
             self.is_running = True
 
@@ -144,4 +144,4 @@ class Broker:
         self.is_running = False
         if self.channel:
             self.channel.close()
-        # print("[Broker] Connection closed.")
+        print("[Broker] Connection closed.")

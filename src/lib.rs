@@ -49,3 +49,4 @@ pub use stocks::{Stock, StockMarket, Symbol, default_stock_universe};
 //pub use sentiment::{SentimentConfig, get as get_sentiment, init as init_sentiment};
 //pub use sentiment_engine::SentimentEngine;
 // -- From the orchestra agent ---
+// Price history tracker is available through the simulation module
