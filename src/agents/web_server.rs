@@ -107,8 +107,10 @@ struct ContextChangePayload {
 
 #[derive(Deserialize, Debug)]
 struct SnapshotContext {
+    #[allow(dead_code)]
     page: Option<String>,
     selected_stocks: Option<Vec<u64>>,
+    #[allow(dead_code)]
     timeframe: Option<String>,
 }
 
