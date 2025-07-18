@@ -70,14 +70,14 @@ impl serde::Serialize for MarketState {
     {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("MarketState", 4)?;
-        
+
         // Convert Arc<OrderBook> to OrderBook for serialization
         let order_books_for_serialization: HashMap<u64, &OrderBook> = self
             .order_books
             .iter()
             .map(|(k, v)| (*k, v.as_ref()))
             .collect();
-            
+
         state.serialize_field("order_books", &order_books_for_serialization)?;
         state.serialize_field("stocks", &self.stocks)?;
         state.serialize_field("last_traded_price", &self.last_traded_price)?;

@@ -3,8 +3,8 @@
 use crate::{
     agents::web_proxy_agent::ProxyRequest, simulation::candle_analyzer::CandleDataHandle,
     simulation::orchestra::ShadowBookHandle,
-    simulation::price_history_tracker::PriceHistoryTracker, types::candle::TimeFrame,
-    types::order::Side, simulators::order_book::OrderBook,
+    simulation::price_history_tracker::PriceHistoryTracker, simulators::order_book::OrderBook,
+    types::candle::TimeFrame, types::order::Side,
 };
 use axum::{
     Router,
