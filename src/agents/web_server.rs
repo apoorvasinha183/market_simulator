@@ -1,11 +1,9 @@
 // src/agents/web_server.rs
 
 use crate::{
-    agents::web_proxy_agent::ProxyRequest, 
-    simulation::candle_analyzer::CandleDataHandle,
-    simulation::orchestra::ShadowBookHandle, 
-    simulation::price_history_tracker::PriceHistoryTracker,
-    types::candle::TimeFrame, 
+    agents::web_proxy_agent::ProxyRequest, simulation::candle_analyzer::CandleDataHandle,
+    simulation::orchestra::ShadowBookHandle,
+    simulation::price_history_tracker::PriceHistoryTracker, types::candle::TimeFrame,
     types::order::Side,
 };
 use axum::{
@@ -32,7 +30,7 @@ impl WebServerRunner {
         proxy_request_tx: Sender<ProxyRequest>,
     ) {
         println!("[WebServerRunner] Starting web server with price history tracking...");
-        
+
         // Create price history tracker (keep 10,000 price points per stock)
         let price_history_handle = Arc::new(PriceHistoryTracker::new(10_000, 200));
         println!("[WebServerRunner] Starting web server...");
@@ -52,7 +50,12 @@ impl WebServerRunner {
                     proxy_request_tx,
                 });
 
-                tokio::spawn(run_broadcast_loop(view_handle, candle_handle, price_history_handle, broadcast_tx));
+                tokio::spawn(run_broadcast_loop(
+                    view_handle,
+                    candle_handle,
+                    price_history_handle,
+                    broadcast_tx,
+                ));
 
                 let router = Router::new()
                     .route("/ws", get(websocket_handler))
@@ -121,7 +124,8 @@ struct SubmitOrderPayload {
 async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
     let (mut sender, mut receiver) = stream.split();
     let (client_response_tx, client_response_rx) = unbounded();
-    let (snapshot_request_tx, mut snapshot_request_rx) = tokio::sync::mpsc::unbounded_channel::<Option<SnapshotContext>>();
+    let (snapshot_request_tx, mut snapshot_request_rx) =
+        tokio::sync::mpsc::unbounded_channel::<Option<SnapshotContext>>();
     let mut broadcast_rx = state.broadcast_tx.subscribe();
     let client_uuid = Arc::new(tokio::sync::Mutex::new(None));
 
@@ -250,23 +254,28 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
                         }
                     }
                     ClientMessage::RequestSnapshot { context } => {
-                        println!("[WebServer] Client requested snapshot with context: {:?}", context);
+                        println!(
+                            "[WebServer] Client requested snapshot with context: {:?}",
+                            context
+                        );
                         // Send snapshot request to the spawned task
                         if snapshot_request_tx.send(context).is_err() {
                             break;
                         }
                     }
                     ClientMessage::ChangeContext(payload) => {
-                        println!("[WebServer] Client changed context: page={:?}, stocks={:?}, timeframe={:?}", 
-                                payload.page, payload.selected_stocks, payload.timeframe);
-                        
+                        println!(
+                            "[WebServer] Client changed context: page={:?}, stocks={:?}, timeframe={:?}",
+                            payload.page, payload.selected_stocks, payload.timeframe
+                        );
+
                         // Convert payload to SnapshotContext and request fresh snapshot
                         let context = SnapshotContext {
                             page: payload.page.clone(),
                             selected_stocks: payload.selected_stocks.clone(),
                             timeframe: payload.timeframe.clone(),
                         };
-                        
+
                         if snapshot_request_tx.send(Some(context)).is_err() {
                             break;
                         }
@@ -285,14 +294,17 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
     }
 }
 
-async fn generate_snapshot(state: &AppState, context: Option<&SnapshotContext>) -> Result<String, String> {
+async fn generate_snapshot(
+    state: &AppState,
+    context: Option<&SnapshotContext>,
+) -> Result<String, String> {
     let market_state = state.view_handle.read().unwrap().clone();
-    
+
     // Filter data based on context if provided
     let (candle_data, price_history) = if let Some(ctx) = context {
         // Filter by selected stocks if specified
         let stock_filter = ctx.selected_stocks.as_ref();
-        
+
         let filtered_candles = state
             .candle_handle
             .iter()
@@ -309,9 +321,12 @@ async fn generate_snapshot(state: &AppState, context: Option<&SnapshotContext>) 
 
         let filtered_price_history = if let Some(stocks) = stock_filter {
             let all_histories = state.price_history_handle.get_all_price_histories();
-            stocks.iter()
+            stocks
+                .iter()
                 .filter_map(|&stock_id| {
-                    all_histories.get(&stock_id).map(|history| (stock_id, history.clone()))
+                    all_histories
+                        .get(&stock_id)
+                        .map(|history| (stock_id, history.clone()))
                 })
                 .collect::<HashMap<u64, Vec<[f64; 2]>>>()
         } else {
@@ -372,7 +387,7 @@ async fn run_broadcast_loop(
     price_history_handle: Arc<PriceHistoryTracker>,
     tx: broadcast::Sender<String>,
 ) {
-    let mut price_interval = tokio::time::interval(Duration::from_millis(200));  // Slower price updates
+    let mut price_interval = tokio::time::interval(Duration::from_millis(200)); // Slower price updates
     let mut sent_candles_count: HashMap<String, usize> = HashMap::new();
 
     loop {
@@ -393,7 +408,7 @@ async fn run_broadcast_loop(
                 if let Some(mid) = state.get_mid_price(stock.id) {
                     let mid_price_dollars = mid as f64 / 100.0;
                     mid_prices.insert(stock.id, mid_price_dollars);
-                    
+
                     // Record this mid price in our price history tracker
                     price_history_handle.update_price(stock.id, mid);
                 }
@@ -467,22 +482,23 @@ async fn run_broadcast_loop(
         static mut UPDATE_COUNTER: u32 = 0;
         static mut PRICE_HISTORY_COUNTER: u32 = 0;
         static mut LAST_PRICE_HISTORY_TIMESTAMP: u64 = 0;
-        
+
         unsafe {
             UPDATE_COUNTER += 1;
             PRICE_HISTORY_COUNTER += 1;
-            
+
             // Send price history updates every 10 intervals (2 seconds) - much less frequent for line charts
             if PRICE_HISTORY_COUNTER >= 10 {
                 PRICE_HISTORY_COUNTER = 0;
-                
+
                 let current_timestamp = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
                     .as_millis() as u64;
-                
-                let price_history_updates = price_history_handle.get_price_updates_since(LAST_PRICE_HISTORY_TIMESTAMP as f64 / 1000.0);
-                
+
+                let price_history_updates = price_history_handle
+                    .get_price_updates_since(LAST_PRICE_HISTORY_TIMESTAMP as f64 / 1000.0);
+
                 if !price_history_updates.is_empty() {
                     let price_history_update = json!({
                         "type": "price_history_update",
@@ -494,10 +510,10 @@ async fn run_broadcast_loop(
                     let price_history_msg = serde_json::to_string(&price_history_update).unwrap();
                     let _ = tx.send(price_history_msg);
                 }
-                
+
                 LAST_PRICE_HISTORY_TIMESTAMP = current_timestamp;
             }
-            
+
             // Send order book updates less frequently (every 5 intervals = 1 second)
             if UPDATE_COUNTER >= 5 {
                 UPDATE_COUNTER = 0;

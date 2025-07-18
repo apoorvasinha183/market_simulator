@@ -7,8 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// A simple price point with timestamp and price
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct PricePoint {
-    pub timestamp: f64,  // Unix timestamp in seconds (with milliseconds as decimal)
-    pub price: f64,      // Price in dollars (not cents)
+    pub timestamp: f64, // Unix timestamp in seconds (with milliseconds as decimal)
+    pub price: f64,     // Price in dollars (not cents)
 }
 
 /// Tracks continuous price history for all stocks
@@ -18,14 +18,14 @@ pub struct PriceHistoryTracker {
     /// Stock ID -> VecDeque of price points
     /// We use VecDeque for efficient push_back and pop_front operations
     price_histories: Arc<RwLock<HashMap<u64, VecDeque<PricePoint>>>>,
-    
+
     /// Maximum number of price points to keep per stock
     max_history_length: usize,
-    
+
     /// Minimum time interval between price updates (in milliseconds)
     /// This prevents spam updates when prices change rapidly
     min_update_interval_ms: u64,
-    
+
     /// Last update timestamp for each stock
     last_update_times: Arc<RwLock<HashMap<u64, u64>>>,
 }
@@ -44,8 +44,8 @@ impl PriceHistoryTracker {
     /// Create with default settings optimized for web interface
     pub fn new_default() -> Self {
         Self::new(
-            5000,  // Keep last 5000 price points per stock
-            50,    // Update at most every 50ms (20 Hz)
+            5000, // Keep last 5000 price points per stock
+            50,   // Update at most every 50ms (20 Hz)
         )
     }
 
@@ -74,15 +74,15 @@ impl PriceHistoryTracker {
 
         let price_point = PricePoint {
             timestamp: now_ms as f64 / 1000.0, // Convert to seconds with decimal precision
-            price: price_cents as f64 / 100.0,  // Convert cents to dollars
+            price: price_cents as f64 / 100.0, // Convert cents to dollars
         };
 
         let mut histories = self.price_histories.write().unwrap();
         let history = histories.entry(stock_id).or_insert_with(VecDeque::new);
-        
+
         // Add new price point
         history.push_back(price_point);
-        
+
         // Trim history if it's too long
         while history.len() > self.max_history_length {
             history.pop_front();
@@ -148,7 +148,7 @@ impl PriceHistoryTracker {
                     .filter(|point| point.timestamp > since_timestamp)
                     .map(|point| [point.timestamp, point.price])
                     .collect();
-                
+
                 if recent_points.is_empty() {
                     None
                 } else {
@@ -171,7 +171,7 @@ impl PriceHistoryTracker {
         let histories = self.price_histories.read().unwrap();
         let total_points: usize = histories.values().map(|deque| deque.len()).sum();
         let stocks_tracked = histories.len();
-        
+
         PriceHistoryStats {
             stocks_tracked,
             total_points,
@@ -201,15 +201,15 @@ mod tests {
     #[test]
     fn test_price_history_basic() {
         let tracker = PriceHistoryTracker::new_default();
-        
+
         // Add some price points
         tracker.update_price(1, 15000); // $150.00
         tracker.update_price(1, 15050); // $150.50
         tracker.update_price(2, 30000); // $300.00
-        
+
         let history1 = tracker.get_price_history_arrays(1);
         let history2 = tracker.get_price_history_arrays(2);
-        
+
         assert_eq!(history1.len(), 2);
         assert_eq!(history2.len(), 1);
         assert_eq!(history1[0][1], 150.0);
@@ -220,19 +220,19 @@ mod tests {
     #[test]
     fn test_rate_limiting() {
         let tracker = PriceHistoryTracker::new(1000, 100); // 100ms minimum interval
-        
+
         // Add multiple price points rapidly
         tracker.update_price(1, 15000);
         tracker.update_price(1, 15010); // Should be ignored due to rate limiting
         tracker.update_price(1, 15020); // Should be ignored due to rate limiting
-        
+
         let history = tracker.get_price_history_arrays(1);
         assert_eq!(history.len(), 1); // Only first update should be recorded
-        
+
         // Wait and try again
         thread::sleep(Duration::from_millis(150));
         tracker.update_price(1, 15030); // Should be recorded now
-        
+
         let history = tracker.get_price_history_arrays(1);
         assert_eq!(history.len(), 2);
     }
@@ -240,16 +240,16 @@ mod tests {
     #[test]
     fn test_history_trimming() {
         let tracker = PriceHistoryTracker::new(3, 0); // Max 3 points, no rate limiting
-        
+
         // Add more points than the limit
         for i in 0..5 {
             tracker.update_price(1, 15000 + i * 10);
             thread::sleep(Duration::from_millis(1)); // Ensure different timestamps
         }
-        
+
         let history = tracker.get_price_history_arrays(1);
         assert_eq!(history.len(), 3); // Should be trimmed to 3 points
-        
+
         // Should contain the last 3 points
         assert_eq!(history[0][1], 150.20); // 15020 cents
         assert_eq!(history[1][1], 150.30); // 15030 cents

@@ -220,7 +220,7 @@ impl MarketMakerAgent {
             let inventory_clone = inventory.clone();
             let bootstrapped_clone = bootstrapped.clone();
             let book_clone = view.book(stock_id);
-            
+
             let initial_price = view
                 .stocks
                 .get_stock_by_id(stock_id)
