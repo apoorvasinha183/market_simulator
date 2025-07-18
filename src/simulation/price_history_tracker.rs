@@ -204,6 +204,8 @@ mod tests {
 
         // Add some price points
         tracker.update_price(1, 15000); // $150.00
+        //add sleep so that we can test rate limiting
+        thread::sleep(Duration::from_millis(100));
         tracker.update_price(1, 15050); // $150.50
         tracker.update_price(2, 30000); // $300.00
 

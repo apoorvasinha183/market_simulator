@@ -4,7 +4,7 @@ use crate::{
     agents::web_proxy_agent::ProxyRequest, simulation::candle_analyzer::CandleDataHandle,
     simulation::orchestra::ShadowBookHandle,
     simulation::price_history_tracker::PriceHistoryTracker, types::candle::TimeFrame,
-    types::order::Side,
+    types::order::Side, simulators::order_book::OrderBook,
 };
 use axum::{
     Router,
@@ -155,11 +155,18 @@ async fn websocket_connection(stream: WebSocket, state: Arc<AppState>) {
         }
     }
 
+    // Convert Arc<OrderBook> to OrderBook for serialization
+    let order_books_for_serialization: HashMap<u64, &OrderBook> = initial_market_state
+        .order_books
+        .iter()
+        .map(|(k, v)| (*k, v.as_ref()))
+        .collect();
+
     let initial_snapshot = json!({
         "type": "snapshot",
         "data": {
             "market_state": {
-                "order_books": initial_market_state.order_books,
+                "order_books": order_books_for_serialization,
                 "stocks": initial_market_state.stocks,
                 "last_traded_price": initial_market_state.last_traded_price,
                 "cumulative_volume": initial_market_state.cumulative_volume,
@@ -361,11 +368,18 @@ async fn generate_snapshot(
         }
     }
 
+    // Convert Arc<OrderBook> to OrderBook for serialization
+    let order_books_for_serialization: HashMap<u64, &OrderBook> = market_state
+        .order_books
+        .iter()
+        .map(|(k, v)| (*k, v.as_ref()))
+        .collect();
+
     let snapshot = json!({
         "type": "snapshot",
         "data": {
             "market_state": {
-                "order_books": market_state.order_books,
+                "order_books": order_books_for_serialization,
                 "stocks": market_state.stocks,
                 "last_traded_price": market_state.last_traded_price,
                 "cumulative_volume": market_state.cumulative_volume,
@@ -519,15 +533,21 @@ async fn run_broadcast_loop(
                 UPDATE_COUNTER = 0;
 
                 // Read order books less frequently
-                let order_books = {
+                let order_books_arc = {
                     let state = view_handle.read().unwrap();
                     state.order_books.clone()
                 };
 
+                // Convert Arc<OrderBook> to OrderBook for serialization
+                let order_books_for_serialization: HashMap<u64, &OrderBook> = order_books_arc
+                    .iter()
+                    .map(|(k, v)| (*k, v.as_ref()))
+                    .collect();
+
                 let orderbook_update = json!({
                     "type": "orderbook_update",
                     "data": {
-                        "order_books": order_books
+                        "order_books": order_books_for_serialization
                     }
                 });
 

@@ -23,7 +23,7 @@ fn main() {
         AgentType::WebProxyAgent,
     ];
 
-    let orchestra = Orchestra::new(participants, 10, 1);
+    let orchestra = Orchestra::new(participants, 100, 10);
 
     // Run the orchestra (market simulation and other agents) in a separate thread
     thread::spawn(move || {

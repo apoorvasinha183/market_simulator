@@ -53,15 +53,38 @@ pub struct ConcurrentMarketState {
 
 /// The shared, read-only state that agents see. This uses standard HashMaps
 /// for maximum read performance, as it's only ever written to in a single swap.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone)]
 pub struct MarketState {
-    pub order_books: HashMap<u64, OrderBook>,
+    pub order_books: HashMap<u64, Arc<OrderBook>>,
     pub stocks: StockMarket,
     pub last_traded_price: HashMap<u64, f64>,
     pub cumulative_volume: HashMap<u64, u64>,
 }
 
 pub type ShadowBookHandle = Arc<RwLock<MarketState>>;
+
+impl serde::Serialize for MarketState {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("MarketState", 4)?;
+        
+        // Convert Arc<OrderBook> to OrderBook for serialization
+        let order_books_for_serialization: HashMap<u64, &OrderBook> = self
+            .order_books
+            .iter()
+            .map(|(k, v)| (*k, v.as_ref()))
+            .collect();
+            
+        state.serialize_field("order_books", &order_books_for_serialization)?;
+        state.serialize_field("stocks", &self.stocks)?;
+        state.serialize_field("last_traded_price", &self.last_traded_price)?;
+        state.serialize_field("cumulative_volume", &self.cumulative_volume)?;
+        state.end()
+    }
+}
 
 impl MarketState {
     /// Creates a new read-only MarketState from the concurrent back-buffer.
@@ -71,7 +94,7 @@ impl MarketState {
             order_books: concurrent_state
                 .order_books
                 .iter()
-                .map(|entry| (*entry.key(), entry.value().clone()))
+                .map(|entry| (*entry.key(), Arc::new(entry.value().clone())))
                 .collect(),
             stocks: concurrent_state.stocks.clone(),
             last_traded_price: concurrent_state
@@ -87,7 +110,7 @@ impl MarketState {
         }
     }
 
-    pub fn book(&self, stock_id: u64) -> Option<OrderBook> {
+    pub fn book(&self, stock_id: u64) -> Option<Arc<OrderBook>> {
         self.order_books.get(&stock_id).cloned()
     }
 
@@ -136,7 +159,7 @@ impl ShadowCoordinator {
             order_books: initial_state
                 .order_books
                 .iter()
-                .map(|(k, v)| (*k, v.clone()))
+                .map(|(k, v)| (*k, (**v).clone()))
                 .collect(),
             stocks: initial_state.stocks.clone(),
             last_traded_price: initial_state
@@ -257,7 +280,7 @@ impl Orchestra {
             let mut cumulative_volume = HashMap::new();
             let mut order_books = HashMap::new();
             for s in stock_market.get_all_stocks() {
-                order_books.insert(s.id, OrderBook::new());
+                order_books.insert(s.id, Arc::new(OrderBook::new()));
                 last_traded_price.insert(s.id, s.initial_price);
                 cumulative_volume.insert(s.id, 0);
             }
