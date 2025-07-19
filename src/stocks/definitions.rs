@@ -502,6 +502,6 @@ mod tests {
 
         let whale_inventory = sm.calculate_initial_inventory_for_agent("whale");
         assert_eq!(whale_inventory.get(&1), Some(&300)); // 30% of 1000
-        assert_eq!(whale_inventory.get(&2), None); // No whale ownership in stock 2
+        assert_eq!(whale_inventory.get(&2), Some(&0)); // No whale ownership in stock 2
     }
 }
