@@ -9,7 +9,7 @@ fn main() {
         AgentType::MarketMaker,
         // ETF agents for each ETF (IDs 21-25 from stock.csv)
         AgentType::ETFAgent { etf_stock_id: 21 }, // BUBBLE
-        AgentType::ETFAgent { etf_stock_id: 22 }, // CASINO  
+        AgentType::ETFAgent { etf_stock_id: 22 }, // CASINO
         AgentType::ETFAgent { etf_stock_id: 23 }, // RETAIL
         AgentType::ETFAgent { etf_stock_id: 24 }, // COPE
         AgentType::ETFAgent { etf_stock_id: 25 }, // YEET
@@ -30,11 +30,13 @@ fn main() {
     println!("  - Calculate NAV for their ETFs based on constituent prices");
     println!("  - Detect when ETF price diverges from NAV");
     println!("  - Execute arbitrage trades to bring prices back in line");
-    println!("  - Example: If BUBBLE constituents drop 5%, ETF agent should sell BUBBLE and buy constituents");
+    println!(
+        "  - Example: If BUBBLE constituents drop 5%, ETF agent should sell BUBBLE and buy constituents"
+    );
     println!();
     println!("Watch for arbitrage messages in the logs!");
     println!("Press Enter to stop...");
-    
+
     let mut buffer = String::new();
     io::stdin().read_line(&mut buffer).unwrap();
     println!("Stopping test.");

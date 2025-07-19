@@ -12,21 +12,17 @@ fn main() {
     let participants = vec![
         // Market infrastructure
         AgentType::MarketMaker,
-        
         // ETF Maintenance agents (our victims)
         AgentType::ETFMaintenanceAgent { etf_stock_id: 25 }, // YEET ETF (LEAPS = 40%!)
         AgentType::ETFMaintenanceAgent { etf_stock_id: 22 }, // CASINO ETF (YOLO = 25%)
         AgentType::ETFMaintenanceAgent { etf_stock_id: 24 }, // COPE ETF (GIGA = 30%)
-        
         // Regular ETF agents for comparison
         AgentType::ETFAgent { etf_stock_id: 21 }, // BUBBLE ETF (diversified)
         AgentType::ETFAgent { etf_stock_id: 23 }, // RETAIL ETF
-        
         // THE MANIPULATORS 😈
-        AgentType::WhaleAgent, // Will target concentrated holdings
-        AgentType::WhaleAgent, // Multiple whales for coordination
+        AgentType::WhaleAgent,    // Will target concentrated holdings
+        AgentType::WhaleAgent,    // Multiple whales for coordination
         AgentType::MomentumAgent, // Will amplify the manipulation
-        
         // Innocent bystanders
         AgentType::DumbMarket,
     ];
@@ -57,13 +53,13 @@ fn main() {
     println!();
     println!("🎪 MARKET MANIPULATION TARGETS:");
     println!("• LEAPS → YEET ETF (40% weight) - NUCLEAR OPTION");
-    println!("• YOLO → CASINO ETF (25% weight) - HIGH IMPACT");  
+    println!("• YOLO → CASINO ETF (25% weight) - HIGH IMPACT");
     println!("• DEGEN → CASINO ETF (25% weight) - DOUBLE TROUBLE");
     println!("• GIGA → COPE ETF (30% weight) - BIG MONEY MOVES");
     println!();
     println!("💰 Real market manipulation at work!");
     println!("Press Enter to stop the chaos...");
-    
+
     let mut buffer = String::new();
     io::stdin().read_line(&mut buffer).unwrap();
     println!("🛑 Stopping market manipulation (SEC is coming!)");

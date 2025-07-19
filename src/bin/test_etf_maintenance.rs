@@ -9,16 +9,13 @@ fn main() {
     let participants = vec![
         // Core market infrastructure
         AgentType::MarketMaker,
-        
         // Regular ETF agents (50bps threshold, 100ms checks)
         AgentType::ETFAgent { etf_stock_id: 21 }, // BUBBLE - regular arbitrage
         AgentType::ETFAgent { etf_stock_id: 22 }, // CASINO - regular arbitrage
-        
-        // ETF Maintenance agents (10bps threshold, 10ms checks) 
+        // ETF Maintenance agents (10bps threshold, 10ms checks)
         AgentType::ETFMaintenanceAgent { etf_stock_id: 23 }, // RETAIL - tight maintenance
-        AgentType::ETFMaintenanceAgent { etf_stock_id: 24 }, // COPE - tight maintenance  
+        AgentType::ETFMaintenanceAgent { etf_stock_id: 24 }, // COPE - tight maintenance
         AgentType::ETFMaintenanceAgent { etf_stock_id: 25 }, // YEET - tight maintenance
-        
         // Market participants to create price movements
         AgentType::DumbMarket,
         AgentType::WhaleAgent,
@@ -56,12 +53,14 @@ fn main() {
     println!();
     println!("🔍 WATCH FOR:");
     println!("• '[ETF Agent X] Arbitrage: ...' (regular agents)");
-    println!("• '[ETF Maintenance Agent X] CREATION/REDEMPTION Arbitrage: ...' (maintenance agents)");
+    println!(
+        "• '[ETF Maintenance Agent X] CREATION/REDEMPTION Arbitrage: ...' (maintenance agents)"
+    );
     println!("• '[ETF Maintenance Agent X] Portfolio: ...' (profit tracking)");
     println!("• '[ETF Maintenance Agent X] Rebalancing: ...' (inventory management)");
     println!();
     println!("Press Enter to stop...");
-    
+
     let mut buffer = String::new();
     io::stdin().read_line(&mut buffer).unwrap();
     println!("Stopping test.");

@@ -154,16 +154,16 @@ impl Market {
         last_traded_price: Arc<RwLock<HashMap<u64, f64>>>,
         order_id_to_stock_id_map: Arc<RwLock<HashMap<u64, u64>>>,
         trade_to_candle_tx: Sender<Trade>,
-        stock_market: StockMarket,
+        _stock_market: StockMarket,
     ) {
         let trade_to_candle_tx_clone = trade_to_candle_tx.clone();
         thread::spawn(move || {
             let mut trade_count = 0;
             while let Ok(trade) = trade_rx.recv() {
                 trade_count += 1;
-                
+
                 // Debug trade receipts - show who made and took each trade with ticker symbol
-                
+
                 if trade_count % 10000 == 0 {
                     let now = SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)

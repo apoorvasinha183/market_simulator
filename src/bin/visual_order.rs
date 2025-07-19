@@ -986,7 +986,6 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::MarketMaker,
         AgentType::MomentumAgent,
         AgentType::Astrologer,
-         
         AgentType::Thermodynamic {
             initial_temperature: 0.2,
             specific_heat: 0.1,

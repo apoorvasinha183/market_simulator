@@ -15,10 +15,10 @@ use crate::agents::dumb_agent::DumbAgent;
 use crate::agents::dumb_limit_agent::DumbLimitAgent;
 use crate::agents::etf_agent::ETFAgent;
 use crate::agents::etf_maintenance_agent::ETFMaintenanceAgent;
-use crate::agents::panic_agent::PanicAgent;
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
 use crate::agents::momentum_agent::MomentumAgent;
+use crate::agents::panic_agent::PanicAgent;
 use crate::agents::thermo_agent::ThermoAgent;
 use crate::agents::web_proxy_agent::{ProxyRequest, WebProxyAgent};
 use crate::agents::web_server::WebServerRunner;
@@ -327,7 +327,10 @@ impl Orchestra {
         let momentum_inventory = stock_market.calculate_initial_inventory_for_agent("momentum");
 
         println!("[Orchestra] Calculated initial inventory allocations:");
-        println!("  Market Makers: {} stocks (solid inventory)", mm_solid_inventory.len());
+        println!(
+            "  Market Makers: {} stocks (solid inventory)",
+            mm_solid_inventory.len()
+        );
         println!("  Whales: {} stocks", whale_inventory.len());
         println!("  Thermo Agents: {} stocks", thermo_inventory.len());
         println!("  Momentum Agents: {} stocks", momentum_inventory.len());
@@ -428,11 +431,14 @@ impl Orchestra {
                     ) {
                         Some(agent) => Box::new(agent),
                         None => {
-                            println!("[Orchestra] Failed to create ETF agent for stock ID {}", etf_stock_id);
+                            println!(
+                                "[Orchestra] Failed to create ETF agent for stock ID {}",
+                                etf_stock_id
+                            );
                             continue; // Skip this agent
                         }
                     }
-                },
+                }
                 AgentType::ETFMaintenanceAgent { etf_stock_id } => {
                     match ETFMaintenanceAgent::new(
                         id,
@@ -445,11 +451,14 @@ impl Orchestra {
                     ) {
                         Some(agent) => Box::new(agent),
                         None => {
-                            println!("[Orchestra] Failed to create ETF maintenance agent for stock ID {}", etf_stock_id);
+                            println!(
+                                "[Orchestra] Failed to create ETF maintenance agent for stock ID {}",
+                                etf_stock_id
+                            );
                             continue; // Skip this agent
                         }
                     }
-                },
+                }
                 AgentType::PanicAgent { monitored_stocks } => {
                     Box::new(PanicAgent::new(
                         id,
@@ -459,7 +468,7 @@ impl Orchestra {
                         rx_trade,
                         normal_shadow_book.clone(), // Panic agents use normal view
                     ))
-                },
+                }
                 AgentType::Thermodynamic {
                     initial_temperature,
                     specific_heat,
@@ -498,10 +507,10 @@ impl Orchestra {
 
         let view_handle_clone = normal_shadow_book.clone();
         let candle_handle_clone = candle_data_handle.clone();
-         
+
         thread::spawn(move || {
             WebServerRunner::run(view_handle_clone, candle_handle_clone, proxy_request_tx);
-        }); 
+        });
 
         Orchestra {
             agents,

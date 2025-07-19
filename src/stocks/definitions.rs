@@ -58,7 +58,7 @@ impl Stock {
     /// Parse the ownership allocation string and populate the parsed_allocation HashMap
     pub fn parse_ownership_allocation(&mut self) {
         self.parsed_allocation.clear();
-        
+
         if self.ownership_allocation.is_empty() {
             return;
         }
@@ -76,7 +76,10 @@ impl Stock {
 
     /// Get the ownership allocation for a specific agent type
     pub fn get_allocation_for_agent(&self, agent_type: &str) -> f64 {
-        self.parsed_allocation.get(agent_type).copied().unwrap_or(0.0)
+        self.parsed_allocation
+            .get(agent_type)
+            .copied()
+            .unwrap_or(0.0)
     }
 
     /// Get all agent types that have ownership in this stock
@@ -100,7 +103,7 @@ impl ETFInfo {
     /// Parse the holdings string and populate the parsed_holdings HashMap
     pub fn parse_holdings(&mut self) {
         self.parsed_holdings.clear();
-        
+
         if self.holdings.is_empty() {
             return;
         }
@@ -129,7 +132,7 @@ impl ETFInfo {
     /// Calculate NAV (Net Asset Value) based on current stock prices
     pub fn calculate_nav(&self, stock_market: &StockMarket) -> Option<f64> {
         let mut nav = 0.0;
-        
+
         for (ticker, weight) in &self.parsed_holdings {
             if let Some(stock) = stock_market.get_stock_by_ticker(ticker) {
                 nav += stock.initial_price * weight;
@@ -138,7 +141,7 @@ impl ETFInfo {
                 return None;
             }
         }
-        
+
         Some(nav)
     }
 }
@@ -217,7 +220,7 @@ impl StockMarket {
     fn load_etf_info() -> HashMap<Symbol, ETFInfo> {
         let mut etf_map = HashMap::new();
         let file_path = "configs/etfs.csv";
-        
+
         if std::path::Path::new(file_path).exists() {
             if let Ok(mut rdr) = csv::Reader::from_path(file_path) {
                 for result in rdr.deserialize() {
@@ -229,7 +232,7 @@ impl StockMarket {
                 }
             }
         }
-        
+
         etf_map
     }
 
@@ -326,26 +329,26 @@ impl StockMarket {
     /// Calculate initial inventory for a specific agent type across all stocks
     pub fn calculate_initial_inventory_for_agent(&self, agent_type: &str) -> HashMap<u64, u64> {
         let mut inventory = HashMap::new();
-        
+
         for stock in &self.stocks {
             let shares = stock.calculate_shares_for_agent(agent_type);
             // Always include the stock in the inventory map, even if shares = 0
             inventory.insert(stock.id, shares);
         }
-        
+
         inventory
     }
 
     /// Get all agent types that have ownership across the stock universe
     pub fn get_all_owner_agent_types(&self) -> std::collections::HashSet<String> {
         let mut agent_types = std::collections::HashSet::new();
-        
+
         for stock in &self.stocks {
             for agent_type in stock.get_owner_agent_types() {
                 agent_types.insert(agent_type);
             }
         }
-        
+
         agent_types
     }
 
@@ -353,16 +356,16 @@ impl StockMarket {
     pub fn validate_ownership_allocations(&self) -> Result<(), String> {
         for stock in &self.stocks {
             let total: f64 = stock.parsed_allocation.values().sum();
-            
+
             // Allow small floating point errors
             if (total - 1.0).abs() > 0.01 {
                 return Err(format!(
-                    "Stock {} ownership allocation sums to {:.3}, expected ~1.0", 
+                    "Stock {} ownership allocation sums to {:.3}, expected ~1.0",
                     stock.ticker, total
                 ));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -375,11 +378,11 @@ mod tests {
         let mut stock1 = Stock::new("TEST1", 1, "Test Company 1", 1000, 10.0, 8001);
         stock1.ownership_allocation = "mm:0.5,whale:0.3,thermo:0.2".to_string();
         stock1.parse_ownership_allocation();
-        
+
         let mut stock2 = Stock::new("TEST2", 2, "Test Company 2", 2000, 20.0, 8002);
         stock2.ownership_allocation = "mm:0.4,thermo:0.6".to_string();
         stock2.parse_ownership_allocation();
-        
+
         vec![stock1, stock2]
     }
 
@@ -454,14 +457,14 @@ mod tests {
     #[test]
     fn ownership_allocation_parsing_works() {
         let sm = create_test_stock_market();
-        
+
         // Test stock 1: "mm:0.5,whale:0.3,thermo:0.2"
         let stock1 = sm.get_stock_by_id(1).unwrap();
         assert_eq!(stock1.get_allocation_for_agent("mm"), 0.5);
         assert_eq!(stock1.get_allocation_for_agent("whale"), 0.3);
         assert_eq!(stock1.get_allocation_for_agent("thermo"), 0.2);
         assert_eq!(stock1.get_allocation_for_agent("nonexistent"), 0.0);
-        
+
         // Test stock 2: "mm:0.4,thermo:0.6"
         let stock2 = sm.get_stock_by_id(2).unwrap();
         assert_eq!(stock2.get_allocation_for_agent("mm"), 0.4);
@@ -472,13 +475,13 @@ mod tests {
     #[test]
     fn calculate_shares_for_agent_works() {
         let sm = create_test_stock_market();
-        
+
         // Stock 1: 1000 total_float, mm gets 50%
         let stock1 = sm.get_stock_by_id(1).unwrap();
         assert_eq!(stock1.calculate_shares_for_agent("mm"), 500);
         assert_eq!(stock1.calculate_shares_for_agent("whale"), 300);
         assert_eq!(stock1.calculate_shares_for_agent("thermo"), 200);
-        
+
         // Stock 2: 2000 total_float, mm gets 40%
         let stock2 = sm.get_stock_by_id(2).unwrap();
         assert_eq!(stock2.calculate_shares_for_agent("mm"), 800);
@@ -488,17 +491,17 @@ mod tests {
     #[test]
     fn calculate_initial_inventory_for_agent_works() {
         let sm = create_test_stock_market();
-        
+
         let mm_inventory = sm.calculate_initial_inventory_for_agent("mm");
-        assert_eq!(mm_inventory.get(&1), Some(&500));  // 50% of 1000
-        assert_eq!(mm_inventory.get(&2), Some(&800));  // 40% of 2000
-        
+        assert_eq!(mm_inventory.get(&1), Some(&500)); // 50% of 1000
+        assert_eq!(mm_inventory.get(&2), Some(&800)); // 40% of 2000
+
         let thermo_inventory = sm.calculate_initial_inventory_for_agent("thermo");
-        assert_eq!(thermo_inventory.get(&1), Some(&200));  // 20% of 1000
+        assert_eq!(thermo_inventory.get(&1), Some(&200)); // 20% of 1000
         assert_eq!(thermo_inventory.get(&2), Some(&1200)); // 60% of 2000
-        
+
         let whale_inventory = sm.calculate_initial_inventory_for_agent("whale");
-        assert_eq!(whale_inventory.get(&1), Some(&300));  // 30% of 1000
-        assert_eq!(whale_inventory.get(&2), None);        // No whale ownership in stock 2
+        assert_eq!(whale_inventory.get(&1), Some(&300)); // 30% of 1000
+        assert_eq!(whale_inventory.get(&2), None); // No whale ownership in stock 2
     }
 }

@@ -22,9 +22,9 @@ pub use agents::dumb_agent::DumbAgent;
 pub use agents::dumb_limit_agent::DumbLimitAgent;
 pub use agents::etf_agent::ETFAgent;
 pub use agents::etf_maintenance_agent::ETFMaintenanceAgent;
-pub use agents::panic_agent::PanicAgent;
 pub use agents::ipo_agent::IpoAgent;
 pub use agents::market_maker_agent::MarketMakerAgent;
+pub use agents::panic_agent::PanicAgent;
 pub use agents::whale_agent::WhaleAgent;
 
 // --- From our `market` engine ---

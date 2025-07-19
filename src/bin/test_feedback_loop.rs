@@ -13,28 +13,24 @@ fn main() {
     let participants = vec![
         // Core market infrastructure
         AgentType::MarketMaker,
-        
         // ETF Maintenance agents (victims of the feedback loop)
         AgentType::ETFMaintenanceAgent { etf_stock_id: 25 }, // YEET ETF (LEAPS=40%, YOLO=30%, DEGEN=20%, ROCKET=10%)
         AgentType::ETFMaintenanceAgent { etf_stock_id: 22 }, // CASINO ETF (YOLO=25%, DEGEN=25%, ROCKET=20%, MOON=15%, FOMO=15%)
         AgentType::ETFMaintenanceAgent { etf_stock_id: 24 }, // COPE ETF (GIGA=30%, ROCKET=25%, ALPHA=20%, SIGMA=15%, ATH=10%)
-        
         // Regular ETF agents for comparison
         AgentType::ETFAgent { etf_stock_id: 21 }, // BUBBLE ETF (diversified - should be more stable)
-        
         // PANIC AGENTS - The feedback loop triggers! 🚨
         // These monitor key stocks and panic sell when prices drop
-        AgentType::PanicAgent { 
-            monitored_stocks: vec![17, 3, 20] // LEAPS, YOLO, DEGEN - key ETF constituents
+        AgentType::PanicAgent {
+            monitored_stocks: vec![17, 3, 20], // LEAPS, YOLO, DEGEN - key ETF constituents
         },
-        AgentType::PanicAgent { 
-            monitored_stocks: vec![7, 8, 16] // ROCKET, MOON, FOMO - more ETF constituents  
+        AgentType::PanicAgent {
+            monitored_stocks: vec![7, 8, 16], // ROCKET, MOON, FOMO - more ETF constituents
         },
-        
         // Market participants to create initial price movements
-        AgentType::WhaleAgent, // Will create initial disturbance
+        AgentType::WhaleAgent,    // Will create initial disturbance
         AgentType::MomentumAgent, // Will amplify movements
-        AgentType::DumbMarket, // Background noise
+        AgentType::DumbMarket,    // Background noise
     ];
 
     let orchestra = Orchestra::new(participants, 100, 10);
@@ -71,13 +67,13 @@ fn main() {
     println!();
     println!("📈 KEY STOCKS TO MONITOR:");
     println!("• LEAPS (ID:17) - 40% of YEET ETF");
-    println!("• YOLO (ID:3) - 30% of YEET + 25% of CASINO");  
+    println!("• YOLO (ID:3) - 30% of YEET + 25% of CASINO");
     println!("• DEGEN (ID:20) - 20% of YEET + 25% of CASINO");
     println!("• ROCKET (ID:7) - 10% of YEET + 20% of CASINO + 25% of COPE");
     println!();
     println!("🌪️  The more interconnected the holdings, the bigger the cascade!");
     println!("Press Enter to stop the feedback loop experiment...");
-    
+
     let mut buffer = String::new();
     io::stdin().read_line(&mut buffer).unwrap();
     println!("🛑 Stopping feedback loop test");

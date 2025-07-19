@@ -43,7 +43,14 @@ impl WhaleAgent {
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
     ) -> Self {
-        Self::new_with_inventory(id, order_channel, ack_channel, port_channel, view_handle, None)
+        Self::new_with_inventory(
+            id,
+            order_channel,
+            ack_channel,
+            port_channel,
+            view_handle,
+            None,
+        )
     }
 
     pub fn new_with_inventory(
@@ -213,15 +220,15 @@ impl WhaleAgent {
                                 let bid_px = crate::agents::quantize_price(
                                     current_mid_price.saturating_sub(offset.round() as u64),
                                 );
-                                
+
                                 // Debug whale orders for GIGA only
-                                /* 
+                                /*
                                 if stock_id == 1 {
-                                    println!("[WHALE DEBUG] Stock {}: mid_price=${:.2}, offset=${:.2}, bid=${:.2}", 
+                                    println!("[WHALE DEBUG] Stock {}: mid_price=${:.2}, offset=${:.2}, bid=${:.2}",
                                              stock_id, current_mid_price as f64 / 100.0, offset / 100.0, bid_px as f64 / 100.0);
                                 }
                                 */
-                                
+
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
                                         order_id: 0,

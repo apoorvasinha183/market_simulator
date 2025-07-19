@@ -12,3 +12,5 @@ workspace.xml
 workspace.xml.idea
 **/*.pyc
 DEVELOPMENT_PLAN.md
+visual_order_enhanced.rs
+visual_etf_crisis.rs

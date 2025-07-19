@@ -34,7 +34,14 @@ impl MomentumAgent {
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
     ) -> Self {
-        Self::new_with_inventory(id, order_channel, ack_channel, port_channel, view_handle, None)
+        Self::new_with_inventory(
+            id,
+            order_channel,
+            ack_channel,
+            port_channel,
+            view_handle,
+            None,
+        )
     }
 
     pub fn new_with_inventory(

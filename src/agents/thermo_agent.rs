@@ -57,9 +57,17 @@ impl ThermoAgent {
         initial_chemical_potential: f64,
     ) -> Self {
         Self::new_with_inventory(
-            id, order_channel, ack_channel, port_channel, event_receiver, 
-            view_handle, stock_market, initial_temperature, specific_heat, 
-            initial_chemical_potential, None
+            id,
+            order_channel,
+            ack_channel,
+            port_channel,
+            event_receiver,
+            view_handle,
+            stock_market,
+            initial_temperature,
+            specific_heat,
+            initial_chemical_potential,
+            None,
         )
     }
 

@@ -167,12 +167,12 @@ impl OrderBook {
                             Side::Sell => (maker_order.id, order.id),
                         };
                         // Debug trade creation for stock ID 1 only
-                        /* 
+                        /*
                         if maker_order.stock_id == 1 {
-                            println!("[TRADE DEBUG] Stock {}: {:?} limit @ {} matching {:?} @ {} -> trade vol={}", 
+                            println!("[TRADE DEBUG] Stock {}: {:?} limit @ {} matching {:?} @ {} -> trade vol={}",
                                      maker_order.stock_id, order.side, order.price, maker_order.side, price, trade_volume);
                         } */
-                        
+
                         trades.push(Trade {
                             stock_id: maker_order.stock_id,
                             price,
