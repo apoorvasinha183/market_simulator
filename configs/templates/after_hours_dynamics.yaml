@@ -1,0 +1,61 @@
+# After Hours Dynamics - Focus on PJ trader behavior and overnight gaps
+
+simulation:
+  name: "Pajama Trader Dynamics Study"
+  duration_hours: 24
+  random_seed: 69420
+
+market_phases:
+  trading:
+    duration_hours: 6.5  # Shorter trading day
+    update_interval_ms: 100
+  settlement:
+    duration_minutes: 30
+    update_interval_ms: 50
+  after_hours:
+    duration_hours: 17  # Long after-hours period
+    update_interval_ms: 1000  # Much slower updates
+
+agents:
+  market_maker:
+    count: 2
+    initial_cash: 75000000
+    active_phases: ["trading"]  # Only active during market hours
+    
+  pj_trader:
+    count: 5  # Many PJ traders for dynamics
+    initial_cash: 30000000
+    active_phases: ["after_hours"]
+    config:
+      spread_multiplier: 3.0  # Much wider spreads
+      volatility_tolerance: "very_high"
+      news_sensitivity: 2.5
+      
+  etf_agent:
+    count: 1
+    initial_cash: 150000000
+    config:
+      after_hours_spread_multiplier: 2.0  # Wider ETF spreads after hours
+      
+  arbitrage:
+    count: 1
+    initial_cash: 200000000
+    config:
+      after_hours_opportunity_threshold: 15  # Higher threshold after hours
+
+# Events to trigger overnight gaps
+events:
+  - time: "02:00"  # Middle of after-hours
+    type: "sentiment_shock"
+    target: "GIGA"
+    magnitude: 0.15
+    
+  - time: "04:30"  # Pre-market
+    type: "news_release"
+    target: "YOLO"
+    sentiment_impact: "very_positive"
+
+monitoring:
+  overnight_gap_tracking: true
+  pj_trader_behavior_analysis: true
+  after_hours_liquidity_metrics: true

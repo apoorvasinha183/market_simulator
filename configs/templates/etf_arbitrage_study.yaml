@@ -1,0 +1,45 @@
+# ETF Arbitrage Study - Focus on ETF dynamics and arbitrage opportunities
+
+simulation:
+  name: "ETF Arbitrage Research"
+  duration_hours: 12
+  random_seed: 31337
+
+market_phases:
+  trading:
+    duration_hours: 8
+    update_interval_ms: 50   # Faster updates to catch arbitrage
+  after_hours:
+    duration_hours: 4
+    update_interval_ms: 200
+
+agents:
+  market_maker:
+    count: 1  # Minimal market making
+    initial_cash: 50000000
+    
+  etf_agent:
+    count: 2  # Multiple ETF agents per ETF for competition
+    initial_cash: 200000000
+    config:
+      target_spread_bps: 2  # Tight spreads
+      rebalance_threshold_bps: 5  # Aggressive rebalancing
+      
+  arbitrage:
+    count: 3  # Multiple arbitrage agents competing
+    initial_cash: 300000000
+    config:
+      min_profit_bps: 2  # Lower threshold for more opportunities
+      speed_tier: "ultra_fast"
+
+# Focus on ETFs with overlapping holdings for cross-arbitrage
+etf_focus:
+  - "BUBBLE"  # Broad market
+  - "COPE"    # Tech heavy (overlaps with BUBBLE)
+  - "CASINO"  # Meme heavy (overlaps with BUBBLE)
+
+# Enhanced monitoring for research
+monitoring:
+  arbitrage_tracking: true
+  etf_premium_discount_logging: true
+  cross_etf_correlation_analysis: true

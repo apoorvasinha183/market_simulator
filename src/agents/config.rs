@@ -20,7 +20,7 @@ pub const MM_INITIAL_INVENTORY: i64 = 1_000_000;
 pub const MM_INITIAL_CENTER_PRICE: u64 = 15_000; // $150.00
 
 // A tighter spread for a more competitive market
-pub const MM_DESIRED_SPREAD: u64 = 80; // $0.08
+pub const MM_DESIRED_SPREAD: u64 = 80; // $0.80
 
 pub const MM_SKEW_FACTOR: f64 = 0.00001;
 
@@ -102,13 +102,13 @@ pub const WHALE_ACTION_PROB: f64 = 0.8;
 pub const WHALE_ORDER_VOLUME: u64 = 100_000;
 
 // Reduced price offset to be aggressive but not completely unrealistic.
-pub const WHALE_PRICE_OFFSET_MAX: u64 = 5000; // $50.00
+pub const WHALE_PRICE_OFFSET_MAX: u64 = 5000; // $50.00 (was $500.00 - way too high!)
 pub const WHALE_PRICE_OFFSET_MIN: u64 = 500; // $5.00
 
 pub const WHALE_REFRESH_THRESHOLD_BPS: u64 = 50; // 0.5%
 
 pub const CRAZY_WHALE: f64 = 0.001;
-pub const WHALE_TAPER_ORDERS: u64 = 100;
+pub const WHALE_TAPER_ORDERS: u64 = 200; // Reduced from 100 to avoid flooding the market
 
 // --- ThermoAgent ---
 pub const THERMO_AGENT_INITIAL_CASH: f64 = 10000000000000_000.0;

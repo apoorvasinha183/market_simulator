@@ -87,7 +87,8 @@ pub struct MarketMakerAgent {
     port_channel: Arc<Mutex<Receiver<Trade>>>,
     view_handle: ShadowBookHandle,
     // State Handles
-    inventory: Arc<RwLock<HashMap<u64, i64>>>,
+    inventory: Arc<RwLock<HashMap<u64, i64>>>, // Operating inventory (starts at 0, changes with trades)
+    solid_inventory: Arc<RwLock<HashMap<u64, i64>>>, // Solid ownership stake (doesn't change)
     ticks_until_active: Arc<Mutex<u32>>,
     bootstrapped: Arc<RwLock<HashMap<u64, bool>>>,
     open_orders: Arc<RwLock<HashMap<u64, Arc<RwLock<HashMap<u64, Order>>>>>>,
@@ -105,15 +106,51 @@ impl MarketMakerAgent {
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
     ) -> Self {
+        Self::new_with_inventory(id, order_channel, ack_channel, port_channel, view_handle, None)
+    }
+
+    pub fn new_with_inventory(
+        id: usize,
+        order_channel: Sender<OrderRequest>,
+        ack_channel: Receiver<Order>,
+        port_channel: Receiver<Trade>,
+        view_handle: ShadowBookHandle,
+        initial_inventory: Option<HashMap<u64, u64>>, // stock_id -> shares (solid inventory)
+    ) -> Self {
+        // Solid inventory: the actual ownership stake (doesn't change)
+        let solid_inventory = if let Some(inv) = initial_inventory {
+            inv.into_iter().map(|(k, v)| (k, v as i64)).collect()
+        } else {
+            HashMap::new()
+        };
+
+        // Operating inventory: starts at 0 for ALL stocks (not just ones we own)
+        // This is what changes with trades and affects pricing decisions
+        let mut operating_inventory = HashMap::new();
+        let view = view_handle.read().unwrap();
+        for stock_id in view.stocks.get_all_ids() {
+            operating_inventory.insert(stock_id, 0i64);
+        }
+        drop(view);
+
+        // Pre-populate bootstrapped map with all stock IDs set to false
+        let mut bootstrapped_map = HashMap::new();
+        let view = view_handle.read().unwrap();
+        for stock_id in view.stocks.get_all_ids() {
+            bootstrapped_map.insert(stock_id, false);
+        }
+        drop(view);
+
         Self {
             id,
             order_channel,
             ack_channel: Arc::new(Mutex::new(ack_channel)),
             port_channel: Arc::new(Mutex::new(port_channel)),
             view_handle,
-            inventory: Arc::new(RwLock::new(HashMap::new())),
+            inventory: Arc::new(RwLock::new(operating_inventory)), // Operating inventory (starts at 0)
+            solid_inventory: Arc::new(RwLock::new(solid_inventory)), // Solid ownership stake
             ticks_until_active: Arc::new(Mutex::new(MM_TICKS_UNTIL_ACTIVE)),
-            bootstrapped: Arc::new(RwLock::new(HashMap::new())),
+            bootstrapped: Arc::new(RwLock::new(bootstrapped_map)),
             open_orders: Arc::new(RwLock::new(HashMap::new())),
             last_quoted_prices: Arc::new(RwLock::new(HashMap::new())),
             cash: Arc::new(RwLock::new(100_000_000_000.0)),
@@ -131,7 +168,10 @@ impl MarketMakerAgent {
         open_orders: &Arc<RwLock<HashMap<u64, Arc<RwLock<HashMap<u64, Order>>>>>>,
         agent_id: usize,
     ) {
+        //println!("[MM PORTFOLIO] Agent {} portfolio updater thread started", agent_id);
         while let Ok(tr) = port_rx.recv() {
+            //println!("[MM PORTFOLIO] Agent {} received trade: {} shares of stock {} at ${:.2}", 
+            //         agent_id, tr.volume, tr.stock_id, tr.price as f64 / 100.0);
             if tr.taker_agent_id == agent_id || tr.maker_agent_id == agent_id {
                 let mut inventory_lock = inventory.write().unwrap();
                 let mut cash_lock = cash.write().unwrap();
@@ -207,6 +247,8 @@ impl MarketMakerAgent {
         if ids.is_empty() {
             return;
         }
+        
+
 
         // Extract all necessary data from the view *before* spawning threads.
         let last_traded_prices: HashMap<u64, f64> = ids
@@ -239,10 +281,19 @@ impl MarketMakerAgent {
                     .read()
                     .unwrap()
                     .get(&stock_id)
-                    .unwrap_or(&false);
+                    .unwrap(); // Now we can safely unwrap since all stock IDs are pre-populated
+                    
                 let agent_id = id; // move id into thread
 
+                // Debug bootstrapped state for first few stocks only
+                /* 
+                if stock_id <= 3 {
+                    //println!("[MM BOOTSTRAP] Stock {}: is_bootstrapped = {}", stock_id, is_bootstrapped);
+                }
+                */
+
                 if !is_bootstrapped {
+                    
                     let total_inventory: i64 = MM_INITIAL_INVENTORY; // MM starting inventory for seeding
                     let side_budget = (total_inventory.abs() as f64 * MM_SEED_DEPTH_PCT) as u64;
                     let mut vol_at_lvl = (side_budget as f64 * (1.0 - MM_SEED_DECAY)
@@ -263,6 +314,8 @@ impl MarketMakerAgent {
                                 + (MM_DESIRED_SPREAD / 2 + lvl as u64 * MM_SEED_TICK_SPACING)
                                     as i128,
                         );
+                        
+
                         /*
                         std::thread::sleep(std::time::Duration::from_millis(
                             PREMIUM_PROCESSING_LATENCY as u64,
@@ -295,6 +348,8 @@ impl MarketMakerAgent {
                         }
                     }
                     bootstrapped_clone.write().unwrap().insert(stock_id, true);
+                    // Give the shadow book a moment to catch up to the seed orders
+                    //std::thread::sleep(std::time::Duration::from_millis(20));
                 } else {
                     let best_bid = book.bids.keys().next_back().copied();
                     let best_ask = book.asks.keys().next().copied();
@@ -432,7 +487,8 @@ impl Agent for MarketMakerAgent {
         let open_orders_handle_for_portfolio = self.open_orders.clone();
         let open_orders_handle_for_acks = self.open_orders.clone();
         let agent_id = self.id;
-
+        //Sleep for 1 second to allow the market to initialize
+       //thread::sleep(std::time::Duration::from_secs(1));
         thread::spawn(move || {
             let rx = portfolio_rx_handle.lock().unwrap();
             Self::run_portfolio_updater_internal(
@@ -451,6 +507,7 @@ impl Agent for MarketMakerAgent {
 
         loop {
             self.decide_actions();
+            //thread::sleep(std::time::Duration::from_millis(10));
             thread::sleep(std::time::Duration::from_nanos(10));
         }
     }

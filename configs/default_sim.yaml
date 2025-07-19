@@ -1,0 +1,81 @@
+# Default Market Simulation Configuration
+
+simulation:
+  name: "Default Market Simulation"
+  duration_hours: 24
+  random_seed: 42069
+  
+market_phases:
+  trading:
+    duration_hours: 8
+    start_time: "09:30"
+    update_interval_ms: 100  # Normal agents
+  settlement:
+    duration_minutes: 30
+    update_interval_ms: 50   # Faster updates during settlement
+  after_hours:
+    duration_hours: 15.5
+    update_interval_ms: 500  # Slower updates after hours
+
+# Agent configuration
+agents:
+  market_maker:
+    count: 3
+    update_interval_ms: 10   # Premium tier - faster updates
+    initial_cash: 100000000
+    config:
+      spread_bps: 5
+      max_inventory_ratio: 0.1
+      
+  momentum:
+    count: 2
+    initial_cash: 50000000
+    config:
+      momentum_threshold: 0.02
+      position_size_ratio: 0.05
+      
+  pj_trader:
+    count: 2
+    active_phases: ["after_hours"]
+    initial_cash: 25000000
+    config:
+      spread_multiplier: 2.0  # Wider spreads after hours
+      risk_tolerance: "high"
+      
+  etf_agent:
+    count: 1  # Per ETF (auto-spawned)
+    initial_cash: 200000000
+    config:
+      target_spread_bps: 3
+      rebalance_threshold_bps: 10
+      max_inventory_shares: 1000000
+      
+  arbitrage:
+    count: 1
+    initial_cash: 500000000
+    config:
+      min_profit_bps: 5
+      max_position_size: 2000000
+      speed_tier: "fast"
+
+# Initial inventory distribution
+initial_distribution:
+  method: "realistic"  # vs "equal" vs "random"
+  institutional_ownership: 0.70
+  retail_ownership: 0.25
+  insider_ownership: 0.05
+  
+# Conservation law enforcement
+conservation:
+  enforce_share_limits: true
+  settlement_enforcement: true
+  margin_call_threshold: 0.8
+  forced_buyins: true
+
+# Logging and monitoring
+monitoring:
+  log_level: "info"
+  performance_tracking: true
+  conservation_checks: true
+  web_interface: true
+  websocket_port: 3000

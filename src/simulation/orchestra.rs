@@ -13,6 +13,9 @@ use crate::agents::astrologer_agent::AstrologerAgent;
 use crate::agents::customer_agent::CustomerAgent;
 use crate::agents::dumb_agent::DumbAgent;
 use crate::agents::dumb_limit_agent::DumbLimitAgent;
+use crate::agents::etf_agent::ETFAgent;
+use crate::agents::etf_maintenance_agent::ETFMaintenanceAgent;
+use crate::agents::panic_agent::PanicAgent;
 use crate::agents::ipo_agent::IpoAgent;
 use crate::agents::market_maker_agent::MarketMakerAgent;
 use crate::agents::momentum_agent::MomentumAgent;
@@ -317,6 +320,18 @@ impl Orchestra {
         let mut agents: Vec<Box<dyn Agent>> = Vec::new();
         let mut registration_data: HashMap<usize, AgentResponseChannels> = HashMap::new();
 
+        // Calculate initial inventory allocations for each agent type
+        let mm_solid_inventory = stock_market.calculate_initial_inventory_for_agent("mm");
+        let whale_inventory = stock_market.calculate_initial_inventory_for_agent("whale");
+        let thermo_inventory = stock_market.calculate_initial_inventory_for_agent("thermo");
+        let momentum_inventory = stock_market.calculate_initial_inventory_for_agent("momentum");
+
+        println!("[Orchestra] Calculated initial inventory allocations:");
+        println!("  Market Makers: {} stocks (solid inventory)", mm_solid_inventory.len());
+        println!("  Whales: {} stocks", whale_inventory.len());
+        println!("  Thermo Agents: {} stocks", thermo_inventory.len());
+        println!("  Momentum Agents: {} stocks", momentum_inventory.len());
+
         for (id, agent_type) in agent_types.into_iter().enumerate() {
             let (tx_ack, rx_ack) = unbounded();
             let (tx_trade, rx_trade) = unbounded();
@@ -356,12 +371,13 @@ impl Orchestra {
                     rx_trade,
                     view_handle,
                 )),
-                AgentType::MarketMaker => Box::new(MarketMakerAgent::new(
+                AgentType::MarketMaker => Box::new(MarketMakerAgent::new_with_inventory(
                     id,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
                     view_handle,
+                    Some(mm_solid_inventory.clone()),
                 )),
                 AgentType::IPO => Box::new(IpoAgent::new(
                     id,
@@ -370,19 +386,21 @@ impl Orchestra {
                     rx_trade,
                     view_handle,
                 )),
-                AgentType::WhaleAgent => Box::new(WhaleAgent::new(
+                AgentType::WhaleAgent => Box::new(WhaleAgent::new_with_inventory(
                     id,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
                     view_handle,
+                    Some(whale_inventory.clone()),
                 )),
-                AgentType::MomentumAgent => Box::new(MomentumAgent::new(
+                AgentType::MomentumAgent => Box::new(MomentumAgent::new_with_inventory(
                     id,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
                     view_handle,
+                    Some(momentum_inventory.clone()),
                 )),
                 AgentType::CustomerAgent => Box::new(CustomerAgent::new(
                     id,
@@ -398,13 +416,57 @@ impl Orchestra {
                     rx_trade,
                     proxy_request_rx.clone(),
                 )),
+                AgentType::ETFAgent { etf_stock_id } => {
+                    match ETFAgent::new(
+                        id,
+                        etf_stock_id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        view_handle,
+                        &stock_market,
+                    ) {
+                        Some(agent) => Box::new(agent),
+                        None => {
+                            println!("[Orchestra] Failed to create ETF agent for stock ID {}", etf_stock_id);
+                            continue; // Skip this agent
+                        }
+                    }
+                },
+                AgentType::ETFMaintenanceAgent { etf_stock_id } => {
+                    match ETFMaintenanceAgent::new(
+                        id,
+                        etf_stock_id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        premium_shadow_book.clone(), // Maintenance agents get premium view
+                        &stock_market,
+                    ) {
+                        Some(agent) => Box::new(agent),
+                        None => {
+                            println!("[Orchestra] Failed to create ETF maintenance agent for stock ID {}", etf_stock_id);
+                            continue; // Skip this agent
+                        }
+                    }
+                },
+                AgentType::PanicAgent { monitored_stocks } => {
+                    Box::new(PanicAgent::new(
+                        id,
+                        monitored_stocks,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        normal_shadow_book.clone(), // Panic agents use normal view
+                    ))
+                },
                 AgentType::Thermodynamic {
                     initial_temperature,
                     specific_heat,
                     initial_chemical_potential,
                 } => {
                     let event_rx_clone = event_rx.clone();
-                    Box::new(ThermoAgent::new(
+                    Box::new(ThermoAgent::new_with_inventory(
                         id,
                         order_tx.clone(),
                         rx_ack,
@@ -415,6 +477,7 @@ impl Orchestra {
                         initial_temperature,
                         specific_heat,
                         initial_chemical_potential,
+                        Some(thermo_inventory.clone()),
                     ))
                 }
             };
@@ -435,10 +498,10 @@ impl Orchestra {
 
         let view_handle_clone = normal_shadow_book.clone();
         let candle_handle_clone = candle_data_handle.clone();
-
+         
         thread::spawn(move || {
             WebServerRunner::run(view_handle_clone, candle_handle_clone, proxy_request_tx);
-        });
+        }); 
 
         Orchestra {
             agents,

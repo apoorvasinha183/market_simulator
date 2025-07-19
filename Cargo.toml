@@ -31,6 +31,22 @@ harness = false
 name = "comprehensive_benchmark"
 harness = false
 
+[[bin]]
+name = "test_etf_agents"
+path = "src/bin/test_etf_agents.rs"
+
+[[bin]]
+name = "test_etf_maintenance"
+path = "src/bin/test_etf_maintenance.rs"
+
+[[bin]]
+name = "test_market_manipulation"
+path = "src/bin/test_market_manipulation.rs"
+
+[[bin]]
+name = "test_feedback_loop"
+path = "src/bin/test_feedback_loop.rs"
+
 [dependencies]
 rand = "0.8"
 socket2 = "0.5"

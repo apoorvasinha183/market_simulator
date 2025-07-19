@@ -43,13 +43,31 @@ impl WhaleAgent {
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
     ) -> Self {
+        Self::new_with_inventory(id, order_channel, ack_channel, port_channel, view_handle, None)
+    }
+
+    pub fn new_with_inventory(
+        id: usize,
+        order_channel: Sender<OrderRequest>,
+        ack_channel: Receiver<Order>,
+        port_channel: Receiver<Trade>,
+        view_handle: ShadowBookHandle,
+        initial_inventory: Option<HashMap<u64, u64>>, // stock_id -> shares
+    ) -> Self {
+        // Convert u64 shares to i64 positions (positive = long)
+        let inventory = if let Some(inv) = initial_inventory {
+            inv.into_iter().map(|(k, v)| (k, v as i64)).collect()
+        } else {
+            HashMap::new()
+        };
+
         Self {
             id,
             order_channel,
             ack_channel: Arc::new(Mutex::new(ack_channel)),
             port_channel: Arc::new(Mutex::new(port_channel)),
             view_handle,
-            inventory: Arc::new(RwLock::new(HashMap::new())), // Whales start with cash
+            inventory: Arc::new(RwLock::new(inventory)),
             ticks_until_active: Arc::new(Mutex::new(WHALE_TICKS_UNTIL_ACTIVE)),
             open_orders: Arc::new(RwLock::new(HashMap::new())),
             cash: Arc::new(RwLock::new(1_000_000_000_000.0)),
@@ -195,6 +213,15 @@ impl WhaleAgent {
                                 let bid_px = crate::agents::quantize_price(
                                     current_mid_price.saturating_sub(offset.round() as u64),
                                 );
+                                
+                                // Debug whale orders for GIGA only
+                                /* 
+                                if stock_id == 1 {
+                                    println!("[WHALE DEBUG] Stock {}: mid_price=${:.2}, offset=${:.2}, bid=${:.2}", 
+                                             stock_id, current_mid_price as f64 / 100.0, offset / 100.0, bid_px as f64 / 100.0);
+                                }
+                                */
+                                
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
                                         order_id: 0,

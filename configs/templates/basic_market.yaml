@@ -1,0 +1,40 @@
+# Basic Market Template - Simple 5-stock market for testing
+
+simulation:
+  name: "Basic Market Test"
+  duration_hours: 8
+  random_seed: 12345
+
+market_phases:
+  trading:
+    duration_hours: 8
+    update_interval_ms: 100
+
+agents:
+  market_maker:
+    count: 2
+    initial_cash: 50000000
+    
+  momentum:
+    count: 1
+    initial_cash: 25000000
+    
+  etf_agent:
+    count: 1
+    initial_cash: 100000000
+
+# Use only top 5 stocks for simplicity
+stock_filter:
+  - "GIGA"
+  - "STONKS" 
+  - "DIAMOND"
+  - "HODL"
+  - "TENDIE"
+
+# Simple ETF for testing
+etf_filter:
+  - "BUBBLE"
+
+conservation:
+  enforce_share_limits: false  # Relaxed for testing
+  settlement_enforcement: false

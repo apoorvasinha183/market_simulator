@@ -34,6 +34,24 @@ impl MomentumAgent {
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
     ) -> Self {
+        Self::new_with_inventory(id, order_channel, ack_channel, port_channel, view_handle, None)
+    }
+
+    pub fn new_with_inventory(
+        id: usize,
+        order_channel: Sender<OrderRequest>,
+        ack_channel: Receiver<Order>,
+        port_channel: Receiver<Trade>,
+        view_handle: ShadowBookHandle,
+        initial_inventory: Option<HashMap<u64, u64>>, // stock_id -> shares
+    ) -> Self {
+        // Convert u64 shares to i64 positions (positive = long)
+        let inventory = if let Some(inv) = initial_inventory {
+            inv.into_iter().map(|(k, v)| (k, v as i64)).collect()
+        } else {
+            HashMap::new()
+        };
+
         Self {
             id,
             order_channel,
@@ -43,7 +61,7 @@ impl MomentumAgent {
             price_history: Arc::new(RwLock::new(HashMap::new())),
             open_orders: Arc::new(RwLock::new(HashMap::new())),
             cash: Arc::new(RwLock::new(1_000_000.0)), // Starting cash
-            inventory: Arc::new(RwLock::new(HashMap::new())),
+            inventory: Arc::new(RwLock::new(inventory)),
         }
     }
 
@@ -201,7 +219,8 @@ impl Agent for MomentumAgent {
         let open_orders_handle_1 = self.open_orders.clone();
         let open_orders_handle_2 = self.open_orders.clone();
         let agent_id = self.id;
-
+        // make it sleep for 10 seconds
+        thread::sleep(std::time::Duration::from_secs(10));
         thread::spawn(move || {
             let rx = portfolio_rx_handle.lock().unwrap();
             Self::run_portfolio_updater_internal(

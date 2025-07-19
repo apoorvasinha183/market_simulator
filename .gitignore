@@ -11,3 +11,4 @@ vcs.xml
 workspace.xml
 workspace.xml.idea
 **/*.pyc
+DEVELOPMENT_PLAN.md

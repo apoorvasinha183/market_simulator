@@ -56,10 +56,37 @@ impl ThermoAgent {
         specific_heat: f64,
         initial_chemical_potential: f64,
     ) -> Self {
+        Self::new_with_inventory(
+            id, order_channel, ack_channel, port_channel, event_receiver, 
+            view_handle, stock_market, initial_temperature, specific_heat, 
+            initial_chemical_potential, None
+        )
+    }
+
+    pub fn new_with_inventory(
+        id: usize,
+        order_channel: Sender<OrderRequest>,
+        ack_channel: Receiver<Order>,
+        port_channel: Receiver<Trade>,
+        event_receiver: Receiver<MarketEvent>,
+        view_handle: ShadowBookHandle,
+        stock_market: StockMarket,
+        initial_temperature: f64,
+        specific_heat: f64,
+        initial_chemical_potential: f64,
+        initial_inventory: Option<HashMap<u64, u64>>, // stock_id -> shares
+    ) -> Self {
         let mut last_price = HashMap::new();
         let mut price_history = HashMap::new();
         let mut temperature_map = HashMap::new();
         let mut chemical_potential_map = HashMap::new();
+
+        // Convert u64 shares to i64 positions (positive = long)
+        let inventory = if let Some(inv) = initial_inventory {
+            inv.into_iter().map(|(k, v)| (k, v as i64)).collect()
+        } else {
+            HashMap::new()
+        };
 
         // Initialize with initial prices from StockMarket
         for stock in stock_market.get_all_stocks() {
@@ -80,7 +107,7 @@ impl ThermoAgent {
             chemical_potential: chemical_potential_map, // Will be populated per stock
             specific_heat: specific_heat.max(0.1),
             cash: THERMO_AGENT_INITIAL_CASH, // Starting cash
-            inventory: HashMap::new(),
+            inventory,
             open_orders: HashMap::new(),
             last_price,
             price_history,

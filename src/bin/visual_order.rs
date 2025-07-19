@@ -986,6 +986,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::MarketMaker,
         AgentType::MomentumAgent,
         AgentType::Astrologer,
+         
         AgentType::Thermodynamic {
             initial_temperature: 0.2,
             specific_heat: 0.1,
@@ -1004,7 +1005,7 @@ fn main() -> Result<(), eframe::Error> {
         AgentType::IPO,
     ];*/
 
-    let orchestra = Orchestra::new(participants, 1000, 10);
+    let orchestra = Orchestra::new(participants, 1, 1);
     let shadow_handle = orchestra.get_shadow_handle();
 
     let candle_data_handle = orchestra.get_candle_data_handle();

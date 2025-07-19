@@ -124,6 +124,7 @@ impl Market {
             last_traded_price.clone(),
             order_id_to_stock_id_map.clone(),
             trade_to_candle_tx,
+            stocks.clone(),
         );
 
         println!("[Market] Connected agents: {:?}", agent_channels_arc.keys());
@@ -153,12 +154,16 @@ impl Market {
         last_traded_price: Arc<RwLock<HashMap<u64, f64>>>,
         order_id_to_stock_id_map: Arc<RwLock<HashMap<u64, u64>>>,
         trade_to_candle_tx: Sender<Trade>,
+        stock_market: StockMarket,
     ) {
         let trade_to_candle_tx_clone = trade_to_candle_tx.clone();
         thread::spawn(move || {
             let mut trade_count = 0;
             while let Ok(trade) = trade_rx.recv() {
                 trade_count += 1;
+                
+                // Debug trade receipts - show who made and took each trade with ticker symbol
+                
                 if trade_count % 10000 == 0 {
                     let now = SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
@@ -180,8 +185,9 @@ impl Market {
                     .unwrap()
                     .remove(&trade.maker_order_id);
 
-                if event_tx.send(MarketEvent::TradeOccurred(trade)).is_err() {
-                    eprintln!("[TradeProcessor] Failed to broadcast trade event");
+                if let Err(e) = event_tx.send(MarketEvent::TradeOccurred(trade)) {
+                    eprintln!("[TradeProcessor] Failed to broadcast trade event: {:?}", e);
+                    eprintln!("[TradeProcessor] Event channel might be disconnected or full"); // I asked the AI to diagnose the error message, they did this to me !
                 }
 
                 if let Some(taker_ch) = agent_channels.get(&trade.taker_agent_id) {
