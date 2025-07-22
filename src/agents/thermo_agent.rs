@@ -68,6 +68,7 @@ impl ThermoAgent {
             specific_heat,
             initial_chemical_potential,
             None,
+            THERMO_AGENT_INITIAL_CASH,
         )
     }
 
@@ -83,6 +84,7 @@ impl ThermoAgent {
         specific_heat: f64,
         initial_chemical_potential: f64,
         initial_inventory: Option<HashMap<u64, u64>>, // stock_id -> shares
+        initial_cash: f64,
     ) -> Self {
         let mut last_price = HashMap::new();
         let mut price_history = HashMap::new();
@@ -114,7 +116,7 @@ impl ThermoAgent {
             temperature: temperature_map, // Will be populated per stock
             chemical_potential: chemical_potential_map, // Will be populated per stock
             specific_heat: specific_heat.max(0.1),
-            cash: THERMO_AGENT_INITIAL_CASH, // Starting cash
+            cash: initial_cash, // Starting cash
             inventory,
             open_orders: HashMap::new(),
             last_price,

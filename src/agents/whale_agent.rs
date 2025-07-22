@@ -1,4 +1,5 @@
 use crossbeam_channel::{Receiver, Sender};
+use dashmap::DashMap;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 use std::collections::HashMap;
@@ -7,8 +8,8 @@ use std::thread;
 
 use super::agent_trait::Agent;
 use super::config::{
-    WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX, WHALE_REFRESH_THRESHOLD_BPS,
-    WHALE_TAPER_ORDERS,
+    WHALE_ACTION_PROB, WHALE_ORDER_VOLUME, WHALE_PRICE_OFFSET_MAX_PCT, WHALE_PRICE_OFFSET_MIN_PCT,
+    WHALE_REFRESH_THRESHOLD_BPS, WHALE_TAPER_ORDERS,
 };
 use super::latency::WHALE_TICKS_UNTIL_ACTIVE;
 use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
@@ -33,6 +34,10 @@ pub struct WhaleAgent {
     margin: Arc<RwLock<f64>>,
     port_value: Arc<RwLock<f64>>,
     last_mid_prices: Arc<RwLock<HashMap<u64, u64>>>,
+
+    // Sentiment and Momentum Tracking
+    sentiment_scores: Arc<DashMap<u64, f64>>, // Current sentiment per stock (-1.0 to 1.0)
+    momentum_scores: Arc<DashMap<u64, f64>>,  // Current momentum per stock (-1.0 to 1.0)
 }
 
 impl WhaleAgent {
@@ -42,6 +47,7 @@ impl WhaleAgent {
         ack_channel: Receiver<Order>,
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
+        initial_cash: f64,
     ) -> Self {
         Self::new_with_inventory(
             id,
@@ -50,6 +56,7 @@ impl WhaleAgent {
             port_channel,
             view_handle,
             None,
+            initial_cash,
         )
     }
 
@@ -60,6 +67,7 @@ impl WhaleAgent {
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
         initial_inventory: Option<HashMap<u64, u64>>, // stock_id -> shares
+        initial_cash: f64,
     ) -> Self {
         // Convert u64 shares to i64 positions (positive = long)
         let inventory = if let Some(inv) = initial_inventory {
@@ -81,6 +89,34 @@ impl WhaleAgent {
             margin: Arc::new(RwLock::new(10_000_000_000_000.0)),
             port_value: Arc::new(RwLock::new(0.0)),
             last_mid_prices: Arc::new(RwLock::new(HashMap::new())),
+            sentiment_scores: Arc::new(DashMap::new()),
+            momentum_scores: Arc::new(DashMap::new()),
+        }
+    }
+
+    // --- SENTIMENT AND MOMENTUM ANALYSIS ---
+
+    fn calculate_directional_bias(sentiment: f64, momentum: f64) -> f64 {
+        let combined = (sentiment * 0.6) + (momentum * 0.4);
+        combined.clamp(-1.0, 1.0)
+    }
+
+    fn apply_institutional_pressure(base_offset_pct: f64, bias: f64) -> (f64, f64) {
+        let aggressiveness = 0.02; // 2% max adjustment
+
+        if bias > 0.0 {
+            // Bullish - raise bids, keep asks normal
+            let bid_boost = bias * aggressiveness;
+            let ask_penalty = bias * aggressiveness * 0.5;
+            (base_offset_pct - bid_boost, base_offset_pct + ask_penalty)
+        } else if bias < 0.0 {
+            // Bearish - lower asks, keep bids normal
+            let bid_penalty = bias.abs() * aggressiveness * 0.5;
+            let ask_boost = bias.abs() * aggressiveness;
+            (base_offset_pct + bid_penalty, base_offset_pct - ask_boost)
+        } else {
+            // Neutral
+            (base_offset_pct, base_offset_pct)
         }
     }
 
@@ -142,6 +178,8 @@ impl WhaleAgent {
         view_handle: &ShadowBookHandle,
         order_channel: &Sender<OrderRequest>,
         last_mid_prices: &Arc<RwLock<HashMap<u64, u64>>>,
+        sentiment_scores: &Arc<DashMap<u64, f64>>,
+        momentum_scores: &Arc<DashMap<u64, f64>>,
     ) {
         {
             let mut ticks = ticks_until_active.lock().unwrap();
@@ -210,24 +248,35 @@ impl WhaleAgent {
                             // 2. Place all the new orders.
                             //    The ack listener will start adding these to the `open_orders` map in the background.
                             let volume_per_order = WHALE_ORDER_VOLUME / WHALE_TAPER_ORDERS;
-                            let std_dev = WHALE_PRICE_OFFSET_MAX as f64;
-                            let normal = Normal::new(0.0, std_dev).unwrap();
+                            let max_offset_pct = WHALE_PRICE_OFFSET_MAX_PCT;
+                            let min_offset_pct = WHALE_PRICE_OFFSET_MIN_PCT;
+                            let normal = Normal::new(0.0, max_offset_pct).unwrap();
 
                             for _ in 0..WHALE_TAPER_ORDERS {
-                                let offset = normal.sample(&mut rng).abs();
+                                let base_offset_pct =
+                                    normal.sample(&mut rng).abs().max(min_offset_pct);
 
-                                // Place buy order
+                                // Get sentiment/momentum for this stock
+                                let sentiment =
+                                    sentiment_scores.get(&stock_id).map(|v| *v).unwrap_or(0.0);
+                                let momentum =
+                                    momentum_scores.get(&stock_id).map(|v| *v).unwrap_or(0.0);
+
+                                // Calculate directional bias and apply institutional pressure
+                                let bias = Self::calculate_directional_bias(sentiment, momentum);
+                                let (bid_offset_pct, ask_offset_pct) =
+                                    Self::apply_institutional_pressure(base_offset_pct, bias);
+
+                                // Apply percentage-based offsets with institutional pressure
+                                let bid_offset =
+                                    (current_mid_price as f64 * bid_offset_pct).round() as u64;
+                                let ask_offset =
+                                    (current_mid_price as f64 * ask_offset_pct).round() as u64;
+
+                                // Place buy order with sentiment-adjusted offset
                                 let bid_px = crate::agents::quantize_price(
-                                    current_mid_price.saturating_sub(offset.round() as u64),
+                                    current_mid_price.saturating_sub(bid_offset),
                                 );
-
-                                // Debug whale orders for GIGA only
-                                /*
-                                if stock_id == 1 {
-                                    println!("[WHALE DEBUG] Stock {}: mid_price=${:.2}, offset=${:.2}, bid=${:.2}",
-                                             stock_id, current_mid_price as f64 / 100.0, offset / 100.0, bid_px as f64 / 100.0);
-                                }
-                                */
 
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
@@ -240,9 +289,9 @@ impl WhaleAgent {
                                     })
                                     .expect("Failed to send whale limit order");
 
-                                // Place sell order
+                                // Place sell order with sentiment-adjusted offset
                                 let ask_px = crate::agents::quantize_price(
-                                    current_mid_price.saturating_add(offset.round() as u64),
+                                    current_mid_price.saturating_add(ask_offset),
                                 );
                                 order_channel
                                     .send(OrderRequest::LimitOrder {
@@ -283,15 +332,32 @@ impl WhaleAgent {
                                 .values()
                                 .any(|o| o.stock_id == stock_id && o.side == Side::Sell);
 
-                            let std_dev = WHALE_PRICE_OFFSET_MAX as f64;
-                            let normal = Normal::new(0.0, std_dev).unwrap();
+                            let max_offset_pct = WHALE_PRICE_OFFSET_MAX_PCT;
+                            let min_offset_pct = WHALE_PRICE_OFFSET_MIN_PCT;
+                            let normal = Normal::new(0.0, max_offset_pct).unwrap();
                             let volume_per_order = WHALE_ORDER_VOLUME / WHALE_TAPER_ORDERS;
 
                             if !has_bids {
                                 for _ in 0..WHALE_TAPER_ORDERS {
-                                    let offset = normal.sample(&mut rng).abs();
+                                    let base_offset_pct =
+                                        normal.sample(&mut rng).abs().max(min_offset_pct);
+
+                                    // Get sentiment/momentum for this stock
+                                    let sentiment =
+                                        sentiment_scores.get(&stock_id).map(|v| *v).unwrap_or(0.0);
+                                    let momentum =
+                                        momentum_scores.get(&stock_id).map(|v| *v).unwrap_or(0.0);
+
+                                    // Calculate directional bias and apply institutional pressure
+                                    let bias =
+                                        Self::calculate_directional_bias(sentiment, momentum);
+                                    let (bid_offset_pct, _ask_offset_pct) =
+                                        Self::apply_institutional_pressure(base_offset_pct, bias);
+
+                                    let bid_offset =
+                                        (current_mid_price as f64 * bid_offset_pct).round() as u64;
                                     let bid_px = crate::agents::quantize_price(
-                                        current_mid_price.saturating_sub(offset.round() as u64),
+                                        current_mid_price.saturating_sub(bid_offset),
                                     );
                                     order_channel
                                         .send(OrderRequest::LimitOrder {
@@ -308,9 +374,25 @@ impl WhaleAgent {
 
                             if !has_asks {
                                 for _ in 0..WHALE_TAPER_ORDERS {
-                                    let offset = normal.sample(&mut rng).abs();
+                                    let base_offset_pct =
+                                        normal.sample(&mut rng).abs().max(min_offset_pct);
+
+                                    // Get sentiment/momentum for this stock
+                                    let sentiment =
+                                        sentiment_scores.get(&stock_id).map(|v| *v).unwrap_or(0.0);
+                                    let momentum =
+                                        momentum_scores.get(&stock_id).map(|v| *v).unwrap_or(0.0);
+
+                                    // Calculate directional bias and apply institutional pressure
+                                    let bias =
+                                        Self::calculate_directional_bias(sentiment, momentum);
+                                    let (_bid_offset_pct, ask_offset_pct) =
+                                        Self::apply_institutional_pressure(base_offset_pct, bias);
+
+                                    let ask_offset =
+                                        (current_mid_price as f64 * ask_offset_pct).round() as u64;
                                     let ask_px = crate::agents::quantize_price(
-                                        current_mid_price.saturating_add(offset.round() as u64),
+                                        current_mid_price.saturating_add(ask_offset),
                                     );
                                     order_channel
                                         .send(OrderRequest::LimitOrder {
@@ -376,6 +458,8 @@ impl Agent for WhaleAgent {
             &self.view_handle,
             &self.order_channel,
             &self.last_mid_prices,
+            &self.sentiment_scores,
+            &self.momentum_scores,
         );
     }
 

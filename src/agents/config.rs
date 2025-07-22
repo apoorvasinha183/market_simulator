@@ -101,9 +101,9 @@ pub const WHALE_ACTION_PROB: f64 = 0.8;
 
 pub const WHALE_ORDER_VOLUME: u64 = 100_000;
 
-// Reduced price offset to be aggressive but not completely unrealistic.
-pub const WHALE_PRICE_OFFSET_MAX: u64 = 5000; // $50.00 (was $500.00 - way too high!)
-pub const WHALE_PRICE_OFFSET_MIN: u64 = 500; // $5.00
+// Percentage-based price offsets (more realistic for institutional trading)
+pub const WHALE_PRICE_OFFSET_MAX_PCT: f64 = 0.15; // 5.0% max offset from mid
+pub const WHALE_PRICE_OFFSET_MIN_PCT: f64 = 0.005; // 0.5% min offset from mid
 
 pub const WHALE_REFRESH_THRESHOLD_BPS: u64 = 50; // 0.5%
 
@@ -111,7 +111,7 @@ pub const CRAZY_WHALE: f64 = 0.001;
 pub const WHALE_TAPER_ORDERS: u64 = 200; // Reduced from 100 to avoid flooding the market
 
 // --- ThermoAgent ---
-pub const THERMO_AGENT_INITIAL_CASH: f64 = 10000000000000_000.0;
+pub const THERMO_AGENT_INITIAL_CASH: f64 = 10000000000000000.0;
 pub const THERMO_AGENT_MOMENTUM_SENSITIVITY: f64 = 2.0;
 pub const THERMO_AGENT_BASE_VOLUME_MIN: u64 = 100;
 pub const THERMO_AGENT_BASE_VOLUME_MAX: u64 = 1000;

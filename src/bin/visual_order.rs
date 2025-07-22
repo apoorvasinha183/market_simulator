@@ -998,6 +998,13 @@ fn main() -> Result<(), eframe::Error> {
         }, // Value Trader
         AgentType::WhaleAgent,
         AgentType::WebProxyAgent,
+        /*
+        AgentType::ETFMaintenanceAgent { etf_stock_id: 25 }, // YEET ETF
+        AgentType::ETFMaintenanceAgent { etf_stock_id: 22 }, // CASINO ETF
+        AgentType::ETFAgent { etf_stock_id: 21 },
+        AgentType::ETFAgent { etf_stock_id: 23 },
+        AgentType::ETFAgent { etf_stock_id: 24 },
+        */
     ];
 
     /*let participants = vec![

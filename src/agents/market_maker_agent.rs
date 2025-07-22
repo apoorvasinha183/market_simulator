@@ -106,6 +106,7 @@ impl MarketMakerAgent {
         ack_channel: Receiver<Order>,
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
+        initial_cash: f64,
     ) -> Self {
         Self::new_with_inventory(
             id,
@@ -114,6 +115,7 @@ impl MarketMakerAgent {
             port_channel,
             view_handle,
             None,
+            initial_cash,
         )
     }
 
@@ -124,6 +126,7 @@ impl MarketMakerAgent {
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
         initial_inventory: Option<HashMap<u64, u64>>, // stock_id -> shares (solid inventory)
+        initial_cash: f64,
     ) -> Self {
         // Solid inventory: the actual ownership stake (doesn't change)
         let solid_inventory = if let Some(inv) = initial_inventory {
@@ -161,7 +164,7 @@ impl MarketMakerAgent {
             bootstrapped: Arc::new(RwLock::new(bootstrapped_map)),
             open_orders: Arc::new(RwLock::new(HashMap::new())),
             last_quoted_prices: Arc::new(RwLock::new(HashMap::new())),
-            cash: Arc::new(RwLock::new(100_000_000_000.0)),
+            cash: Arc::new(RwLock::new(initial_cash)),
             margin: Arc::new(RwLock::new(400_000_000_000.0)),
             port_value: Arc::new(RwLock::new(0.0)),
         }

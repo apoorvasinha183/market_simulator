@@ -1,26 +1,26 @@
-ticker,id,company_name,total_float,initial_price,sentiment_port,ownership_allocation
-GIGA,1,GigaChad Industries,15982000000,195.37,3001,"mm:0.20,whale:0.30,thermo:0.35,momentum:0.15"
-STONKS,2,Stonk Capital,12780000000,175.88,4001,"mm:0.15,whale:0.25,thermo:0.40,momentum:0.20"
-YOLO,3,YOLO Enterprises,1784000000,24.55,5001,"mm:0.10,whale:0.15,thermo:0.60,momentum:0.15"
-DIAMOND,4,Diamond Hands Inc.,14260000,1512.45,6001,"mm:0.35,whale:0.40,thermo:0.15,momentum:0.10"
-HODL,5,Hold On for Dear Life Ltd.,7430000000,427.56,7001,"mm:0.25,whale:0.35,thermo:0.25,momentum:0.15"
-TENDIE,6,Tendies Corp.,10350000000,184.67,8001,"mm:0.15,whale:0.20,thermo:0.50,momentum:0.15"
-ROCKET,7,Rocket Ship Holdings,2460000000,120.51,9001,"mm:0.10,whale:0.15,thermo:0.55,momentum:0.20"
-MOON,8,To The Moon LLC,2830000000,182.01,10001,"mm:0.12,whale:0.18,thermo:0.50,momentum:0.20"
-APE,9,Ape Army Conglomerate,2100000000,498.32,11001,"mm:0.08,whale:0.12,thermo:0.65,momentum:0.15"
-GAINZ,10,Gainz & Co.,2200000000,412.67,12001,"mm:0.20,whale:0.30,thermo:0.30,momentum:0.20"
-ALPHA,11,Alpha Investments,950000000,883.88,13001,"mm:0.30,whale:0.35,thermo:0.20,momentum:0.15"
-SIGMA,12,Sigma Male Ventures,430000000,1734.56,14001,"mm:0.35,whale:0.40,thermo:0.15,momentum:0.10"
-ATH,13,All Time High Corp,2900000000,198.88,15001,"mm:0.18,whale:0.25,thermo:0.37,momentum:0.20"
-BTFD,14,Buy The F'n Dip Foundation,1650000000,274.50,16001,"mm:0.12,whale:0.18,thermo:0.55,momentum:0.15"
-WSB,15,WallStreetBets Inc.,4020000000,114.15,17001,"mm:0.05,whale:0.10,thermo:0.70,momentum:0.15"
-FOMO,16,Fear Of Missing Out Group,2170000000,67.22,18001,"mm:0.08,whale:0.12,thermo:0.65,momentum:0.15"
-LEAPS,17,Long-Term Equity Anticipation Securities Inc.,2450000000,147.55,19001,"mm:0.25,whale:0.30,thermo:0.25,momentum:0.20"
-BAG,18,Bagholders United,2320000000,168.25,20001,"mm:0.10,whale:0.15,thermo:0.60,momentum:0.15"
-PEPE,19,Pepe Frog Finance,920000000,456.78,21001,"mm:0.06,whale:0.09,thermo:0.70,momentum:0.15"
-DEGEN,20,Degen Capital,1010000000,335.12,22001,"mm:0.08,whale:0.12,thermo:0.65,momentum:0.15"
-BUBBLE,21,Everything Bubble Total Market ETF,1000000,250.00,23001,"etf:1.0"
-CASINO,22,Sir This Is A Wendy's Casino ETF,500000,180.00,24001,"etf:1.0"
-RETAIL,23,Retail Investor Revenge ETF,750000,120.00,25001,"etf:1.0"
-COPE,24,Copium Technology Innovation ETF,800000,200.00,26001,"etf:1.0"
-YEET,25,YEET Options & Derivatives ETF,300000,150.00,27001,"etf:1.0"
+ticker,id,company_name,total_float,initial_price,sentiment_port,ownership_allocation,holdings,expense_ratio,creation_unit_size
+GIGA,1,GigaChad Industries,15982000000,195.37,3001,"BUBBLE_ETF:0.0010,COPE_ETF:0.0015,mm:0.1995,whale:0.2993,thermo:0.3491,momentum:0.1496",,0.0,0
+STONKS,2,Stonk Capital,12780000000,175.88,4001,"BUBBLE_ETF:0.0011,mm:0.1498,whale:0.2497,thermo:0.3996,momentum:0.1998",,0.0,0
+YOLO,3,YOLO Enterprises,1784000000,24.55,5001,"BUBBLE_ETF:0.0171,CASINO_ETF:0.0514,YEET_ETF:0.0308,mm:0.0901,whale:0.1351,thermo:0.5404,momentum:0.1351",,0.0,0
+DIAMOND,4,Diamond Hands Inc.,14260000,1512.45,6001,"BUBBLE_ETF:0.0927,mm:0.3175,whale:0.3629,thermo:0.1361,momentum:0.0907",,0.0,0
+HODL,5,Hold On for Dear Life Ltd.,7430000000,427.56,7001,"BUBBLE_ETF:0.0006,mm:0.2498,whale:0.3498,thermo:0.2498,momentum:0.1499",,0.0,0
+TENDIE,6,Tendies Corp.,10350000000,184.67,8001,"BUBBLE_ETF:0.0009,RETAIL_ETF:0.0007,mm:0.1498,whale:0.1997,thermo:0.4992,momentum:0.1498",,0.0,0
+ROCKET,7,Rocket Ship Holdings,2460000000,120.51,9001,"BUBBLE_ETF:0.0034,CASINO_ETF:0.0061,COPE_ETF:0.0135,YEET_ETF:0.0015,mm:0.0976,whale:0.1463,thermo:0.5365,momentum:0.1951",,0.0,0
+MOON,8,To The Moon LLC,2830000000,182.01,10001,"BUBBLE_ETF:0.0019,CASINO_ETF:0.0026,mm:0.1195,whale:0.1792,thermo:0.4977,momentum:0.1991",,0.0,0
+APE,9,Ape Army Conglomerate,2100000000,498.32,11001,"BUBBLE_ETF:0.0010,RETAIL_ETF:0.0015,mm:0.0798,whale:0.1197,thermo:0.6484,momentum:0.1496",,0.0,0
+GAINZ,10,Gainz & Co.,2200000000,412.67,12001,"BUBBLE_ETF:0.0017,mm:0.1997,whale:0.2995,thermo:0.2995,momentum:0.1997",,0.0,0
+ALPHA,11,Alpha Investments,950000000,883.88,13001,"BUBBLE_ETF:0.0015,COPE_ETF:0.0038,mm:0.2984,whale:0.3481,thermo:0.1989,momentum:0.1492",,0.0,0
+SIGMA,12,Sigma Male Ventures,430000000,1734.56,14001,"BUBBLE_ETF:0.0013,COPE_ETF:0.0032,mm:0.3484,whale:0.3982,thermo:0.1493,momentum:0.0995",,0.0,0
+ATH,13,All Time High Corp,2900000000,198.88,15001,"BUBBLE_ETF:0.0022,COPE_ETF:0.0028,mm:0.1791,whale:0.2488,thermo:0.3682,momentum:0.1990",,0.0,0
+BTFD,14,Buy The F'n Dip Foundation,1650000000,274.5,16001,"BUBBLE_ETF:0.0011,RETAIL_ETF:0.0030,mm:0.1195,whale:0.1793,thermo:0.5478,momentum:0.1494",,0.0,0
+WSB,15,WallStreetBets Inc.,4020000000,114.15,17001,"BUBBLE_ETF:0.0016,RETAIL_ETF:0.0039,mm:0.0497,whale:0.0994,thermo:0.6961,momentum:0.1492",,0.0,0
+FOMO,16,Fear Of Missing Out Group,2170000000,67.22,18001,"BUBBLE_ETF:0.0051,CASINO_ETF:0.0093,RETAIL_ETF:0.0062,mm:0.0784,whale:0.1175,thermo:0.6366,momentum:0.1469",,0.0,0
+LEAPS,17,Long-Term Equity Anticipation Securities Inc.,2450000000,147.55,19001,"BUBBLE_ETF:0.0021,YEET_ETF:0.0050,mm:0.2482,whale:0.2979,thermo:0.2482,momentum:0.1986",,0.0,0
+BAG,18,Bagholders United,2320000000,168.25,20001,"BUBBLE_ETF:0.0019,RETAIL_ETF:0.0028,mm:0.0995,whale:0.1493,thermo:0.5972,momentum:0.1493",,0.0,0
+PEPE,19,Pepe Frog Finance,920000000,456.78,21001,"BUBBLE_ETF:0.0018,RETAIL_ETF:0.0021,mm:0.0598,whale:0.0896,thermo:0.6973,momentum:0.1494",,0.0,0
+DEGEN,20,Degen Capital,1010000000,335.12,22001,"BUBBLE_ETF:0.0022,CASINO_ETF:0.0066,YEET_ETF:0.0027,mm:0.0791,whale:0.1186,thermo:0.6425,momentum:0.1483",,0.0,0
+BUBBLE,21,Everything Bubble Total Market ETF,100000000,250.0,23001,"etf_maintenance:0.2,momentum:0.8","GIGA:0.12,STONKS:0.10,DIAMOND:0.08,HODL:0.08,TENDIE:0.07,GAINZ:0.06,ALPHA:0.05,ATH:0.05,ROCKET:0.04,MOON:0.04,APE:0.04,SIGMA:0.04,YOLO:0.03,FOMO:0.03,LEAPS:0.03,BAG:0.03,PEPE:0.03,DEGEN:0.03,WSB:0.03,BTFD:0.02",0.0003,50000
+CASINO,22,Sir This Is A Wendy's Casino ETF,50000000,180.0,24001,"etf_maintenance:0.2,momentum:0.8","YOLO:0.25,ROCKET:0.20,MOON:0.15,FOMO:0.15,DEGEN:0.25",0.0005,25000
+RETAIL,23,Retail Investor Revenge ETF,75000000,120.0,25001,"etf_maintenance:0.2,momentum:0.8","WSB:0.20,APE:0.18,TENDIE:0.15,BTFD:0.15,BAG:0.12,PEPE:0.10,FOMO:0.10",0.0008,10000
+COPE,24,Copium Technology Innovation ETF,80000000,200.0,26001,"etf_maintenance:0.2,momentum:0.8","GIGA:0.30,ROCKET:0.25,ALPHA:0.20,SIGMA:0.15,ATH:0.10",0.0004,75000
+YEET,25,YEET Options & Derivatives ETF,30000000,150.0,27001,"etf_maintenance:0.2,momentum:0.8","LEAPS:0.40,YOLO:0.30,DEGEN:0.20,ROCKET:0.10",0.0012,5000

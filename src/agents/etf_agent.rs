@@ -2,7 +2,7 @@
 
 use super::agent_trait::Agent;
 use crate::simulation::orchestra::{MarketState, ShadowBookHandle};
-use crate::stocks::definitions::{ETFInfo, StockMarket};
+use crate::stocks::definitions::{Stock, StockMarket};
 use crate::types::order::{Order, OrderRequest, Side, Trade};
 use crossbeam_channel::{Receiver, Sender};
 use rand::Rng;
@@ -19,7 +19,7 @@ pub struct ETFAgent {
     id: usize,
     etf_stock_id: u64, // The ETF's stock ID (e.g., BUBBLE = 21)
     #[allow(dead_code)]
-    etf_info: ETFInfo, // ETF metadata with holdings
+    etf_info: Stock, // ETF metadata with holdings
     constituent_stock_ids: HashMap<u64, f64>, // stock_id -> weight mapping
 
     // Communication channels
@@ -44,14 +44,16 @@ impl ETFAgent {
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
         stock_market: &StockMarket,
+        initial_cash: f64,
     ) -> Option<Self> {
-        // Get ETF info from stock market
-        let etf_stock = stock_market.get_stock_by_id(etf_stock_id)?;
-        let etf_info = stock_market.get_etf_info(&etf_stock.ticker)?.clone();
+        let etf_stock = stock_market.get_stock_by_id(etf_stock_id)?.clone();
+        if !etf_stock.is_etf() {
+            return None;
+        }
 
         // Map constituent tickers to stock IDs
         let mut constituent_stock_ids = HashMap::new();
-        for (ticker, weight) in &etf_info.parsed_holdings {
+        for (ticker, weight) in &etf_stock.parsed_holdings {
             if let Some(stock) = stock_market.get_stock_by_ticker(ticker) {
                 constituent_stock_ids.insert(stock.id, *weight);
             }
@@ -74,14 +76,14 @@ impl ETFAgent {
         Some(Self {
             id,
             etf_stock_id,
-            etf_info,
+            etf_info: etf_stock,
             constituent_stock_ids,
             order_channel,
             ack_channel: Arc::new(Mutex::new(ack_channel)),
             port_channel: Arc::new(Mutex::new(port_channel)),
             view_handle,
             inventory: Arc::new(RwLock::new(inventory)),
-            cash: Arc::new(RwLock::new(1_000_000_000.0)), // $1B starting cash
+            cash: Arc::new(RwLock::new(initial_cash)),
             last_nav: Arc::new(RwLock::new(0.0)),
             last_etf_price: Arc::new(RwLock::new(0.0)),
         })
@@ -90,20 +92,8 @@ impl ETFAgent {
     fn calculate_nav(&self, view: &MarketState) -> Option<f64> {
         let mut nav = 0.0;
 
-        // First, get the ticker of the ETF this agent is managing
-        let etf_ticker = match view.stocks.get_ticker_by_id(self.etf_stock_id) {
-            Some(ticker) => ticker,
-            None => return None, // This agent's ETF doesn't exist
-        };
-
-        // Then, use the ticker to get the ETF's definition (holdings)
-        let etf_info = match view.stocks.get_etf_info(etf_ticker) {
-            Some(info) => info,
-            None => return None, // Not a valid ETF
-        };
-
         // Now, calculate NAV based on the parsed holdings
-        for (holding_ticker, &weight) in &etf_info.parsed_holdings {
+        for (holding_ticker, &weight) in &self.etf_info.parsed_holdings {
             let holding_id = match view.stocks.get_id_by_ticker(holding_ticker) {
                 Some(id) => id,
                 None => continue, // Skip if a holding isn't found in the market

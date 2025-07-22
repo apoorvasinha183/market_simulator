@@ -22,14 +22,22 @@ agents:
   market_maker:
     count: 3
     update_interval_ms: 10   # Premium tier - faster updates
-    initial_cash: 100000000
+    initial_cash: 100000000000
     config:
       spread_bps: 5
       max_inventory_ratio: 0.1
+
+  whale_agent:
+    count: 1
+    initial_cash: 500000000000
+
+  thermo_agent:
+    count: 1
+    initial_cash: 1000000000000
       
   momentum:
     count: 2
-    initial_cash: 50000000
+    initial_cash: 50000000000
     config:
       momentum_threshold: 0.02
       position_size_ratio: 0.05
@@ -37,22 +45,27 @@ agents:
   pj_trader:
     count: 2
     active_phases: ["after_hours"]
-    initial_cash: 25000000
+    initial_cash: 25000000000
     config:
       spread_multiplier: 2.0  # Wider spreads after hours
       risk_tolerance: "high"
       
   etf_agent:
-    count: 1  # Per ETF (auto-spawned)
-    initial_cash: 200000000
+    count: 2 # Number of general arbitrage agents per ETF
+    initial_cash: 250000000000
     config:
-      target_spread_bps: 3
-      rebalance_threshold_bps: 10
-      max_inventory_shares: 1000000
+      arbitrage_threshold_bps: 50
+
+  etf_maintenance_agent:
+    count: 1 # Number of official maintenance agents (APs) per ETF
+    initial_cash: 10000000000000
+    config:
+      maintenance_threshold_bps: 10
+      max_inventory_ratio: 0.1
       
   arbitrage:
     count: 1
-    initial_cash: 500000000
+    initial_cash: 500000000000
     config:
       min_profit_bps: 5
       max_position_size: 2000000

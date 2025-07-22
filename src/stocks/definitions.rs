@@ -16,21 +16,18 @@ pub struct Stock {
     pub initial_price: f64,
     pub sentiment_port: u64,
     #[serde(default)]
-    pub ownership_allocation: String, // Raw CSV string like "mm:0.20,whale:0.30,thermo:0.35,momentum:0.15"
-    #[serde(skip)]
-    pub parsed_allocation: HashMap<String, f64>, // Parsed allocation map
-}
-
-/// ETF-specific information loaded from configs/etfs.csv
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ETFInfo {
-    pub symbol: String,
-    pub name: String,
+    pub ownership_allocation: String,
+    #[serde(default)]
+    pub holdings: String,
+    #[serde(default)]
     pub expense_ratio: f64,
+    #[serde(default)]
     pub creation_unit_size: u64,
-    pub holdings: String, // Raw holdings string like "GIGA:0.12,STONKS:0.10,DIAMOND:0.08"
+
     #[serde(skip)]
-    pub parsed_holdings: HashMap<String, f64>, // Parsed holdings map: ticker -> weight
+    pub parsed_allocation: HashMap<String, f64>,
+    #[serde(skip)]
+    pub parsed_holdings: HashMap<String, f64>,
 }
 
 impl Stock {
@@ -51,7 +48,11 @@ impl Stock {
             initial_price,
             sentiment_port,
             ownership_allocation: String::new(),
+            holdings: String::new(),
+            expense_ratio: 0.0,
+            creation_unit_size: 0,
             parsed_allocation: HashMap::new(),
+            parsed_holdings: HashMap::new(),
         }
     }
 
@@ -69,6 +70,25 @@ impl Stock {
                 let agent_type = parts[0].trim().to_string();
                 if let Ok(percentage) = parts[1].trim().parse::<f64>() {
                     self.parsed_allocation.insert(agent_type, percentage);
+                }
+            }
+        }
+    }
+
+    /// Parse the holdings string and populate the parsed_holdings HashMap
+    pub fn parse_holdings(&mut self) {
+        self.parsed_holdings.clear();
+
+        if self.holdings.is_empty() {
+            return;
+        }
+
+        for holding in self.holdings.split(',') {
+            let parts: Vec<&str> = holding.split(':').collect();
+            if parts.len() == 2 {
+                let ticker = parts[0].trim().to_string();
+                if let Ok(weight) = parts[1].trim().parse::<f64>() {
+                    self.parsed_holdings.insert(ticker, weight);
                 }
             }
         }
@@ -93,56 +113,9 @@ impl Stock {
         (self.total_float as f64 * percentage) as u64
     }
 
-    /// Check if this stock is an ETF (based on ownership allocation)
+    /// Check if this stock is an ETF
     pub fn is_etf(&self) -> bool {
-        self.parsed_allocation.contains_key("etf")
-    }
-}
-
-impl ETFInfo {
-    /// Parse the holdings string and populate the parsed_holdings HashMap
-    pub fn parse_holdings(&mut self) {
-        self.parsed_holdings.clear();
-
-        if self.holdings.is_empty() {
-            return;
-        }
-
-        for holding in self.holdings.split(',') {
-            let parts: Vec<&str> = holding.split(':').collect();
-            if parts.len() == 2 {
-                let ticker = parts[0].trim().to_string();
-                if let Ok(weight) = parts[1].trim().parse::<f64>() {
-                    self.parsed_holdings.insert(ticker, weight);
-                }
-            }
-        }
-    }
-
-    /// Get the weight of a specific holding in this ETF
-    pub fn get_holding_weight(&self, ticker: &str) -> f64 {
-        self.parsed_holdings.get(ticker).copied().unwrap_or(0.0)
-    }
-
-    /// Get all tickers held by this ETF
-    pub fn get_holding_tickers(&self) -> Vec<String> {
-        self.parsed_holdings.keys().cloned().collect()
-    }
-
-    /// Calculate NAV (Net Asset Value) based on current stock prices
-    pub fn calculate_nav(&self, stock_market: &StockMarket) -> Option<f64> {
-        let mut nav = 0.0;
-
-        for (ticker, weight) in &self.parsed_holdings {
-            if let Some(stock) = stock_market.get_stock_by_ticker(ticker) {
-                nav += stock.initial_price * weight;
-            } else {
-                // If we can't find a holding, NAV calculation fails
-                return None;
-            }
-        }
-
-        Some(nav)
+        !self.holdings.is_empty()
     }
 }
 
@@ -151,7 +124,6 @@ pub struct StockMarket {
     pub stocks: Vec<Stock>,
     pub id_to_stock: std::collections::HashMap<u64, Stock>,
     pub ticker_to_stock: std::collections::HashMap<Symbol, Stock>,
-    pub etf_info: std::collections::HashMap<Symbol, ETFInfo>, // ETF-specific information
 }
 
 #[inline]
@@ -164,6 +136,7 @@ pub fn default_stock_universe() -> Vec<Stock> {
             let mut stock: Stock = result.expect("Could not deserialize stock");
             // Parse the ownership allocation after loading from CSV
             stock.parse_ownership_allocation();
+            stock.parse_holdings();
             stocks.push(stock);
         }
         stocks
@@ -207,43 +180,11 @@ impl StockMarket {
     }
 
     pub fn from_universe(stocks: Vec<Stock>) -> Self {
-        let etf_info = Self::load_etf_info();
         Self {
             id_to_stock: stock_id_to_stock_map(&stocks),
             ticker_to_stock: stock_ticker_to_stock_map(&stocks),
             stocks,
-            etf_info,
         }
-    }
-
-    /// Load ETF information from configs/etfs.csv
-    fn load_etf_info() -> HashMap<Symbol, ETFInfo> {
-        let mut etf_map = HashMap::new();
-        let file_path = "configs/etfs.csv";
-
-        if std::path::Path::new(file_path).exists() {
-            if let Ok(mut rdr) = csv::Reader::from_path(file_path) {
-                for result in rdr.deserialize() {
-                    if let Ok(etf_info) = result {
-                        let mut etf_info: ETFInfo = etf_info;
-                        etf_info.parse_holdings();
-                        etf_map.insert(etf_info.symbol.clone(), etf_info);
-                    }
-                }
-            }
-        }
-
-        etf_map
-    }
-
-    /// Get ETF information by symbol
-    pub fn get_etf_info(&self, symbol: &str) -> Option<&ETFInfo> {
-        self.etf_info.get(symbol)
-    }
-
-    /// Get all ETF symbols
-    pub fn get_all_etf_symbols(&self) -> Vec<String> {
-        self.etf_info.keys().cloned().collect()
     }
 
     /// Get all ETFs (stocks that are ETFs)
@@ -253,8 +194,20 @@ impl StockMarket {
 
     /// Calculate NAV for an ETF
     pub fn calculate_etf_nav(&self, etf_symbol: &str) -> Option<f64> {
-        if let Some(etf_info) = self.get_etf_info(etf_symbol) {
-            etf_info.calculate_nav(self)
+        if let Some(etf) = self.get_stock_by_ticker(&etf_symbol.to_string()) {
+            if !etf.is_etf() {
+                return None;
+            }
+
+            let mut nav = 0.0;
+            for (ticker, weight) in &etf.parsed_holdings {
+                if let Some(stock) = self.get_stock_by_ticker(ticker) {
+                    nav += stock.initial_price * weight;
+                } else {
+                    return None;
+                }
+            }
+            Some(nav)
         } else {
             None
         }

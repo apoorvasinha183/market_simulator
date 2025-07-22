@@ -33,6 +33,7 @@ impl MomentumAgent {
         ack_channel: Receiver<Order>,
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
+        initial_cash: f64,
     ) -> Self {
         Self::new_with_inventory(
             id,
@@ -41,6 +42,7 @@ impl MomentumAgent {
             port_channel,
             view_handle,
             None,
+            initial_cash,
         )
     }
 
@@ -51,6 +53,7 @@ impl MomentumAgent {
         port_channel: Receiver<Trade>,
         view_handle: ShadowBookHandle,
         initial_inventory: Option<HashMap<u64, u64>>, // stock_id -> shares
+        initial_cash: f64,
     ) -> Self {
         // Convert u64 shares to i64 positions (positive = long)
         let inventory = if let Some(inv) = initial_inventory {
@@ -67,7 +70,7 @@ impl MomentumAgent {
             view_handle,
             price_history: Arc::new(RwLock::new(HashMap::new())),
             open_orders: Arc::new(RwLock::new(HashMap::new())),
-            cash: Arc::new(RwLock::new(1_000_000.0)), // Starting cash
+            cash: Arc::new(RwLock::new(initial_cash)), // Starting cash
             inventory: Arc::new(RwLock::new(inventory)),
         }
     }

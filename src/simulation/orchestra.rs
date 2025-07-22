@@ -23,7 +23,6 @@ use crate::agents::thermo_agent::ThermoAgent;
 use crate::agents::web_proxy_agent::{ProxyRequest, WebProxyAgent};
 use crate::agents::web_server::WebServerRunner;
 use crate::agents::whale_agent::WhaleAgent;
-use crate::default_stock_universe;
 use crate::events::MarketEvent;
 use crate::market::Market;
 use crate::sentiment_engine::SentimentEngine;
@@ -31,6 +30,7 @@ use crate::simulation::candle_analyzer::{CandleAnalyzer, CandleDataHandle};
 use crate::simulators::market_trait::Marketable;
 use crate::simulators::order_book::OrderBook;
 use crate::stocks::StockMarket;
+use crate::stocks::default_stock_universe;
 use crate::types::order::{Order, OrderRequest, Trade};
 
 // ----------------------------------------------------------------------------
@@ -262,7 +262,7 @@ impl Orchestra {
 
         let stock_market = StockMarket::from_universe(default_stock_universe());
         let (order_tx, order_rx) = unbounded::<OrderRequest>();
-        let (event_tx, event_rx) = unbounded::<MarketEvent>();
+        let (event_tx, _event_rx) = unbounded::<MarketEvent>();
 
         let mut normal_shadow_senders = HashMap::new();
         let mut normal_shadow_receivers = HashMap::new();
@@ -320,40 +320,117 @@ impl Orchestra {
         let mut agents: Vec<Box<dyn Agent>> = Vec::new();
         let mut registration_data: HashMap<usize, AgentResponseChannels> = HashMap::new();
 
-        // Calculate initial inventory allocations for each agent type
-        let mm_solid_inventory = stock_market.calculate_initial_inventory_for_agent("mm");
+        // --- Agent Spawning Logic ---
+        let config_path = "configs/default_sim.yaml";
+        let config: serde_yaml::Value = serde_yaml::from_str(
+            &std::fs::read_to_string(config_path).expect("Failed to read config file"),
+        )
+        .expect("Failed to parse config file");
+
+        let mut agent_id_counter = 0;
+
+        // Calculate all initial inventories first
+        let mm_inventory = stock_market.calculate_initial_inventory_for_agent("mm");
         let whale_inventory = stock_market.calculate_initial_inventory_for_agent("whale");
         let thermo_inventory = stock_market.calculate_initial_inventory_for_agent("thermo");
         let momentum_inventory = stock_market.calculate_initial_inventory_for_agent("momentum");
 
-        println!("[Orchestra] Calculated initial inventory allocations:");
-        println!(
-            "  Market Makers: {} stocks (solid inventory)",
-            mm_solid_inventory.len()
-        );
-        println!("  Whales: {} stocks", whale_inventory.len());
-        println!("  Thermo Agents: {} stocks", thermo_inventory.len());
-        println!("  Momentum Agents: {} stocks", momentum_inventory.len());
+        // Spawn ETF-related agents based on config and available ETFs
+        for etf_stock in stock_market.get_all_etfs() {
+            if let Some(conf) = config["agents"].get("etf_maintenance_agent") {
+                let count = conf["count"].as_u64().unwrap_or(1) as usize;
+                let cash = conf["initial_cash"].as_f64().unwrap_or(10_000_000_000.0);
+                for _ in 0..count {
+                    let (tx_ack, rx_ack) = unbounded();
+                    let (tx_trade, rx_trade) = unbounded();
+                    registration_data.insert(
+                        agent_id_counter,
+                        AgentResponseChannels {
+                            ack_tx: tx_ack,
+                            trade_tx: tx_trade,
+                        },
+                    );
+                    if let Some(agent) = ETFMaintenanceAgent::new(
+                        agent_id_counter,
+                        etf_stock.id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        premium_shadow_book.clone(),
+                        &stock_market,
+                        cash,
+                    ) {
+                        // Only add to running agents if explicitly requested in agent_types
+                        let should_run = agent_types.iter().any(|at| {
+                            matches!(at, AgentType::ETFMaintenanceAgent { etf_stock_id } if *etf_stock_id == etf_stock.id)
+                        });
 
-        for (id, agent_type) in agent_types.into_iter().enumerate() {
+                        if should_run {
+                            agents.push(Box::new(agent));
+                        }
+                        agent_id_counter += 1;
+                    }
+                }
+            }
+            if let Some(conf) = config["agents"].get("etf_agent") {
+                let count = conf["count"].as_u64().unwrap_or(1) as usize;
+                let cash = conf["initial_cash"].as_f64().unwrap_or(250_000_000.0);
+                for _ in 0..count {
+                    let (tx_ack, rx_ack) = unbounded();
+                    let (tx_trade, rx_trade) = unbounded();
+                    registration_data.insert(
+                        agent_id_counter,
+                        AgentResponseChannels {
+                            ack_tx: tx_ack,
+                            trade_tx: tx_trade,
+                        },
+                    );
+                    if let Some(agent) = ETFAgent::new(
+                        agent_id_counter,
+                        etf_stock.id,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        normal_shadow_book.clone(),
+                        &stock_market,
+                        cash,
+                    ) {
+                        // Only add to running agents if explicitly requested in agent_types
+                        let should_run = agent_types.iter().any(|at| {
+                            matches!(at, AgentType::ETFAgent { etf_stock_id } if *etf_stock_id == etf_stock.id)
+                        });
+
+                        if should_run {
+                            agents.push(Box::new(agent));
+                        }
+                        agent_id_counter += 1;
+                    }
+                }
+            }
+        }
+
+        // Spawn other agents based on the passed-in agent_types vector
+        for agent_type in agent_types {
             let (tx_ack, rx_ack) = unbounded();
             let (tx_trade, rx_trade) = unbounded();
             registration_data.insert(
-                id,
+                agent_id_counter,
                 AgentResponseChannels {
                     ack_tx: tx_ack,
                     trade_tx: tx_trade,
                 },
             );
-            // big moneh gets the premium view
+
             let view_handle = match agent_type {
-                AgentType::MarketMaker => premium_shadow_book.clone(),
+                AgentType::MarketMaker | AgentType::ETFMaintenanceAgent { .. } => {
+                    premium_shadow_book.clone()
+                }
                 _ => normal_shadow_book.clone(),
             };
 
             let new_agent: Box<dyn Agent> = match agent_type {
                 AgentType::Astrologer => Box::new(AstrologerAgent::new(
-                    id,
+                    agent_id_counter,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
@@ -361,137 +438,124 @@ impl Orchestra {
                     candle_data_handle.clone(),
                 )),
                 AgentType::DumbMarket => Box::new(DumbAgent::new(
-                    id,
+                    agent_id_counter,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
                     view_handle,
                 )),
                 AgentType::DumbLimit => Box::new(DumbLimitAgent::new(
-                    id,
+                    agent_id_counter,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
                     view_handle,
                 )),
-                AgentType::MarketMaker => Box::new(MarketMakerAgent::new_with_inventory(
-                    id,
-                    order_tx.clone(),
-                    rx_ack,
-                    rx_trade,
-                    view_handle,
-                    Some(mm_solid_inventory.clone()),
-                )),
+                AgentType::MarketMaker => {
+                    let cash = config["agents"]["market_maker"]["initial_cash"]
+                        .as_f64()
+                        .unwrap_or(100_000_000.0);
+                    Box::new(MarketMakerAgent::new_with_inventory(
+                        agent_id_counter,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        view_handle,
+                        Some(mm_inventory.clone()),
+                        cash,
+                    ))
+                }
                 AgentType::IPO => Box::new(IpoAgent::new(
-                    id,
+                    agent_id_counter,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
                     view_handle,
                 )),
-                AgentType::WhaleAgent => Box::new(WhaleAgent::new_with_inventory(
-                    id,
-                    order_tx.clone(),
-                    rx_ack,
-                    rx_trade,
-                    view_handle,
-                    Some(whale_inventory.clone()),
-                )),
-                AgentType::MomentumAgent => Box::new(MomentumAgent::new_with_inventory(
-                    id,
-                    order_tx.clone(),
-                    rx_ack,
-                    rx_trade,
-                    view_handle,
-                    Some(momentum_inventory.clone()),
-                )),
+                AgentType::WhaleAgent => {
+                    let cash = config["agents"]
+                        .get("whale_agent")
+                        .and_then(|c| c.get("initial_cash"))
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(500_000_000.0);
+                    Box::new(WhaleAgent::new_with_inventory(
+                        agent_id_counter,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        view_handle,
+                        Some(whale_inventory.clone()),
+                        cash,
+                    ))
+                }
+                AgentType::MomentumAgent => {
+                    let cash = config["agents"]["momentum"]["initial_cash"]
+                        .as_f64()
+                        .unwrap_or(50_000_000.0);
+                    Box::new(MomentumAgent::new_with_inventory(
+                        agent_id_counter,
+                        order_tx.clone(),
+                        rx_ack,
+                        rx_trade,
+                        view_handle,
+                        Some(momentum_inventory.clone()),
+                        cash,
+                    ))
+                }
                 AgentType::CustomerAgent => Box::new(CustomerAgent::new(
-                    id,
+                    agent_id_counter,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
                     view_handle,
                 )),
                 AgentType::WebProxyAgent => Box::new(WebProxyAgent::new(
-                    id,
+                    agent_id_counter,
                     order_tx.clone(),
                     rx_ack,
                     rx_trade,
                     proxy_request_rx.clone(),
                 )),
-                AgentType::ETFAgent { etf_stock_id } => {
-                    match ETFAgent::new(
-                        id,
-                        etf_stock_id,
-                        order_tx.clone(),
-                        rx_ack,
-                        rx_trade,
-                        view_handle,
-                        &stock_market,
-                    ) {
-                        Some(agent) => Box::new(agent),
-                        None => {
-                            println!(
-                                "[Orchestra] Failed to create ETF agent for stock ID {}",
-                                etf_stock_id
-                            );
-                            continue; // Skip this agent
-                        }
-                    }
-                }
-                AgentType::ETFMaintenanceAgent { etf_stock_id } => {
-                    match ETFMaintenanceAgent::new(
-                        id,
-                        etf_stock_id,
-                        order_tx.clone(),
-                        rx_ack,
-                        rx_trade,
-                        premium_shadow_book.clone(), // Maintenance agents get premium view
-                        &stock_market,
-                    ) {
-                        Some(agent) => Box::new(agent),
-                        None => {
-                            println!(
-                                "[Orchestra] Failed to create ETF maintenance agent for stock ID {}",
-                                etf_stock_id
-                            );
-                            continue; // Skip this agent
-                        }
-                    }
-                }
-                AgentType::PanicAgent { monitored_stocks } => {
-                    Box::new(PanicAgent::new(
-                        id,
-                        monitored_stocks,
-                        order_tx.clone(),
-                        rx_ack,
-                        rx_trade,
-                        normal_shadow_book.clone(), // Panic agents use normal view
-                    ))
-                }
+                AgentType::PanicAgent { monitored_stocks } => Box::new(PanicAgent::new(
+                    agent_id_counter,
+                    monitored_stocks,
+                    order_tx.clone(),
+                    rx_ack,
+                    rx_trade,
+                    view_handle,
+                )),
                 AgentType::Thermodynamic {
                     initial_temperature,
                     specific_heat,
                     initial_chemical_potential,
                 } => {
-                    let event_rx_clone = event_rx.clone();
+                    let cash = config["agents"]
+                        .get("thermo_agent")
+                        .and_then(|c| c.get("initial_cash"))
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(1_000_000_000.0);
                     Box::new(ThermoAgent::new_with_inventory(
-                        id,
+                        agent_id_counter,
                         order_tx.clone(),
                         rx_ack,
                         rx_trade,
-                        event_rx_clone,
+                        _event_rx.clone(),
                         view_handle,
                         stock_market.clone(),
                         initial_temperature,
                         specific_heat,
                         initial_chemical_potential,
                         Some(thermo_inventory.clone()),
+                        cash,
                     ))
                 }
+                // These are now spawned in the dedicated loop above
+                AgentType::ETFAgent { .. } | AgentType::ETFMaintenanceAgent { .. } => continue,
             };
             agents.push(new_agent);
+            agent_id_counter += 1;
         }
+
         println!("[Orchestra] {} agents instantiated.", agents.len());
 
         let market = Market::new(
@@ -541,7 +605,7 @@ impl Orchestra {
         let event_sender = self.event_sender.clone();
         handles.push(thread::spawn(move || {
             loop {
-                thread::sleep(Duration::from_millis(100));
+                thread::sleep(Duration::from_millis(1));
                 if event_sender.send(MarketEvent::Heartbeat).is_err() {
                     break;
                 }
